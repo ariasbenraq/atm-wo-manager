@@ -1,1 +1,12 @@
-@import "tailwindcss";
+@import "./tailwind.generated.css";
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #f4f5f7;
+}
