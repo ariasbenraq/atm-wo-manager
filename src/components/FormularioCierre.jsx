@@ -249,21 +249,18 @@ export default function FormularioCierre({ tareas }) {
                 <CampoInfo
                   label="WO"
                   valor={tareaSeleccionada.wo}
-                  mono
                   copiable
                   onCopiar={() => copiarTexto(tareaSeleccionada.wo, 'WO')}
                 />
                 <CampoInfo
                   label="Modelo"
                   valor={tareaSeleccionada.modelo}
-                  mono
                   copiable
                   onCopiar={() => copiarTexto(tareaSeleccionada.modelo, 'Modelo')}
                 />
                 <CampoInfo
                   label="Serie"
                   valor={tareaSeleccionada.serie}
-                  mono
                   copiable
                   onCopiar={() => copiarTexto(tareaSeleccionada.serie, 'Serie')}
                 />
@@ -272,7 +269,6 @@ export default function FormularioCierre({ tareas }) {
                 <CampoInfo
                   label="Agencia"
                   valor={tareaSeleccionada.nombre}
-                  mono
                   copiable
                   onCopiar={() => copiarTexto(tareaSeleccionada.nombre, 'Agencia')}
                 />
