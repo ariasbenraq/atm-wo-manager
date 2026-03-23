@@ -85,13 +85,14 @@ export default function App() {
           </CardBody>
         </Card>
 
-        {vista === 'lista' && (
-          <>
-            <ImportarExcel onImportado={cargarTareas} />
-            <ListaTareas tareas={tareas} />
-          </>
-        )}
-        {vista === 'formulario' && <FormularioCierre tareas={tareas} />}
+        <div className={vista === 'lista' ? 'block' : 'hidden'}>
+          <ImportarExcel onImportado={cargarTareas} />
+          <ListaTareas tareas={tareas} />
+        </div>
+
+        <div className={vista === 'formulario' ? 'block' : 'hidden'}>
+          <FormularioCierre tareas={tareas} />
+        </div>
       </main>
     </div>
   )
