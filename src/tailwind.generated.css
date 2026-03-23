@@ -1026,6 +1026,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .animate-spin {
   animation: var(--animate-spin);
 }
+.cursor-copy {
+  cursor: copy;
+}
 .cursor-default {
   cursor: default;
 }
@@ -2983,6 +2986,11 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .active\:underline {
   &:active {
     text-decoration-line: underline;
+  }
+}
+.active\:opacity-70 {
+  &:active {
+    opacity: 70%;
   }
 }
 .disabled\:cursor-default {
