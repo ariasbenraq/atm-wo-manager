@@ -265,7 +265,12 @@ export default function FormularioCierre({ tareas }) {
                   onCopiar={() => copiarTexto(tareaSeleccionada.serie, 'Serie')}
                 />
                 <CampoInfo label="Fecha" valor={tareaSeleccionada.fecha} />
-                <CampoInfo label="Dirección" valor={tareaSeleccionada.direccion} />
+                <CampoInfo
+                  label="Dirección"
+                  valor={tareaSeleccionada.direccion}
+                  copiable
+                  onCopiar={() => copiarTexto(tareaSeleccionada.direccion, 'Dirección')}
+                />
                 <CampoInfo
                   label="Agencia"
                   valor={tareaSeleccionada.nombre}
