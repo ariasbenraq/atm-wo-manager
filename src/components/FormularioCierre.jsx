@@ -181,43 +181,6 @@ export default function FormularioCierre({ tareas }) {
               )}
             </div>
           </ScrollShadow>
-          {/* <div className="relative">
-            <Input
-              placeholder="Buscar agencia, WO, distrito..."
-              value={busqueda}
-              onValueChange={v => { setBusqueda(v); setMostrarLista(true); if (!v) setTareaSeleccionada(null) }}
-              onFocus={() => setMostrarLista(true)}
-              startContent={<Search size={14} className="text-default-400" />}
-              variant="bordered"
-              radius="lg"
-              size="md"
-            />
-            {mostrarLista && busqueda && tareasFiltradas.length > 0 && (
-              <div className=" w-full mt-1 bg-white border border-default-200
-                rounded-xl shadow-lg overflow-hidden">
-                {tareasFiltradas.map((t, i) => (
-                  <div key={i} onClick={() => seleccionarTarea(t)}
-                    className="px-3 py-3 hover:bg-primary-50 cursor-pointer border-b
-                      border-default-100 last:border-0 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <Chip size="sm" variant="flat" color={chipColor(t.id_atm)}
-                        className="font-mono text-xs">{t.id_atm}</Chip>
-                      <span className="text-xs font-mono text-default-400">{t.wo}</span>
-                    </div>
-                    <p className="text-sm font-medium text-default-700 mt-1">{t.nombre}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="flex items-center gap-1 text-xs text-default-400">
-                        <MapPin size={10} />{t.distrito}
-                      </span>
-                      <span className="flex items-center gap-1 text-xs text-default-400">
-                        <Clock size={10} />{t.hora}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div> */}
         </CardBody>
       </Card>
 
