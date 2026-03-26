@@ -1,6 +1,13 @@
 import { supabase } from './supabase'
 import { db } from './db'
 
+function normalizarTarea(tarea) {
+  return {
+    ...tarea,
+    ce: String(tarea?.ce ?? tarea?.CE ?? '').trim(),
+  }
+}
+
 export async function syncFromSupabase() {
   try {
     const [tareas, cmca, cmpd, motivos] = await Promise.all([
@@ -10,7 +17,7 @@ export async function syncFromSupabase() {
       supabase.from('motivos_aqr').select('*'),
     ])
 
-    if (tareas.data)   await db.tareas.clear().then(() => db.tareas.bulkAdd(tareas.data))
+    if (tareas.data)   await db.tareas.clear().then(() => db.tareas.bulkAdd(tareas.data.map(normalizarTarea)))
     if (cmca.data)     await db.personal_cmca.clear().then(() => db.personal_cmca.bulkAdd(cmca.data))
     if (cmpd.data)     await db.personal_cmpd.clear().then(() => db.personal_cmpd.bulkAdd(cmpd.data))
     if (motivos.data)  await db.motivos_aqr.clear().then(() => db.motivos_aqr.bulkAdd(motivos.data))

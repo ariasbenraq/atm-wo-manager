@@ -77,6 +77,7 @@ export default function FormularioCierre({ tareas }) {
     return (
       t.nombre?.toLowerCase().includes(q) ||
       t.wo?.toLowerCase().includes(q) ||
+      t.ce?.toLowerCase().includes(q) ||
       t.distrito?.toLowerCase().includes(q) ||
       t.id_atm?.toLowerCase().includes(q)
     )
@@ -139,7 +140,7 @@ export default function FormularioCierre({ tareas }) {
             <p className="text-sm font-semibold">Seleccionar tarea</p>
           </div>
           <Input
-            placeholder="Buscar agencia, WO, distrito..."
+            placeholder="Buscar agencia, WO, usuario o distrito..."
             value={busqueda}
             onValueChange={v => { setBusqueda(v); setMostrarLista(true); if (!v) setTareaSeleccionada(null) }}
             onFocus={() => setMostrarLista(true)}
@@ -168,6 +169,7 @@ export default function FormularioCierre({ tareas }) {
                       </div>
                       <p className="text-sm font-medium text-default-700 mt-1">{t.nombre}</p>
                       <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-default-500">{t.ce || 'Sin usuario'}</span>
                         <span className="flex items-center gap-1 text-xs text-default-400">
                           <MapPin size={10} />{t.distrito}
                         </span>
@@ -239,6 +241,12 @@ export default function FormularioCierre({ tareas }) {
                   valor={tareaSeleccionada.nombre}
                   copiable
                   onCopiar={() => copiarTexto(tareaSeleccionada.nombre, 'Agencia')}
+                />
+                <CampoInfo
+                  label="Usuario asignado"
+                  valor={tareaSeleccionada.ce}
+                  copiable
+                  onCopiar={() => copiarTexto(tareaSeleccionada.ce, 'Usuario asignado')}
                 />
               </div>
 

@@ -17,6 +17,7 @@ export default function ListaTareas({ tareas }) {
     return (
       t.wo?.toLowerCase().includes(q) ||
       t.nombre?.toLowerCase().includes(q) ||
+      t.ce?.toLowerCase().includes(q) ||
       t.distrito?.toLowerCase().includes(q) ||
       t.id_atm?.toLowerCase().includes(q)
     )
@@ -42,7 +43,7 @@ export default function ListaTareas({ tareas }) {
           </Chip>
         </div>
         <Input
-          placeholder="WO, agencia, distrito, ID..."
+          placeholder="WO, agencia, usuario, distrito, ID..."
           value={busqueda}
           onValueChange={setBusqueda}
           startContent={<Search size={14} className="text-default-400" />}
@@ -72,6 +73,7 @@ export default function ListaTareas({ tareas }) {
                   </div>
                   <p className="text-sm font-medium text-default-800 leading-snug">{t.nombre}</p>
                   <div className="flex items-center gap-3 mt-1.5">
+                    <span className="text-xs text-default-500">{t.ce || 'Sin usuario'}</span>
                     <span className="flex items-center gap-1 text-xs text-default-400">
                       <MapPin size={11} />{t.distrito}
                     </span>
