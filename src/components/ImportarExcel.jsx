@@ -2,8 +2,8 @@ import { useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
-import { Card, CardBody, CardHeader, Button, Chip, Divider } from '@heroui/react'
-import { Upload, CheckCircle, XCircle, FileSpreadsheet } from 'lucide-react'
+import { Card, CardBody, CardHeader, Alert, Divider, Spinner } from '@heroui/react'
+import { Upload, FileSpreadsheet } from 'lucide-react'
 
 function excelFechaAString(valor) {
   if (!valor) return null
@@ -53,11 +53,29 @@ export default function ImportarExcel({ onImportado }) {
   const [estado, setEstado] = useState(null)
   const [mensaje, setMensaje] = useState('')
   const [dragging, setDragging] = useState(false)
+  const alertConfig = {
+    ok: {
+      color: 'success',
+      title: 'Importación completada',
+    },
+    error: {
+      color: 'danger',
+      title: 'No se pudo importar el Excel',
+    },
+    warning: {
+      color: 'warning',
+      title: 'WO duplicadas detectadas',
+    },
+    loading: {
+      color: 'primary',
+      title: 'Procesando archivo',
+    },
+  }
 
   async function procesarArchivo(archivo) {
     if (!archivo) return
     setCargando(true)
-    setEstado(null)
+    setEstado('loading')
     setMensaje('Leyendo Excel...')
 
     try {
@@ -71,7 +89,7 @@ export default function ImportarExcel({ onImportado }) {
         setCargando(false); return
       }
 
-      const tareas = filas.map(fila => ({
+      const tareasCrudas = filas.map(fila => ({
         wo:        String(fila['WO']        || '').trim(),
         modelo:    String(fila['MODELO']    || '').trim(),
         serie:     String(fila['SERIE']     || '').trim(),
@@ -84,6 +102,34 @@ export default function ImportarExcel({ onImportado }) {
         ce:        String(fila['CE']        || '').trim(),
       })).filter(t => t.wo !== '')
 
+      if (tareasCrudas.length === 0) {
+        setEstado('error')
+        setMensaje('No se encontraron filas con WO válido para importar.')
+        setCargando(false)
+        return
+      }
+
+      const contadorWo = new Map()
+      for (const tarea of tareasCrudas) {
+        contadorWo.set(tarea.wo, (contadorWo.get(tarea.wo) || 0) + 1)
+      }
+      const woDuplicadas = Array.from(contadorWo.entries())
+        .filter(([, cantidad]) => cantidad > 1)
+        .map(([wo]) => wo)
+
+      if (woDuplicadas.length > 0) {
+        setEstado('warning')
+        setMensaje(
+          `Se detectaron WO duplicadas en el Excel (${woDuplicadas.length}): ${woDuplicadas.join(', ')}. ` +
+          'Corrige el archivo antes de importar; no se guardó ningún registro.'
+        )
+        setCargando(false)
+        return
+      }
+
+      const tareas = tareasCrudas
+
+      setEstado('loading')
       setMensaje(`Subiendo ${tareas.length} tareas...`)
       const { error } = await supabase.from('tareas').upsert(tareas, { onConflict: 'wo' })
       if (error) throw error
@@ -129,17 +175,13 @@ export default function ImportarExcel({ onImportado }) {
         </label>
 
         {mensaje && (
-          <Chip
-            className="mt-3 w-full max-w-full h-auto py-2"
-            variant="flat"
-            color={estado === 'ok' ? 'success' : estado === 'error' ? 'danger' : 'primary'}
-            startContent={
-              estado === 'ok' ? <CheckCircle size={14} /> :
-              estado === 'error' ? <XCircle size={14} /> : null
-            }
-          >
-            {mensaje}
-          </Chip>
+          <Alert
+            className="mt-3"
+            color={alertConfig[estado]?.color || 'primary'}
+            title={alertConfig[estado]?.title || 'Estado de importación'}
+            description={mensaje}
+            startContent={estado === 'loading' ? <Spinner size="sm" /> : undefined}
+          />
         )}
       </CardBody>
     </Card>
