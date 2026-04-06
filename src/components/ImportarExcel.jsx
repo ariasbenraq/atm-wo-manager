@@ -2,8 +2,8 @@ import { useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
-import { Card, CardBody, CardHeader, Button, Chip, Divider } from '@heroui/react'
-import { Upload, CheckCircle, XCircle, FileSpreadsheet } from 'lucide-react'
+import { Card, CardBody, CardHeader, Alert, Divider, Spinner } from '@heroui/react'
+import { Upload, CheckCircle, XCircle, FileSpreadsheet, AlertTriangle, Info } from 'lucide-react'
 
 function excelFechaAString(valor) {
   if (!valor) return null
@@ -53,11 +53,33 @@ export default function ImportarExcel({ onImportado }) {
   const [estado, setEstado] = useState(null)
   const [mensaje, setMensaje] = useState('')
   const [dragging, setDragging] = useState(false)
+  const alertConfig = {
+    ok: {
+      status: 'success',
+      title: 'Importación completada',
+      icon: <CheckCircle size={16} />,
+    },
+    error: {
+      status: 'danger',
+      title: 'No se pudo importar el Excel',
+      icon: <XCircle size={16} />,
+    },
+    warning: {
+      status: 'warning',
+      title: 'WO duplicadas detectadas',
+      icon: <AlertTriangle size={16} />,
+    },
+    loading: {
+      status: 'accent',
+      title: 'Procesando archivo',
+      icon: <Spinner size="sm" />,
+    },
+  }
 
   async function procesarArchivo(archivo) {
     if (!archivo) return
     setCargando(true)
-    setEstado(null)
+    setEstado('loading')
     setMensaje('Leyendo Excel...')
 
     try {
@@ -100,7 +122,7 @@ export default function ImportarExcel({ onImportado }) {
         .map(([wo]) => wo)
 
       if (woDuplicadas.length > 0) {
-        setEstado('error')
+        setEstado('warning')
         setMensaje(
           `Se detectaron WO duplicadas en el Excel (${woDuplicadas.length}): ${woDuplicadas.join(', ')}. ` +
           'Corrige el archivo antes de importar; no se guardó ningún registro.'
@@ -111,6 +133,7 @@ export default function ImportarExcel({ onImportado }) {
 
       const tareas = tareasCrudas
 
+      setEstado('loading')
       setMensaje(`Subiendo ${tareas.length} tareas...`)
       const { error } = await supabase.from('tareas').upsert(tareas, { onConflict: 'wo' })
       if (error) throw error
@@ -156,17 +179,15 @@ export default function ImportarExcel({ onImportado }) {
         </label>
 
         {mensaje && (
-          <Chip
-            className="mt-3 w-full max-w-full h-auto py-2"
-            variant="flat"
-            color={estado === 'ok' ? 'success' : estado === 'error' ? 'danger' : 'primary'}
-            startContent={
-              estado === 'ok' ? <CheckCircle size={14} /> :
-              estado === 'error' ? <XCircle size={14} /> : null
-            }
-          >
-            {mensaje}
-          </Chip>
+          <Alert className="mt-3" status={alertConfig[estado]?.status || 'accent'}>
+            <Alert.Indicator>
+              {alertConfig[estado]?.icon || <Info size={16} />}
+            </Alert.Indicator>
+            <Alert.Content>
+              <Alert.Title>{alertConfig[estado]?.title || 'Estado de importación'}</Alert.Title>
+              <Alert.Description>{mensaje}</Alert.Description>
+            </Alert.Content>
+          </Alert>
         )}
       </CardBody>
     </Card>
