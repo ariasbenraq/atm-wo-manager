@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
 import { Card, CardBody, CardHeader, Alert, Divider, Spinner } from '@heroui/react'
-import { Upload, CheckCircle, XCircle, FileSpreadsheet, AlertTriangle, Info } from 'lucide-react'
+import { Upload, FileSpreadsheet } from 'lucide-react'
 
 function excelFechaAString(valor) {
   if (!valor) return null
@@ -55,24 +55,20 @@ export default function ImportarExcel({ onImportado }) {
   const [dragging, setDragging] = useState(false)
   const alertConfig = {
     ok: {
-      status: 'success',
+      color: 'success',
       title: 'Importación completada',
-      icon: <CheckCircle size={16} />,
     },
     error: {
-      status: 'danger',
+      color: 'danger',
       title: 'No se pudo importar el Excel',
-      icon: <XCircle size={16} />,
     },
     warning: {
-      status: 'warning',
+      color: 'warning',
       title: 'WO duplicadas detectadas',
-      icon: <AlertTriangle size={16} />,
     },
     loading: {
-      status: 'accent',
+      color: 'primary',
       title: 'Procesando archivo',
-      icon: <Spinner size="sm" />,
     },
   }
 
@@ -179,15 +175,13 @@ export default function ImportarExcel({ onImportado }) {
         </label>
 
         {mensaje && (
-          <Alert className="mt-3" status={alertConfig[estado]?.status || 'accent'}>
-            <Alert.Indicator>
-              {alertConfig[estado]?.icon || <Info size={16} />}
-            </Alert.Indicator>
-            <Alert.Content>
-              <Alert.Title>{alertConfig[estado]?.title || 'Estado de importación'}</Alert.Title>
-              <Alert.Description>{mensaje}</Alert.Description>
-            </Alert.Content>
-          </Alert>
+          <Alert
+            className="mt-3"
+            color={alertConfig[estado]?.color || 'primary'}
+            title={alertConfig[estado]?.title || 'Estado de importación'}
+            description={mensaje}
+            startContent={estado === 'loading' ? <Spinner size="sm" /> : undefined}
+          />
         )}
       </CardBody>
     </Card>
