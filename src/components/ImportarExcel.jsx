@@ -84,18 +84,32 @@ export default function ImportarExcel({ onImportado }) {
         ce:        String(fila['CE']        || '').trim(),
       })).filter(t => t.wo !== '')
 
-      const tareasPorWo = new Map()
-      for (const tarea of tareasCrudas) {
-        tareasPorWo.set(tarea.wo, tarea)
-      }
-      const tareas = Array.from(tareasPorWo.values())
-      const duplicados = tareasCrudas.length - tareas.length
-      if (tareas.length === 0) {
+      if (tareasCrudas.length === 0) {
         setEstado('error')
         setMensaje('No se encontraron filas con WO válido para importar.')
         setCargando(false)
         return
       }
+
+      const contadorWo = new Map()
+      for (const tarea of tareasCrudas) {
+        contadorWo.set(tarea.wo, (contadorWo.get(tarea.wo) || 0) + 1)
+      }
+      const woDuplicadas = Array.from(contadorWo.entries())
+        .filter(([, cantidad]) => cantidad > 1)
+        .map(([wo]) => wo)
+
+      if (woDuplicadas.length > 0) {
+        setEstado('error')
+        setMensaje(
+          `Se detectaron WO duplicadas en el Excel (${woDuplicadas.length}): ${woDuplicadas.join(', ')}. ` +
+          'Corrige el archivo antes de importar; no se guardó ningún registro.'
+        )
+        setCargando(false)
+        return
+      }
+
+      const tareas = tareasCrudas
 
       setMensaje(`Subiendo ${tareas.length} tareas...`)
       const { error } = await supabase.from('tareas').upsert(tareas, { onConflict: 'wo' })
@@ -105,11 +119,7 @@ export default function ImportarExcel({ onImportado }) {
       await db.tareas.bulkAdd(tareas)
 
       setEstado('ok')
-      setMensaje(
-        duplicados > 0
-          ? `${tareas.length} tareas importadas (${duplicados} filas duplicadas por WO fueron reemplazadas por la última ocurrencia).`
-          : `${tareas.length} tareas importadas`
-      )
+      setMensaje(`${tareas.length} tareas importadas`)
       onImportado && onImportado(tareas)
     } catch (err) {
       setEstado('error')
