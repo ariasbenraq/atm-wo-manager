@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Card, CardBody, CardHeader, Input, Chip, Divider, ScrollShadow } from '@heroui/react'
-import { Search, MapPin, Clock } from 'lucide-react'
+import { Card, CardBody, CardHeader, Input, Chip, Divider, ScrollShadow, Button } from '@heroui/react'
+import { Search, MapPin, Clock, CalendarDays, X } from 'lucide-react'
 
 const chipColor = (id) => {
   if (!id) return 'default'
@@ -11,15 +11,23 @@ const chipColor = (id) => {
 
 export default function ListaTareas({ tareas }) {
   const [busqueda, setBusqueda] = useState('')
+  const [fechaBusqueda, setFechaBusqueda] = useState('')
+
+  const hoy = new Date().toISOString().split('T')[0]
 
   const filtradas = tareas.filter(t => {
     const q = busqueda.toLowerCase()
-    return (
+    const coincideTexto = (
       t.wo?.toLowerCase().includes(q) ||
       t.nombre?.toLowerCase().includes(q) ||
       t.ce?.toLowerCase().includes(q) ||
       t.distrito?.toLowerCase().includes(q) ||
       t.id_atm?.toLowerCase().includes(q)
+    )
+    const coincideFecha = fechaBusqueda ? t.fecha === fechaBusqueda : true
+
+    return (
+      coincideTexto && coincideFecha
     )
   })
 
@@ -52,6 +60,41 @@ export default function ListaTareas({ tareas }) {
           radius="lg"
           classNames={{ inputWrapper: "border-default-200" }}
         />
+        <div className="flex gap-2 w-full">
+          <Input
+            type="date"
+            aria-label="Filtrar tareas por fecha"
+            value={fechaBusqueda}
+            onValueChange={setFechaBusqueda}
+            startContent={<CalendarDays size={14} className="text-default-400" />}
+            size="sm"
+            variant="bordered"
+            radius="lg"
+            className="flex-1"
+            classNames={{ inputWrapper: "border-default-200" }}
+          />
+          <Button
+            size="sm"
+            variant="flat"
+            color="primary"
+            radius="lg"
+            onPress={() => setFechaBusqueda(hoy)}
+          >
+            Hoy
+          </Button>
+          {fechaBusqueda && (
+            <Button
+              isIconOnly
+              size="sm"
+              variant="light"
+              radius="lg"
+              aria-label="Limpiar filtro de fecha"
+              onPress={() => setFechaBusqueda('')}
+            >
+              <X size={15} />
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <Divider className="mt-3" />
       <CardBody className="p-0">
@@ -80,6 +123,11 @@ export default function ListaTareas({ tareas }) {
                     <span className="flex items-center gap-1 text-xs text-default-400">
                       <Clock size={11} />{t.hora}
                     </span>
+                    {t.fecha && (
+                      <span className="flex items-center gap-1 text-xs text-default-400">
+                        <CalendarDays size={11} />{t.fecha}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
