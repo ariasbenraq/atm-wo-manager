@@ -33,6 +33,7 @@
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
   --tracking-tight: -0.025em;
+  --tracking-wide: 0.025em;
   --tracking-wider: 0.05em;
   --leading-snug: 1.375;
   --radius-sm: 0.25rem;
@@ -1699,6 +1700,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .text-\[0\.55rem\] {
   font-size: 0.55rem;
 }
+.text-\[11px\] {
+  font-size: 11px;
+}
 .text-\[100\%\] {
   font-size: 100%;
 }
@@ -1741,6 +1745,10 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .tracking-tight {
   --tw-tracking: var(--tracking-tight);
   letter-spacing: var(--tracking-tight);
+}
+.tracking-wide {
+  --tw-tracking: var(--tracking-wide);
+  letter-spacing: var(--tracking-wide);
 }
 .tracking-wider {
   --tw-tracking: var(--tracking-wider);

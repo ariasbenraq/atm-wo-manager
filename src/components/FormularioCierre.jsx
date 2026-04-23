@@ -61,6 +61,17 @@ function SelectorHora({ label, value, onChange, onAhora }) {
   )
 }
 
+function CampoResumen({ label, valor, mono = false }) {
+  return (
+    <div className="min-w-0 rounded-lg bg-default-50 px-3 py-2">
+      <p className="text-[11px] uppercase tracking-wide text-default-400">{label}</p>
+      <p className={`truncate text-sm font-medium text-default-700 ${mono ? 'font-mono' : ''}`}>
+        {valor || '—'}
+      </p>
+    </div>
+  )
+}
+
 export default function FormularioCierre({ tareas, onEliminarTarea }) {
   const [busqueda, setBusqueda] = useState('')
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null)
@@ -151,7 +162,10 @@ export default function FormularioCierre({ tareas, onEliminarTarea }) {
       <Card shadow="sm" className="overflow-visible">
         <CardHeader className="flex flex-col gap-3 pb-0">
           <div className="flex justify-between w-full items-center">
-            <p className="text-sm font-semibold">Seleccionar tarea</p>
+            <p className="text-sm font-semibold">Mis tareas</p>
+            <Chip size="sm" variant="flat" color="default">
+              {tareas.length} tarea{tareas.length === 1 ? '' : 's'}
+            </Chip>
           </div>
           <Input
             placeholder="Buscar agencia, WO, usuario o distrito..."
@@ -181,25 +195,38 @@ export default function FormularioCierre({ tareas, onEliminarTarea }) {
                     <div key={i}
                       className="px-3 py-3 border-b
                       border-default-100 last:border-0 transition-colors">
-                      <div onClick={() => seleccionarTarea(t)}
-                        className="cursor-pointer rounded-lg px-1 py-1 hover:bg-primary-50 transition-colors">
-                        <div className="flex items-center justify-between">
+                      <div className="rounded-lg px-1 py-1">
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-default-800">{t.nombre}</p>
+                            <p className="mt-1 text-xs text-default-500">
+                              Datos principales para gestionar la tarea
+                            </p>
+                          </div>
                           <Chip size="sm" variant="flat" color={chipColor(t.id_atm)}
-                            className="font-mono text-xs">{t.id_atm}</Chip>
-                          <span className="text-xs font-mono text-default-400">{t.wo}</span>
+                            className="font-mono text-xs shrink-0">
+                            {t.id_atm || 'Sin ATM'}
+                          </Chip>
                         </div>
-                        <p className="text-sm font-medium text-default-700 mt-1">{t.nombre}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-default-500">{t.ce || 'Sin usuario'}</span>
-                          <span className="flex items-center gap-1 text-xs text-default-400">
-                            <MapPin size={10} />{t.distrito}
-                          </span>
-                          <span className="flex items-center gap-1 text-xs text-default-400">
-                            <Clock size={10} />{t.hora}
-                          </span>
+                        <div className="grid grid-cols-2 gap-2">
+                          <CampoResumen label="WO" valor={t.wo} mono />
+                          <CampoResumen label="ATM" valor={t.id_atm} mono />
+                          <CampoResumen label="CE" valor={t.ce || 'Sin usuario'} />
+                          <CampoResumen label="Distrito" valor={t.distrito} />
+                          <CampoResumen label="Hora" valor={t.hora} mono />
+                          <CampoResumen label="Nombre" valor={t.nombre} />
                         </div>
                       </div>
-                      <div className="mt-3 flex justify-end">
+                      <div className="mt-3 flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          color="primary"
+                          variant="flat"
+                          radius="lg"
+                          onPress={() => seleccionarTarea(t)}
+                        >
+                          Ver detalle
+                        </Button>
                         <Button
                           size="sm"
                           color="danger"
@@ -230,8 +257,20 @@ export default function FormularioCierre({ tareas, onEliminarTarea }) {
         <>
           <Card shadow="sm">
             <CardHeader className="flex justify-between pb-0">
-              <p className="text-sm font-semibold">Datos del ATM</p>
+              <p className="text-sm font-semibold">Detalle de tarea</p>
               <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="light"
+                  radius="lg"
+                  onPress={() => {
+                    setTareaSeleccionada(null)
+                    setBusqueda('')
+                    setMostrarLista(true)
+                  }}
+                >
+                  Volver a lista
+                </Button>
                 <Button
                   size="sm"
                   color="danger"
