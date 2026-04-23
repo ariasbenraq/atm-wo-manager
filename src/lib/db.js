@@ -32,3 +32,17 @@ db.version(3).stores({
   motivos_aqr:   '++localId, descripcion',
   cierres:       '++localId, wo',
 })
+
+db.version(4).stores({
+  tareas:        '++localId, wo, id_atm, fecha, ce',
+  mis_tareas:    '++localId, &wo, id_atm, fecha, ce, estado, completadaEn',
+  personal_cmca: '++localId, nombre',
+  personal_cmpd: '++localId, nombre',
+  motivos_aqr:   '++localId, descripcion',
+  cierres:       '++localId, wo',
+}).upgrade(async tx => {
+  await tx.table('mis_tareas').toCollection().modify(tarea => {
+    tarea.estado = tarea.estado || 'pendiente'
+    tarea.completadaEn = tarea.completadaEn || null
+  })
+})

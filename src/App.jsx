@@ -75,8 +75,31 @@ export default function App() {
     const existente = await db.mis_tareas.where('wo').equals(tarea.wo).first()
     if (existente) return
 
-    await db.mis_tareas.add(tarea)
-    setMisTareas(prev => [tarea, ...prev])
+    const tareaPendiente = {
+      ...tarea,
+      estado: 'pendiente',
+      completadaEn: null,
+    }
+
+    await db.mis_tareas.add(tareaPendiente)
+    setMisTareas(prev => [tareaPendiente, ...prev])
+  }
+
+  async function marcarTareaCompletada(wo) {
+    if (!wo) return
+
+    const completadaEn = new Date().toISOString()
+
+    await db.mis_tareas.where('wo').equals(wo).modify({
+      estado: 'completada',
+      completadaEn,
+    })
+
+    setMisTareas(prev => prev.map(tarea => (
+      tarea.wo === wo
+        ? { ...tarea, estado: 'completada', completadaEn }
+        : tarea
+    )))
   }
 
   async function eliminarDeMisTareas(wo) {
@@ -190,6 +213,7 @@ export default function App() {
         <div className={vista === 'mis-tareas' ? 'block' : 'hidden'}>
           <FormularioCierre
             tareas={misTareas}
+            onMarcarCompletada={marcarTareaCompletada}
             onEliminarTarea={eliminarDeMisTareas}
           />
         </div>

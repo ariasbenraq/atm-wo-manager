@@ -1151,6 +1151,13 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
     margin-block-end: calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-y-reverse)));
   }
 }
+.space-y-3 {
+  :where(& > :not(:last-child)) {
+    --tw-space-y-reverse: 0;
+    margin-block-start: calc(calc(var(--spacing) * 3) * var(--tw-space-y-reverse));
+    margin-block-end: calc(calc(var(--spacing) * 3) * calc(1 - var(--tw-space-y-reverse)));
+  }
+}
 .space-y-4 {
   :where(& > :not(:last-child)) {
     --tw-space-y-reverse: 0;
@@ -1360,6 +1367,12 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
   border-color: color-mix(in srgb, #e2e8f0 70%, transparent);
   @supports (color: color-mix(in lab, red, red)) {
     border-color: color-mix(in oklab, var(--color-default-200) 70%, transparent);
+  }
+}
+.border-default-200\/80 {
+  border-color: color-mix(in srgb, #e2e8f0 80%, transparent);
+  @supports (color: color-mix(in lab, red, red)) {
+    border-color: color-mix(in oklab, var(--color-default-200) 80%, transparent);
   }
 }
 .border-default-300 {

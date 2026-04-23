@@ -3,9 +3,10 @@ import TimePicker from 'react-time-picker'
 import 'react-time-picker/dist/TimePicker.css'
 import {
   Card, CardBody, CardHeader, Input, Button,
-  Chip, Divider, ScrollShadow
+  Chip, Divider, ScrollShadow, Modal, ModalContent,
+  ModalHeader, ModalBody, ModalFooter
 } from '@heroui/react'
-import { Search, Clock, MapPin, Trash2 } from 'lucide-react'
+import { Search, Clock, CheckCircle2, Trash2 } from 'lucide-react'
 
 const chipColor = (id) => {
   if (!id) return 'default'
@@ -72,10 +73,11 @@ function CampoResumen({ label, valor, mono = false }) {
   )
 }
 
-export default function FormularioCierre({ tareas, onEliminarTarea }) {
+export default function FormularioCierre({ tareas, onMarcarCompletada, onEliminarTarea }) {
   const [busqueda, setBusqueda] = useState('')
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null)
   const [mostrarLista, setMostrarLista] = useState(true)
+  const [confirmacion, setConfirmacion] = useState(null)
   const [ds, setDs] = useState(null)
   const [arribo, setArribo] = useState(null)
   const [inicio, setInicio] = useState(null)
@@ -92,8 +94,11 @@ export default function FormularioCierre({ tareas, onEliminarTarea }) {
       t.distrito?.toLowerCase().includes(q) ||
       t.id_atm?.toLowerCase().includes(q)
     )
-  }).slice(0, 8)
-  const tareasVisibles = (busqueda ? tareasFiltradas : tareas.slice(0, 8))
+  })
+  const tareasPendientes = tareasFiltradas.filter(t => t.estado !== 'completada')
+  const tareasCompletadas = tareasFiltradas.filter(t => t.estado === 'completada')
+  const pendientesVisibles = (busqueda ? tareasPendientes : tareasPendientes.slice(0, 8))
+  const completadasVisibles = (busqueda ? tareasCompletadas : tareasCompletadas.slice(0, 8))
 
   function seleccionarTarea(tarea) {
     setTareaSeleccionada(tarea)
@@ -102,17 +107,74 @@ export default function FormularioCierre({ tareas, onEliminarTarea }) {
     setDs(null); setArribo(null); setInicio(null); setFin(null); setRetorno(null)
   }
 
-  function eliminarTarea(tarea) {
+  function limpiarSeleccion() {
+    setTareaSeleccionada(null)
+    setBusqueda('')
+    setMostrarLista(true)
+    setDs(null); setArribo(null); setInicio(null); setFin(null); setRetorno(null)
+  }
+
+  function abrirConfirmacion(tipo, tarea) {
     if (!tarea?.wo) return
 
-    onEliminarTarea?.(tarea.wo)
+    setConfirmacion({ tipo, tarea })
+  }
+
+  function cerrarConfirmacion() {
+    setConfirmacion(null)
+  }
+
+  function ejecutarConfirmacion() {
+    if (!confirmacion?.tarea?.wo) return
+
+    const { tipo, tarea } = confirmacion
+
+    if (tipo === 'completar') {
+      onMarcarCompletada?.(tarea.wo)
+    }
+
+    if (tipo === 'eliminar') {
+      onEliminarTarea?.(tarea.wo)
+    }
 
     if (tareaSeleccionada?.wo === tarea.wo) {
-      setTareaSeleccionada(null)
-      setBusqueda('')
-      setMostrarLista(true)
-      setDs(null); setArribo(null); setInicio(null); setFin(null); setRetorno(null)
+      limpiarSeleccion()
     }
+
+    cerrarConfirmacion()
+  }
+
+  function obtenerTextoConfirmacion() {
+    if (!confirmacion?.tarea) return null
+
+    const { tipo, tarea } = confirmacion
+    const nombre = tarea.nombre || 'esta agencia'
+
+    if (tipo === 'completar') {
+      return {
+        titulo: 'Marcar tarea como completada',
+        descripcion: `La tarea ${tarea.wo} de ${nombre} dejara de aparecer en pendientes y pasara a completadas.`,
+        boton: 'Confirmar completada',
+        color: 'success',
+      }
+    }
+
+    return {
+      titulo: 'Eliminar tarea de Mis tareas',
+      descripcion: `La tarea ${tarea.wo} de ${nombre} se quitara de tu asignacion local y dejara de mostrarse en este apartado.`,
+      boton: 'Confirmar eliminacion',
+      color: 'danger',
+    }
+  }
+
+  function marcarCompletada(tarea) {
+    if (!tarea?.wo) return
+    abrirConfirmacion('completar', tarea)
+  }
+
+  function eliminarTarea(tarea) {
+    if (!tarea?.wo) return
+    abrirConfirmacion('eliminar', tarea)
   }
 
   function ahora() {
@@ -155,22 +217,23 @@ export default function FormularioCierre({ tareas, onEliminarTarea }) {
     }
   }
 
+  const textoConfirmacion = obtenerTextoConfirmacion()
+
   return (
     <div className="space-y-4">
 
-      {/* Selector */}
       <Card shadow="sm" className="overflow-visible">
         <CardHeader className="flex flex-col gap-3 pb-0">
           <div className="flex justify-between w-full items-center">
             <p className="text-sm font-semibold">Mis tareas</p>
             <Chip size="sm" variant="flat" color="default">
-              {tareas.length} tarea{tareas.length === 1 ? '' : 's'}
+              {tareasPendientes.length} pendiente{tareasPendientes.length === 1 ? '' : 's'}
             </Chip>
           </div>
           <Input
             placeholder="Buscar agencia, WO, usuario o distrito..."
             value={busqueda}
-            onValueChange={v => { setBusqueda(v); setMostrarLista(true); if (!v) setTareaSeleccionada(null) }}
+            onValueChange={v => { setBusqueda(v); setMostrarLista(true); if (!v && tareaSeleccionada?.estado === 'completada') limpiarSeleccion() }}
             onFocus={() => setMostrarLista(true)}
             startContent={<Search size={14} className="text-default-400" />}
             variant="bordered"
@@ -178,55 +241,133 @@ export default function FormularioCierre({ tareas, onEliminarTarea }) {
             size="md"
           />
         </CardHeader>
-        {/* <Divider className="mt-3" /> */}
-        <CardBody className='overflow-visible'>
+        <CardBody className="overflow-visible space-y-4">
           {tareas.length === 0 && (
             <div className="rounded-xl border border-dashed border-default-200 bg-default-50 px-4 py-6 text-center text-sm text-default-400">
               No tienes tareas en este apartado.
             </div>
           )}
-          <ScrollShadow className="max-h-[60vh]">
-            <div className="relative">
-
-              {mostrarLista && tareasVisibles.length > 0 && (
-                <div className=" w-full mt-1 bg-white border border-default-200
-                rounded-xl shadow-lg overflow-hidden">
-                  {tareasVisibles.map((t, i) => (
-                    <div key={i}
-                      className="px-3 py-3 border-b
-                      border-default-100 last:border-0 transition-colors">
-                      <div className="rounded-lg px-1 py-1">
-                        <div className="mb-3 flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-default-800">{t.nombre}</p>
-                            <p className="mt-1 text-xs text-default-500">
-                              Datos principales para gestionar la tarea
-                            </p>
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-semibold text-default-700">Pendientes</p>
+              <Chip size="sm" variant="flat" color="warning">
+                {tareasPendientes.length}
+              </Chip>
+            </div>
+            {mostrarLista && pendientesVisibles.length > 0 && (
+              <ScrollShadow className="max-h-[60vh]">
+                <div className="space-y-3">
+                  {pendientesVisibles.map((t, i) => (
+                    <Card
+                      key={t.wo || i}
+                      shadow="sm"
+                      className="border border-default-200/80 bg-white"
+                    >
+                      <CardBody className="p-4">
+                        <div className="rounded-lg px-1 py-1">
+                          <div className="mb-3 flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-default-800">{t.nombre}</p>
+                              <p className="mt-1 text-xs text-default-500">
+                                Datos principales para gestionar la tarea
+                              </p>
+                            </div>
+                            <Chip size="sm" variant="flat" color={chipColor(t.id_atm)}
+                              className="shrink-0 font-mono text-xs">
+                              {t.id_atm || 'Sin ATM'}
+                            </Chip>
                           </div>
-                          <Chip size="sm" variant="flat" color={chipColor(t.id_atm)}
-                            className="font-mono text-xs shrink-0">
-                            {t.id_atm || 'Sin ATM'}
-                          </Chip>
+                          <div className="grid grid-cols-2 gap-2">
+                            <CampoResumen label="WO" valor={t.wo} mono />
+                            <CampoResumen label="ATM" valor={t.id_atm} mono />
+                            <CampoResumen label="CE" valor={t.ce || 'Sin usuario'} />
+                            <CampoResumen label="Distrito" valor={t.distrito} />
+                            <CampoResumen label="Hora" valor={t.hora} mono />
+                            <CampoResumen label="Nombre" valor={t.nombre} />
+                          </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <CampoResumen label="WO" valor={t.wo} mono />
-                          <CampoResumen label="ATM" valor={t.id_atm} mono />
-                          <CampoResumen label="CE" valor={t.ce || 'Sin usuario'} />
-                          <CampoResumen label="Distrito" valor={t.distrito} />
-                          <CampoResumen label="Hora" valor={t.hora} mono />
-                          <CampoResumen label="Nombre" valor={t.nombre} />
+                        <div className="mt-3 flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            color="primary"
+                            variant="flat"
+                            radius="lg"
+                            onPress={() => seleccionarTarea(t)}
+                          >
+                            Ver detalle
+                          </Button>
+                          <Button
+                            size="sm"
+                            color="success"
+                            variant="flat"
+                            radius="lg"
+                            startContent={<CheckCircle2 size={14} />}
+                            onPress={() => marcarCompletada(t)}
+                          >
+                            Marcar completada
+                          </Button>
+                          <Button
+                            size="sm"
+                            color="danger"
+                            variant="flat"
+                            radius="lg"
+                            startContent={<Trash2 size={14} />}
+                            onPress={() => eliminarTarea(t)}
+                          >
+                            Eliminar
+                          </Button>
                         </div>
+                      </CardBody>
+                    </Card>
+                  ))}
+                </div>
+              </ScrollShadow>
+            )}
+            {mostrarLista && pendientesVisibles.length === 0 && (
+              <div className="rounded-xl border border-default-200 bg-white px-4 py-4 text-sm text-default-400 shadow-sm">
+                {busqueda
+                  ? `No se encontraron tareas pendientes para "${busqueda}".`
+                  : 'No hay tareas pendientes.'}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-semibold text-default-700">Completadas</p>
+              <Chip size="sm" variant="flat" color="success">
+                {tareasCompletadas.length}
+              </Chip>
+            </div>
+            {completadasVisibles.length > 0 ? (
+              <div className="space-y-3">
+                {completadasVisibles.map((t, i) => (
+                  <Card
+                    key={t.wo || i}
+                    shadow="sm"
+                    className="border border-default-200/80 bg-white"
+                  >
+                    <CardBody className="p-4">
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-default-700">{t.nombre}</p>
+                          <p className="mt-1 text-xs text-default-400">
+                            Completada {t.completadaEn ? new Date(t.completadaEn).toLocaleString() : ''}
+                          </p>
+                        </div>
+                        <Chip size="sm" variant="flat" color="success" className="shrink-0">
+                          Completada
+                        </Chip>
                       </div>
-                      <div className="mt-3 flex justify-end gap-2">
-                        <Button
-                          size="sm"
-                          color="primary"
-                          variant="flat"
-                          radius="lg"
-                          onPress={() => seleccionarTarea(t)}
-                        >
-                          Ver detalle
-                        </Button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <CampoResumen label="WO" valor={t.wo} mono />
+                        <CampoResumen label="ATM" valor={t.id_atm} mono />
+                        <CampoResumen label="CE" valor={t.ce || 'Sin usuario'} />
+                        <CampoResumen label="Distrito" valor={t.distrito} />
+                        <CampoResumen label="Hora" valor={t.hora} mono />
+                        <CampoResumen label="Nombre" valor={t.nombre} />
+                      </div>
+                      <div className="mt-3 flex justify-end">
                         <Button
                           size="sm"
                           color="danger"
@@ -238,21 +379,21 @@ export default function FormularioCierre({ tareas, onEliminarTarea }) {
                           Eliminar
                         </Button>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {mostrarLista && busqueda && tareasVisibles.length === 0 && (
-                <div className="w-full mt-1 rounded-xl border border-default-200 bg-white px-3 py-4 text-sm text-default-400 shadow-lg">
-                  No se encontraron tareas asignadas para "{busqueda}".
-                </div>
-              )}
-            </div>
-          </ScrollShadow>
+                    </CardBody>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-default-200 bg-white px-4 py-4 text-sm text-default-400 shadow-sm">
+                {busqueda
+                  ? `No se encontraron tareas completadas para "${busqueda}".`
+                  : 'Aun no hay tareas completadas.'}
+              </div>
+            )}
+          </div>
         </CardBody>
       </Card>
 
-      {/* Datos ATM */}
       {tareaSeleccionada && (
         <>
           <Card shadow="sm">
@@ -263,13 +404,19 @@ export default function FormularioCierre({ tareas, onEliminarTarea }) {
                   size="sm"
                   variant="light"
                   radius="lg"
-                  onPress={() => {
-                    setTareaSeleccionada(null)
-                    setBusqueda('')
-                    setMostrarLista(true)
-                  }}
+                  onPress={limpiarSeleccion}
                 >
                   Volver a lista
+                </Button>
+                <Button
+                  size="sm"
+                  color="success"
+                  variant="flat"
+                  radius="lg"
+                  startContent={<CheckCircle2 size={14} />}
+                  onPress={() => marcarCompletada(tareaSeleccionada)}
+                >
+                  Marcar completada
                 </Button>
                 <Button
                   size="sm"
@@ -398,6 +545,25 @@ export default function FormularioCierre({ tareas, onEliminarTarea }) {
           </Card>
         </>
       )}
+
+      <Modal isOpen={Boolean(confirmacion)} onOpenChange={abierto => !abierto && cerrarConfirmacion()}>
+        <ModalContent>
+          <>
+            <ModalHeader>{textoConfirmacion?.titulo}</ModalHeader>
+            <ModalBody>
+              <p className="text-sm text-default-600">{textoConfirmacion?.descripcion}</p>
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" onPress={cerrarConfirmacion}>
+                Cancelar
+              </Button>
+              <Button color={textoConfirmacion?.color} onPress={ejecutarConfirmacion}>
+                {textoConfirmacion?.boton}
+              </Button>
+            </ModalFooter>
+          </>
+        </ModalContent>
+      </Modal>
     </div>
   )
 }
