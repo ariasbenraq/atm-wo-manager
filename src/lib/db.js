@@ -23,3 +23,12 @@ db.version(2).stores({
     }
   })
 })
+
+db.version(3).stores({
+  tareas:        '++localId, wo, id_atm, fecha, ce',
+  mis_tareas:    '++localId, &wo, id_atm, fecha, ce',
+  personal_cmca: '++localId, nombre',
+  personal_cmpd: '++localId, nombre',
+  motivos_aqr:   '++localId, descripcion',
+  cierres:       '++localId, wo',
+})

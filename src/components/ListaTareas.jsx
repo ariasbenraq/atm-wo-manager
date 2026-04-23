@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Card, CardBody, CardHeader, Input, Chip, Divider, ScrollShadow, Button } from '@heroui/react'
-import { Search, MapPin, Clock, CalendarDays, X } from 'lucide-react'
+import { Search, MapPin, Clock, CalendarDays, Plus, Check, X } from 'lucide-react'
 
 const chipColor = (id) => {
   if (!id) return 'default'
@@ -9,11 +9,12 @@ const chipColor = (id) => {
   return 'default'
 }
 
-export default function ListaTareas({ tareas }) {
+export default function ListaTareas({ tareas, misTareas = [], onAgregarAMisTareas }) {
   const [busqueda, setBusqueda] = useState('')
   const [fechaBusqueda, setFechaBusqueda] = useState('')
 
   const hoy = new Date().toISOString().split('T')[0]
+  const misTareasWo = new Set(misTareas.map(tarea => tarea.wo))
 
   const filtradas = tareas.filter(t => {
     const q = busqueda.toLowerCase()
@@ -105,32 +106,52 @@ export default function ListaTareas({ tareas }) {
             </div>
           ) : (
             <div className="divide-y divide-default-100">
-              {filtradas.map((t, i) => (
-                <div key={i} className="px-4 py-3 hover:bg-default-50 cursor-pointer transition-colors">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <Chip size="sm" variant="flat" color={chipColor(t.id_atm)}
-                      className="font-mono text-xs">
-                      {t.id_atm}
-                    </Chip>
-                    <span className="text-xs font-mono text-default-400">{t.wo}</span>
+              {filtradas.map((t, i) => {
+                const yaAgregada = misTareasWo.has(t.wo)
+
+                return (
+                  <div key={t.wo || i} className="px-4 py-3 hover:bg-default-50 transition-colors">
+                    <div className="flex items-start justify-between gap-3 mb-1">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <Chip size="sm" variant="flat" color={chipColor(t.id_atm)}
+                            className="font-mono text-xs">
+                            {t.id_atm}
+                          </Chip>
+                          <span className="text-xs font-mono text-default-400">{t.wo}</span>
+                        </div>
+                        <p className="text-sm font-medium text-default-800 leading-snug">{t.nombre}</p>
+                        <div className="flex flex-wrap items-center gap-3 mt-1.5">
+                          <span className="text-xs text-default-500">{t.ce || 'Sin usuario'}</span>
+                          <span className="flex items-center gap-1 text-xs text-default-400">
+                            <MapPin size={11} />{t.distrito}
+                          </span>
+                          <span className="flex items-center gap-1 text-xs text-default-400">
+                            <Clock size={11} />{t.hora}
+                          </span>
+                          {t.fecha && (
+                            <span className="flex items-center gap-1 text-xs text-default-400">
+                              <CalendarDays size={11} />{t.fecha}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        radius="lg"
+                        color={yaAgregada ? 'success' : 'primary'}
+                        variant={yaAgregada ? 'flat' : 'solid'}
+                        startContent={yaAgregada ? <Check size={14} /> : <Plus size={14} />}
+                        onPress={() => onAgregarAMisTareas?.(t)}
+                        isDisabled={yaAgregada}
+                        className="shrink-0"
+                      >
+                        {yaAgregada ? 'Agregada' : 'Agregar a Mis tareas'}
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-sm font-medium text-default-800 leading-snug">{t.nombre}</p>
-                  <div className="flex items-center gap-3 mt-1.5">
-                    <span className="text-xs text-default-500">{t.ce || 'Sin usuario'}</span>
-                    <span className="flex items-center gap-1 text-xs text-default-400">
-                      <MapPin size={11} />{t.distrito}
-                    </span>
-                    <span className="flex items-center gap-1 text-xs text-default-400">
-                      <Clock size={11} />{t.hora}
-                    </span>
-                    {t.fecha && (
-                      <span className="flex items-center gap-1 text-xs text-default-400">
-                        <CalendarDays size={11} />{t.fecha}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </ScrollShadow>

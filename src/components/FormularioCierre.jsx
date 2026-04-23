@@ -5,7 +5,7 @@ import {
   Card, CardBody, CardHeader, Input, Button,
   Chip, Divider, ScrollShadow
 } from '@heroui/react'
-import { Search, Clock, MapPin } from 'lucide-react'
+import { Search, Clock, MapPin, Trash2 } from 'lucide-react'
 
 const chipColor = (id) => {
   if (!id) return 'default'
@@ -61,10 +61,10 @@ function SelectorHora({ label, value, onChange, onAhora }) {
   )
 }
 
-export default function FormularioCierre({ tareas }) {
+export default function FormularioCierre({ tareas, onEliminarTarea }) {
   const [busqueda, setBusqueda] = useState('')
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null)
-  const [mostrarLista, setMostrarLista] = useState(false)
+  const [mostrarLista, setMostrarLista] = useState(true)
   const [ds, setDs] = useState(null)
   const [arribo, setArribo] = useState(null)
   const [inicio, setInicio] = useState(null)
@@ -82,12 +82,26 @@ export default function FormularioCierre({ tareas }) {
       t.id_atm?.toLowerCase().includes(q)
     )
   }).slice(0, 8)
+  const tareasVisibles = (busqueda ? tareasFiltradas : tareas.slice(0, 8))
 
   function seleccionarTarea(tarea) {
     setTareaSeleccionada(tarea)
     setBusqueda(tarea.nombre)
     setMostrarLista(false)
     setDs(null); setArribo(null); setInicio(null); setFin(null); setRetorno(null)
+  }
+
+  function eliminarTarea(tarea) {
+    if (!tarea?.wo) return
+
+    onEliminarTarea?.(tarea.wo)
+
+    if (tareaSeleccionada?.wo === tarea.wo) {
+      setTareaSeleccionada(null)
+      setBusqueda('')
+      setMostrarLista(true)
+      setDs(null); setArribo(null); setInicio(null); setFin(null); setRetorno(null)
+    }
   }
 
   function ahora() {
@@ -152,33 +166,58 @@ export default function FormularioCierre({ tareas }) {
         </CardHeader>
         {/* <Divider className="mt-3" /> */}
         <CardBody className='overflow-visible'>
+          {tareas.length === 0 && (
+            <div className="rounded-xl border border-dashed border-default-200 bg-default-50 px-4 py-6 text-center text-sm text-default-400">
+              No tienes tareas en este apartado.
+            </div>
+          )}
           <ScrollShadow className="max-h-[60vh]">
             <div className="relative">
 
-              {mostrarLista && busqueda && tareasFiltradas.length > 0 && (
+              {mostrarLista && tareasVisibles.length > 0 && (
                 <div className=" w-full mt-1 bg-white border border-default-200
                 rounded-xl shadow-lg overflow-hidden">
-                  {tareasFiltradas.map((t, i) => (
-                    <div key={i} onClick={() => seleccionarTarea(t)}
-                      className="px-3 py-3 hover:bg-primary-50 cursor-pointer border-b
+                  {tareasVisibles.map((t, i) => (
+                    <div key={i}
+                      className="px-3 py-3 border-b
                       border-default-100 last:border-0 transition-colors">
-                      <div className="flex items-center justify-between">
-                        <Chip size="sm" variant="flat" color={chipColor(t.id_atm)}
-                          className="font-mono text-xs">{t.id_atm}</Chip>
-                        <span className="text-xs font-mono text-default-400">{t.wo}</span>
+                      <div onClick={() => seleccionarTarea(t)}
+                        className="cursor-pointer rounded-lg px-1 py-1 hover:bg-primary-50 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <Chip size="sm" variant="flat" color={chipColor(t.id_atm)}
+                            className="font-mono text-xs">{t.id_atm}</Chip>
+                          <span className="text-xs font-mono text-default-400">{t.wo}</span>
+                        </div>
+                        <p className="text-sm font-medium text-default-700 mt-1">{t.nombre}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-default-500">{t.ce || 'Sin usuario'}</span>
+                          <span className="flex items-center gap-1 text-xs text-default-400">
+                            <MapPin size={10} />{t.distrito}
+                          </span>
+                          <span className="flex items-center gap-1 text-xs text-default-400">
+                            <Clock size={10} />{t.hora}
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-sm font-medium text-default-700 mt-1">{t.nombre}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs text-default-500">{t.ce || 'Sin usuario'}</span>
-                        <span className="flex items-center gap-1 text-xs text-default-400">
-                          <MapPin size={10} />{t.distrito}
-                        </span>
-                        <span className="flex items-center gap-1 text-xs text-default-400">
-                          <Clock size={10} />{t.hora}
-                        </span>
+                      <div className="mt-3 flex justify-end">
+                        <Button
+                          size="sm"
+                          color="danger"
+                          variant="flat"
+                          radius="lg"
+                          startContent={<Trash2 size={14} />}
+                          onPress={() => eliminarTarea(t)}
+                        >
+                          Eliminar
+                        </Button>
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+              {mostrarLista && busqueda && tareasVisibles.length === 0 && (
+                <div className="w-full mt-1 rounded-xl border border-default-200 bg-white px-3 py-4 text-sm text-default-400 shadow-lg">
+                  No se encontraron tareas asignadas para "{busqueda}".
                 </div>
               )}
             </div>
@@ -192,21 +231,33 @@ export default function FormularioCierre({ tareas }) {
           <Card shadow="sm">
             <CardHeader className="flex justify-between pb-0">
               <p className="text-sm font-semibold">Datos del ATM</p>
-              <button
-                type="button"
-                onClick={() => copiarTexto(tareaSeleccionada.id_atm, 'ID ATM')}
-                className="rounded-medium cursor-copy active:scale-95 transition-transform"
-                title="Toca para copiar ID ATM"
-              >
-                <Chip
+              <div className="flex items-center gap-2">
+                <Button
                   size="sm"
+                  color="danger"
                   variant="flat"
-                  color={chipColor(tareaSeleccionada.id_atm)}
-                  className="font-mono"
+                  radius="lg"
+                  startContent={<Trash2 size={14} />}
+                  onPress={() => eliminarTarea(tareaSeleccionada)}
                 >
-                  {tareaSeleccionada.id_atm}
-                </Chip>
-              </button>
+                  Eliminar
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => copiarTexto(tareaSeleccionada.id_atm, 'ID ATM')}
+                  className="rounded-medium cursor-copy active:scale-95 transition-transform"
+                  title="Toca para copiar ID ATM"
+                >
+                  <Chip
+                    size="sm"
+                    variant="flat"
+                    color={chipColor(tareaSeleccionada.id_atm)}
+                    className="font-mono"
+                  >
+                    {tareaSeleccionada.id_atm}
+                  </Chip>
+                </button>
+              </div>
             </CardHeader>
             <Divider className="mt-3" />
             <CardBody>
