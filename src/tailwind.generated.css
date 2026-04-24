@@ -1475,6 +1475,12 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .bg-white {
   background-color: var(--color-white);
 }
+.bg-white\/70 {
+  background-color: color-mix(in srgb, #fff 70%, transparent);
+  @supports (color: color-mix(in lab, red, red)) {
+    background-color: color-mix(in oklab, var(--color-white) 70%, transparent);
+  }
+}
 .bg-white\/80 {
   background-color: color-mix(in srgb, #fff 80%, transparent);
   @supports (color: color-mix(in lab, red, red)) {
@@ -1747,6 +1753,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .text-\[11px\] {
   font-size: 11px;
 }
+.text-\[18px\] {
+  font-size: 18px;
+}
 .text-\[100\%\] {
   font-size: 100%;
 }
@@ -1761,6 +1770,10 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .leading-\[32px\] {
   --tw-leading: 32px;
   line-height: 32px;
+}
+.leading-none {
+  --tw-leading: 1;
+  line-height: 1;
 }
 .leading-snug {
   --tw-leading: var(--leading-snug);
@@ -1808,6 +1821,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 }
 .break-words {
   overflow-wrap: break-word;
+}
+.break-all {
+  word-break: break-all;
 }
 .text-ellipsis {
   text-overflow: ellipsis;
@@ -3213,6 +3229,16 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .sm\:\[--slide-exit\:0px\] {
   @media (width >= 40rem) {
     --slide-exit: 0px;
+  }
+}
+.md\:block {
+  @media (width >= 48rem) {
+    display: block;
+  }
+}
+.md\:hidden {
+  @media (width >= 48rem) {
+    display: none;
   }
 }
 .md\:grid-cols-2 {

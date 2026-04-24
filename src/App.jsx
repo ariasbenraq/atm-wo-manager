@@ -29,7 +29,7 @@ import {
   ModalBody,
   ModalFooter,
 } from '@heroui/react'
-import { Boxes, ClipboardList, LogOut, Menu, Package, Pencil, Plus, Wrench } from 'lucide-react'
+import { Boxes, ClipboardList, LogOut, Menu, Package, Plus, Wrench } from 'lucide-react'
 
 const VISTA_INICIAL = 'tareas'
 
@@ -484,7 +484,64 @@ function PaginaRepuestos({ session }) {
             </div>
           ) : (
             <ScrollShadow className="max-h-[55vh] px-5 pb-5">
-              <div className="overflow-hidden rounded-2xl border border-default-200 bg-white">
+              <div className="space-y-3 md:hidden">
+                {repuestos.map(repuesto => (
+                  <div
+                    key={repuesto.id || repuesto.localId}
+                    className={`rounded-2xl border px-4 py-4 shadow-sm transition-colors ${
+                      repuesto.tiene_stock
+                        ? 'border-success-200 bg-success-50/80'
+                        : 'border-danger-200 bg-danger-50/80'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className={`text-sm font-semibold ${
+                          repuesto.tiene_stock ? 'text-success-950' : 'text-danger-950'
+                        }`}>
+                          {repuesto.nombre}
+                        </p>
+                        <p className={`mt-1 break-all font-mono text-xs ${
+                          repuesto.tiene_stock ? 'text-success-800' : 'text-danger-800'
+                        }`}>
+                          {repuesto.part_number}
+                        </p>
+                      </div>
+                      <Chip
+                        size="sm"
+                        variant="flat"
+                        color={repuesto.tiene_stock ? 'success' : 'danger'}
+                      >
+                        {repuesto.tiene_stock ? 'Con stock' : 'Sin stock'}
+                      </Chip>
+                    </div>
+
+                    <div className="mt-4 rounded-xl bg-white/70 px-3 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+                        Detalle
+                      </p>
+                      <p className="mt-1 text-sm leading-5 text-default-700">
+                        {repuesto.descripcion || 'Sin detalle adicional'}
+                      </p>
+                    </div>
+
+                    <div className="mt-4 flex justify-end">
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="light"
+                        radius="lg"
+                        aria-label={`Editar repuesto ${repuesto.nombre}`}
+                        onPress={() => abrirEdicion(repuesto)}
+                      >
+                        <span className="material-symbols-outlined text-[18px] leading-none">edit</span>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden overflow-hidden rounded-2xl border border-default-200 bg-white md:block">
                 <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_100px_minmax(0,1.1fr)_96px] gap-4 border-b border-default-200 bg-default-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-500">
                   <span>Nombre</span>
                   <span>Part Number</span>
@@ -534,13 +591,14 @@ function PaginaRepuestos({ session }) {
                       </div>
                       <div className="flex justify-end">
                         <Button
+                          isIconOnly
                           size="sm"
                           variant="light"
                           radius="lg"
-                          startContent={<Pencil size={14} />}
+                          aria-label={`Editar repuesto ${repuesto.nombre}`}
                           onPress={() => abrirEdicion(repuesto)}
                         >
-                          Editar
+                          <span className="material-symbols-outlined text-[18px] leading-none">edit</span>
                         </Button>
                       </div>
                     </div>
