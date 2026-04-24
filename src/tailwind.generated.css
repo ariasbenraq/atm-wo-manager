@@ -643,6 +643,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .max-h-\[48rem\] {
   max-height: 48rem;
 }
+.max-h-\[55vh\] {
+  max-height: 55vh;
+}
 .max-h-\[56rem\] {
   max-height: 56rem;
 }
@@ -1165,6 +1168,13 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
     margin-block-end: calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-y-reverse)));
   }
 }
+.space-y-5 {
+  :where(& > :not(:last-child)) {
+    --tw-space-y-reverse: 0;
+    margin-block-start: calc(calc(var(--spacing) * 5) * var(--tw-space-y-reverse));
+    margin-block-end: calc(calc(var(--spacing) * 5) * calc(1 - var(--tw-space-y-reverse)));
+  }
+}
 .gap-x-0 {
   column-gap: calc(var(--spacing) * 0);
 }
@@ -1627,6 +1637,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .pt-3 {
   padding-top: calc(var(--spacing) * 3);
 }
+.pt-5 {
+  padding-top: calc(var(--spacing) * 5);
+}
 .pr-0\.5 {
   padding-right: calc(var(--spacing) * 0.5);
 }
@@ -1650,6 +1663,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 }
 .pb-4 {
   padding-bottom: calc(var(--spacing) * 4);
+}
+.pb-5 {
+  padding-bottom: calc(var(--spacing) * 5);
 }
 .pb-10 {
   padding-bottom: calc(var(--spacing) * 10);
@@ -3174,6 +3190,11 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .sm\:\[--slide-exit\:0px\] {
   @media (width >= 40rem) {
     --slide-exit: 0px;
+  }
+}
+.md\:grid-cols-2 {
+  @media (width >= 48rem) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 .md\:space-y-5 {

@@ -46,3 +46,13 @@ db.version(4).stores({
     tarea.completadaEn = tarea.completadaEn || null
   })
 })
+
+db.version(5).stores({
+  tareas:        '++localId, wo, id_atm, fecha, ce',
+  mis_tareas:    '++localId, &wo, id_atm, fecha, ce, estado, completadaEn',
+  repuestos:     '++localId, nombre, partNumber, creadoEn',
+  personal_cmca: '++localId, nombre',
+  personal_cmpd: '++localId, nombre',
+  motivos_aqr:   '++localId, descripcion',
+  cierres:       '++localId, wo',
+})

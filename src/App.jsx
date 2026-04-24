@@ -18,8 +18,11 @@ import {
   DropdownMenu,
   DropdownTrigger,
   Divider,
+  Input,
+  Alert,
+  ScrollShadow,
 } from '@heroui/react'
-import { Boxes, ClipboardList, Menu, Package, Wrench } from 'lucide-react'
+import { Boxes, ClipboardList, Menu, Package, Plus, Wrench } from 'lucide-react'
 
 const VISTA_INICIAL = 'tareas'
 
@@ -30,23 +33,178 @@ const vistas = [
 ]
 
 function PaginaRepuestos() {
+  const [repuestos, setRepuestos] = useState([])
+  const [nombre, setNombre] = useState('')
+  const [partNumber, setPartNumber] = useState('')
+  const [errores, setErrores] = useState({})
+  const [mensaje, setMensaje] = useState(null)
+
+  useEffect(() => {
+    async function cargarRepuestos() {
+      const local = await db.repuestos.orderBy('localId').reverse().toArray()
+      setRepuestos(local)
+    }
+
+    cargarRepuestos()
+  }, [])
+
+  function validarFormulario() {
+    const nuevosErrores = {}
+
+    if (!nombre.trim()) {
+      nuevosErrores.nombre = 'El nombre es obligatorio.'
+    }
+
+    if (!partNumber.trim()) {
+      nuevosErrores.partNumber = 'El part number es obligatorio.'
+    }
+
+    setErrores(nuevosErrores)
+    return Object.keys(nuevosErrores).length === 0
+  }
+
+  async function crearRepuesto() {
+    setMensaje(null)
+
+    if (!validarFormulario()) return
+
+    const nuevoRepuesto = {
+      nombre: nombre.trim(),
+      partNumber: partNumber.trim(),
+      creadoEn: new Date().toISOString(),
+    }
+
+    const localId = await db.repuestos.add(nuevoRepuesto)
+    setRepuestos(prev => [{ ...nuevoRepuesto, localId }, ...prev])
+    setNombre('')
+    setPartNumber('')
+    setErrores({})
+    setMensaje({
+      color: 'success',
+      texto: `Repuesto ${nuevoRepuesto.nombre} agregado correctamente.`,
+    })
+  }
+
   return (
-    <Card shadow="sm" className="border border-default-200/70">
-      <CardBody className="p-6 md:p-8">
-        <div className="flex items-start gap-4">
-          <div className="rounded-2xl bg-warning-100 p-3 text-warning-700">
-            <Boxes size={22} />
+    <div className="space-y-4">
+      <Card shadow="sm" className="border border-default-200/70">
+        <CardBody className="p-6 md:p-8 space-y-5">
+          <div className="flex items-start gap-4">
+            <div className="rounded-2xl bg-warning-100 p-3 text-warning-700">
+              <Boxes size={22} />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold text-default-800">Repuestos</h2>
+              <p className="text-sm text-default-500">
+                Registra el inventario base con nombre y part number para tener una referencia
+                inmediata dentro de la aplicación.
+              </p>
+            </div>
           </div>
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold text-default-800">Repuestos</h2>
-            <p className="text-sm text-default-500">
-              Esta vista queda disponible desde el menú hamburguesa para continuar el flujo sin
-              reiniciar la aplicación ni perder la sesión actual.
-            </p>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <Input
+              label="Nombre del repuesto"
+              placeholder="Ej. Fuente de poder"
+              value={nombre}
+              onValueChange={value => {
+                setNombre(value)
+                if (errores.nombre) {
+                  setErrores(prev => ({ ...prev, nombre: undefined }))
+                }
+              }}
+              isInvalid={Boolean(errores.nombre)}
+              errorMessage={errores.nombre}
+              variant="bordered"
+              radius="lg"
+            />
+            <Input
+              label="Part number"
+              placeholder="Ej. NCR-00992-AX"
+              value={partNumber}
+              onValueChange={value => {
+                setPartNumber(value)
+                if (errores.partNumber) {
+                  setErrores(prev => ({ ...prev, partNumber: undefined }))
+                }
+              }}
+              isInvalid={Boolean(errores.partNumber)}
+              errorMessage={errores.partNumber}
+              variant="bordered"
+              radius="lg"
+            />
           </div>
-        </div>
-      </CardBody>
-    </Card>
+
+          <div className="flex justify-end">
+            <Button
+              color="primary"
+              radius="lg"
+              startContent={<Plus size={16} />}
+              onPress={crearRepuesto}
+            >
+              Crear repuesto
+            </Button>
+          </div>
+
+          {mensaje && (
+            <Alert
+              color={mensaje.color}
+              title="Inventario actualizado"
+              description={mensaje.texto}
+            />
+          )}
+        </CardBody>
+      </Card>
+
+      <Card shadow="sm" className="border border-default-200/70">
+        <CardBody className="p-0">
+          <div className="flex items-center justify-between px-5 pt-5">
+            <div>
+              <p className="text-sm font-semibold text-default-800">Inventario base</p>
+              <p className="text-xs text-default-500">Los nuevos repuestos aparecen al instante.</p>
+            </div>
+            <Chip size="sm" variant="flat" color="warning">
+              {repuestos.length} repuesto{repuestos.length === 1 ? '' : 's'}
+            </Chip>
+          </div>
+          <Divider className="my-4" />
+
+          {repuestos.length === 0 ? (
+            <div className="px-5 pb-5 text-sm text-default-400">
+              Aún no hay repuestos registrados.
+            </div>
+          ) : (
+            <ScrollShadow className="max-h-[55vh] px-5 pb-5">
+              <div className="space-y-3">
+                {repuestos.map(repuesto => (
+                  <Card
+                    key={repuesto.localId}
+                    shadow="sm"
+                    className="border border-default-200/80 bg-white"
+                  >
+                    <CardBody className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-default-800">
+                            {repuesto.nombre}
+                          </p>
+                          <p className="mt-1 text-xs text-default-500">
+                            Registrado para inventario base
+                          </p>
+                        </div>
+                        <Chip size="sm" variant="flat" color="primary" className="font-mono">
+                          {repuesto.partNumber}
+                        </Chip>
+                      </div>
+                    </CardBody>
+                  </Card>
+                ))}
+              </div>
+            </ScrollShadow>
+          )}
+        </CardBody>
+      </Card>
+    </div>
   )
 }
 
