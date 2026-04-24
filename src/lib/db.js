@@ -56,3 +56,31 @@ db.version(5).stores({
   motivos_aqr:   '++localId, descripcion',
   cierres:       '++localId, wo',
 })
+
+db.version(6).stores({
+  tareas:        '++localId, wo, id_atm, fecha, ce',
+  mis_tareas:    '++localId, &wo, id_atm, fecha, ce, estado, completadaEn',
+  repuestos:     '++localId, nombre, partNumber, descripcion, creadoEn',
+  personal_cmca: '++localId, nombre',
+  personal_cmpd: '++localId, nombre',
+  motivos_aqr:   '++localId, descripcion',
+  cierres:       '++localId, wo',
+}).upgrade(async tx => {
+  await tx.table('repuestos').toCollection().modify(repuesto => {
+    repuesto.descripcion = repuesto.descripcion || ''
+  })
+})
+
+db.version(7).stores({
+  tareas:        '++localId, wo, id_atm, fecha, ce',
+  mis_tareas:    '++localId, &wo, id_atm, fecha, ce, estado, completadaEn',
+  repuestos:     '++localId, nombre, partNumber, descripcion, tieneStock, creadoEn',
+  personal_cmca: '++localId, nombre',
+  personal_cmpd: '++localId, nombre',
+  motivos_aqr:   '++localId, descripcion',
+  cierres:       '++localId, wo',
+}).upgrade(async tx => {
+  await tx.table('repuestos').toCollection().modify(repuesto => {
+    repuesto.tieneStock = Boolean(repuesto.tieneStock)
+  })
+})

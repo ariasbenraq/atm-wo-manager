@@ -511,6 +511,12 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .box-content {
   box-sizing: content-box;
 }
+.line-clamp-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
 .inline-block {
   display: inline-block;
 }
@@ -1481,6 +1487,12 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
     background-color: color-mix(in oklab, var(--color-white) 85%, transparent);
   }
 }
+.bg-white\/90 {
+  background-color: color-mix(in srgb, #fff 90%, transparent);
+  @supports (color: color-mix(in lab, red, red)) {
+    background-color: color-mix(in oklab, var(--color-white) 90%, transparent);
+  }
+}
 .bg-gradient-to-b {
   --tw-gradient-position: to bottom in oklab;
   background-image: linear-gradient(var(--tw-gradient-stops));
@@ -1688,6 +1700,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .text-left {
   text-align: left;
 }
+.text-right {
+  text-align: right;
+}
 .text-start {
   text-align: start;
 }
@@ -1770,6 +1785,14 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .font-semibold {
   --tw-font-weight: var(--font-weight-semibold);
   font-weight: var(--font-weight-semibold);
+}
+.tracking-\[0\.2em\] {
+  --tw-tracking: 0.2em;
+  letter-spacing: 0.2em;
+}
+.tracking-\[0\.16em\] {
+  --tw-tracking: 0.16em;
+  letter-spacing: 0.16em;
 }
 .tracking-tight {
   --tw-tracking: var(--tracking-tight);

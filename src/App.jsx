@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { syncFromSupabase } from './lib/sync'
 import { db } from './lib/db'
+import { supabase } from './lib/supabase'
 import ImportarExcel from './components/ImportarExcel'
 import ListaTareas from './components/ListaTareas'
 import FormularioCierre from './components/FormularioCierre'
@@ -21,8 +22,14 @@ import {
   Input,
   Alert,
   ScrollShadow,
+  Spinner,
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
 } from '@heroui/react'
-import { Boxes, ClipboardList, Menu, Package, Plus, Wrench } from 'lucide-react'
+import { Boxes, ClipboardList, LogOut, Menu, Package, Pencil, Plus, Wrench } from 'lucide-react'
 
 const VISTA_INICIAL = 'tareas'
 
@@ -32,17 +39,162 @@ const vistas = [
   { key: 'repuestos', label: 'Repuestos', icon: Package },
 ]
 
-function PaginaRepuestos() {
+function PaginaLogin({ onLogin }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [errores, setErrores] = useState({})
+  const [cargando, setCargando] = useState(false)
+  const [mensaje, setMensaje] = useState(null)
+
+  function validarFormulario() {
+    const nuevosErrores = {}
+
+    if (!email.trim()) nuevosErrores.email = 'El correo es obligatorio.'
+    if (!password.trim()) nuevosErrores.password = 'La contraseña es obligatoria.'
+
+    setErrores(nuevosErrores)
+    return Object.keys(nuevosErrores).length === 0
+  }
+
+  async function iniciarSesion() {
+    setMensaje(null)
+
+    if (!validarFormulario()) return
+
+    setCargando(true)
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    })
+    setCargando(false)
+
+    if (error) {
+      setMensaje({ color: 'danger', texto: error.message })
+      return
+    }
+
+    onLogin?.(data.session ?? null)
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-default-100 via-default-50 to-white px-4 py-10">
+      <div className="mx-auto max-w-md">
+        <Card shadow="sm" className="border border-default-200/70 bg-white/90">
+          <CardBody className="space-y-5 p-6">
+            <div className="space-y-2 text-center">
+              <p className="text-xs uppercase tracking-[0.2em] text-default-400">ATM·WO</p>
+              <h1 className="text-xl font-semibold text-default-800">Acceso técnico</h1>
+              <p className="text-sm text-default-500">
+                Inicia sesión con tu cuenta para registrar y consultar repuestos en Supabase.
+              </p>
+            </div>
+
+            <Input
+              label="Correo"
+              type="email"
+              placeholder="tecnico@ncr.com"
+              value={email}
+              onValueChange={value => {
+                setEmail(value)
+                if (errores.email) setErrores(prev => ({ ...prev, email: undefined }))
+              }}
+              isInvalid={Boolean(errores.email)}
+              errorMessage={errores.email}
+              variant="bordered"
+              radius="lg"
+            />
+
+            <Input
+              label="Contraseña"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onValueChange={value => {
+                setPassword(value)
+                if (errores.password) setErrores(prev => ({ ...prev, password: undefined }))
+              }}
+              isInvalid={Boolean(errores.password)}
+              errorMessage={errores.password}
+              variant="bordered"
+              radius="lg"
+            />
+
+            <Button color="primary" radius="lg" onPress={iniciarSesion} isLoading={cargando}>
+              Entrar
+            </Button>
+
+            {mensaje && (
+              <Alert
+                color={mensaje.color}
+                title="No se pudo iniciar sesión"
+                description={mensaje.texto}
+              />
+            )}
+          </CardBody>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+function PaginaRepuestos({ session }) {
   const [repuestos, setRepuestos] = useState([])
   const [nombre, setNombre] = useState('')
   const [partNumber, setPartNumber] = useState('')
+  const [descripcion, setDescripcion] = useState('')
+  const [tieneStock, setTieneStock] = useState(false)
   const [errores, setErrores] = useState({})
   const [mensaje, setMensaje] = useState(null)
+  const [cargandoLista, setCargandoLista] = useState(true)
+  const [repuestoEditando, setRepuestoEditando] = useState(null)
+  const [editNombre, setEditNombre] = useState('')
+  const [editPartNumber, setEditPartNumber] = useState('')
+  const [editDescripcion, setEditDescripcion] = useState('')
+  const [editTieneStock, setEditTieneStock] = useState(false)
+  const [editErrores, setEditErrores] = useState({})
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false)
 
   useEffect(() => {
     async function cargarRepuestos() {
-      const local = await db.repuestos.orderBy('localId').reverse().toArray()
-      setRepuestos(local)
+      setCargandoLista(true)
+
+      try {
+        const { data, error } = await supabase
+          .from('repuestos')
+          .select('*')
+          .order('created_at', { ascending: false })
+
+        if (error) throw error
+
+        setRepuestos(data || [])
+
+        await db.repuestos.clear()
+        if (data?.length) {
+          await db.repuestos.bulkAdd(data.map(repuesto => ({
+            idRemoto: repuesto.id,
+            nombre: repuesto.nombre,
+            partNumber: repuesto.part_number,
+            descripcion: repuesto.descripcion || '',
+            tieneStock: Boolean(repuesto.tiene_stock),
+            creadoEn: repuesto.created_at,
+          })))
+        }
+      } catch {
+        const local = await db.repuestos.orderBy('localId').reverse().toArray()
+        setRepuestos(local.map(repuesto => ({
+          id: repuesto.idRemoto || repuesto.localId,
+          nombre: repuesto.nombre,
+          part_number: repuesto.partNumber,
+          descripcion: repuesto.descripcion || '',
+          tiene_stock: Boolean(repuesto.tieneStock),
+        })))
+        setMensaje({
+          color: 'warning',
+          texto: 'No se pudo sincronizar con Supabase. Mostrando el inventario local disponible.',
+        })
+      } finally {
+        setCargandoLista(false)
+      }
     }
 
     cargarRepuestos()
@@ -63,25 +215,142 @@ function PaginaRepuestos() {
     return Object.keys(nuevosErrores).length === 0
   }
 
+  function validarEdicion() {
+    const nuevosErrores = {}
+
+    if (!editNombre.trim()) {
+      nuevosErrores.nombre = 'El nombre es obligatorio.'
+    }
+
+    if (!editPartNumber.trim()) {
+      nuevosErrores.partNumber = 'El part number es obligatorio.'
+    }
+
+    setEditErrores(nuevosErrores)
+    return Object.keys(nuevosErrores).length === 0
+  }
+
   async function crearRepuesto() {
     setMensaje(null)
 
     if (!validarFormulario()) return
 
-    const nuevoRepuesto = {
+    const payload = {
       nombre: nombre.trim(),
-      partNumber: partNumber.trim(),
-      creadoEn: new Date().toISOString(),
+      part_number: partNumber.trim(),
+      descripcion: descripcion.trim(),
+      tiene_stock: tieneStock,
+      imagen_url: null,
+      created_by: session.user.id,
     }
 
-    const localId = await db.repuestos.add(nuevoRepuesto)
-    setRepuestos(prev => [{ ...nuevoRepuesto, localId }, ...prev])
+    const { data, error } = await supabase
+      .from('repuestos')
+      .insert(payload)
+      .select('*')
+      .single()
+
+    if (error) {
+      setMensaje({
+        color: 'danger',
+        texto: error.code === '23505'
+          ? 'Ya existe un repuesto con ese part number.'
+          : error.message,
+      })
+      return
+    }
+
+    await db.repuestos.add({
+      idRemoto: data.id,
+      nombre: data.nombre,
+      partNumber: data.part_number,
+      descripcion: data.descripcion || '',
+      tieneStock: Boolean(data.tiene_stock),
+      creadoEn: data.created_at,
+    })
+
+    setRepuestos(prev => [data, ...prev])
     setNombre('')
     setPartNumber('')
+    setDescripcion('')
+    setTieneStock(false)
     setErrores({})
     setMensaje({
       color: 'success',
-      texto: `Repuesto ${nuevoRepuesto.nombre} agregado correctamente.`,
+      texto: `Repuesto ${data.nombre} agregado correctamente.`,
+    })
+  }
+
+  function abrirEdicion(repuesto) {
+    setMensaje(null)
+    setRepuestoEditando(repuesto)
+    setEditNombre(repuesto.nombre || '')
+    setEditPartNumber(repuesto.part_number || '')
+    setEditDescripcion(repuesto.descripcion || '')
+    setEditTieneStock(Boolean(repuesto.tiene_stock))
+    setEditErrores({})
+  }
+
+  function cerrarEdicion() {
+    setRepuestoEditando(null)
+    setEditNombre('')
+    setEditPartNumber('')
+    setEditDescripcion('')
+    setEditTieneStock(false)
+    setEditErrores({})
+  }
+
+  async function actualizarRepuesto() {
+    if (!repuestoEditando?.id) return
+    if (!validarEdicion()) return
+
+    setGuardandoEdicion(true)
+
+    const payload = {
+      nombre: editNombre.trim(),
+      part_number: editPartNumber.trim(),
+      descripcion: editDescripcion.trim(),
+      tiene_stock: editTieneStock,
+      updated_at: new Date().toISOString(),
+    }
+
+    const { data, error } = await supabase
+      .from('repuestos')
+      .update(payload)
+      .eq('id', repuestoEditando.id)
+      .select('*')
+      .single()
+
+    setGuardandoEdicion(false)
+
+    if (error) {
+      setMensaje({
+        color: 'danger',
+        texto: error.code === '23505'
+          ? 'Ya existe un repuesto con ese part number.'
+          : error.message,
+      })
+      return
+    }
+
+    await db.repuestos.toCollection().modify(repuesto => {
+      if (repuesto.idRemoto === repuestoEditando.id) {
+        repuesto.nombre = data.nombre
+        repuesto.partNumber = data.part_number
+        repuesto.descripcion = data.descripcion || ''
+        repuesto.tieneStock = Boolean(data.tiene_stock)
+        repuesto.creadoEn = data.created_at
+      }
+    })
+
+    setRepuestos(prev => prev.map(repuesto => (
+      repuesto.id === data.id ? data : repuesto
+    )))
+
+    cerrarEdicion()
+    setMensaje({
+      color: 'success',
+      texto: `Repuesto ${data.nombre} actualizado correctamente.`,
     })
   }
 
@@ -133,6 +402,41 @@ function PaginaRepuestos() {
               variant="bordered"
               radius="lg"
             />
+            <Input
+              label="Detalle"
+              placeholder="Ej. Compatible con ATM SelfServ 80"
+              value={descripcion}
+              onValueChange={setDescripcion}
+              variant="bordered"
+              radius="lg"
+            />
+          </div>
+
+          <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
+            <p className="text-sm font-semibold text-default-700">Stock actual</p>
+            <p className="mt-1 text-xs text-default-500">
+              Indica si este repuesto está disponible actualmente.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <Button
+                size="sm"
+                radius="lg"
+                color={tieneStock ? 'success' : 'default'}
+                variant={tieneStock ? 'solid' : 'bordered'}
+                onPress={() => setTieneStock(true)}
+              >
+                Con stock
+              </Button>
+              <Button
+                size="sm"
+                radius="lg"
+                color={!tieneStock ? 'danger' : 'default'}
+                variant={!tieneStock ? 'solid' : 'bordered'}
+                onPress={() => setTieneStock(false)}
+              >
+                Sin stock
+              </Button>
+            </div>
           </div>
 
           <div className="flex justify-end">
@@ -169,41 +473,156 @@ function PaginaRepuestos() {
           </div>
           <Divider className="my-4" />
 
-          {repuestos.length === 0 ? (
+          {cargandoLista ? (
+            <div className="flex items-center gap-3 px-5 pb-5 text-sm text-default-500">
+              <Spinner size="sm" />
+              Cargando repuestos...
+            </div>
+          ) : repuestos.length === 0 ? (
             <div className="px-5 pb-5 text-sm text-default-400">
               Aún no hay repuestos registrados.
             </div>
           ) : (
             <ScrollShadow className="max-h-[55vh] px-5 pb-5">
-              <div className="space-y-3">
-                {repuestos.map(repuesto => (
-                  <Card
-                    key={repuesto.localId}
-                    shadow="sm"
-                    className="border border-default-200/80 bg-white"
-                  >
-                    <CardBody className="p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-default-800">
-                            {repuesto.nombre}
-                          </p>
-                          <p className="mt-1 text-xs text-default-500">
-                            Registrado para inventario base
-                          </p>
-                        </div>
-                        <Chip size="sm" variant="flat" color="primary" className="font-mono">
-                          {repuesto.partNumber}
+              <div className="overflow-hidden rounded-2xl border border-default-200 bg-white">
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_100px_minmax(0,1.1fr)_96px] gap-4 border-b border-default-200 bg-default-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-500">
+                  <span>Nombre</span>
+                  <span>Part Number</span>
+                  <span>Stock</span>
+                  <span>Detalle</span>
+                  <span className="text-right">Acción</span>
+                </div>
+                <div className="divide-y divide-default-100">
+                  {repuestos.map(repuesto => (
+                    <div
+                      key={repuesto.id || repuesto.localId}
+                      className={`grid grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_100px_minmax(0,1.1fr)_96px] gap-4 px-4 py-3 transition-colors ${
+                        repuesto.tiene_stock
+                          ? 'bg-success-50/70 hover:bg-success-50'
+                          : 'bg-danger-50/70 hover:bg-danger-50'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className={`truncate text-sm font-medium ${
+                          repuesto.tiene_stock ? 'text-success-900' : 'text-danger-900'
+                        }`}>
+                          {repuesto.nombre}
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className={`truncate font-mono text-sm ${
+                          repuesto.tiene_stock ? 'text-success-800' : 'text-danger-800'
+                        }`}>
+                          {repuesto.part_number}
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <Chip
+                          size="sm"
+                          variant="flat"
+                          color={repuesto.tiene_stock ? 'success' : 'danger'}
+                        >
+                          {repuesto.tiene_stock ? 'Disponible' : 'Sin stock'}
                         </Chip>
                       </div>
-                    </CardBody>
-                  </Card>
-                ))}
+                      <div className="min-w-0">
+                        <p className={`line-clamp-2 text-xs leading-5 ${
+                          repuesto.tiene_stock ? 'text-success-700' : 'text-danger-700'
+                        }`}>
+                          {repuesto.descripcion || 'Sin detalle adicional'}
+                        </p>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button
+                          size="sm"
+                          variant="light"
+                          radius="lg"
+                          startContent={<Pencil size={14} />}
+                          onPress={() => abrirEdicion(repuesto)}
+                        >
+                          Editar
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </ScrollShadow>
           )}
         </CardBody>
       </Card>
+
+      <Modal isOpen={Boolean(repuestoEditando)} onOpenChange={abierto => !abierto && cerrarEdicion()}>
+        <ModalContent>
+          <>
+            <ModalHeader>Editar repuesto</ModalHeader>
+            <ModalBody className="space-y-3">
+              <Input
+                label="Nombre del repuesto"
+                value={editNombre}
+                onValueChange={value => {
+                  setEditNombre(value)
+                  if (editErrores.nombre) setEditErrores(prev => ({ ...prev, nombre: undefined }))
+                }}
+                isInvalid={Boolean(editErrores.nombre)}
+                errorMessage={editErrores.nombre}
+                variant="bordered"
+                radius="lg"
+              />
+              <Input
+                label="Part number"
+                value={editPartNumber}
+                onValueChange={value => {
+                  setEditPartNumber(value)
+                  if (editErrores.partNumber) setEditErrores(prev => ({ ...prev, partNumber: undefined }))
+                }}
+                isInvalid={Boolean(editErrores.partNumber)}
+                errorMessage={editErrores.partNumber}
+                variant="bordered"
+                radius="lg"
+              />
+              <Input
+                label="Detalle"
+                value={editDescripcion}
+                onValueChange={setEditDescripcion}
+                variant="bordered"
+                radius="lg"
+              />
+              <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
+                <p className="text-sm font-semibold text-default-700">Stock actual</p>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    radius="lg"
+                    color={editTieneStock ? 'success' : 'default'}
+                    variant={editTieneStock ? 'solid' : 'bordered'}
+                    onPress={() => setEditTieneStock(true)}
+                  >
+                    Con stock
+                  </Button>
+                  <Button
+                    size="sm"
+                    radius="lg"
+                    color={!editTieneStock ? 'danger' : 'default'}
+                    variant={!editTieneStock ? 'solid' : 'bordered'}
+                    onPress={() => setEditTieneStock(false)}
+                  >
+                    Sin stock
+                  </Button>
+                </div>
+              </div>
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" onPress={cerrarEdicion}>
+                Cancelar
+              </Button>
+              <Button color="primary" onPress={actualizarRepuesto} isLoading={guardandoEdicion}>
+                Guardar cambios
+              </Button>
+            </ModalFooter>
+          </>
+        </ModalContent>
+      </Modal>
     </div>
   )
 }
@@ -212,6 +631,8 @@ export default function App() {
   const [tareas, setTareas] = useState([])
   const [misTareas, setMisTareas] = useState([])
   const [syncing, setSyncing] = useState(true)
+  const [session, setSession] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [vista, setVista] = useState(() => {
     if (typeof window === 'undefined') return VISTA_INICIAL
     return sessionStorage.getItem('atm-wo-vista') || VISTA_INICIAL
@@ -268,7 +689,31 @@ export default function App() {
   }
 
   useEffect(() => {
+    let activo = true
+
+    async function initAuth() {
+      const { data } = await supabase.auth.getSession()
+      if (!activo) return
+      setSession(data.session ?? null)
+      setAuthLoading(false)
+    }
+
+    initAuth()
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nuevaSession) => {
+      if (!activo) return
+      setSession(nuevaSession ?? null)
+    })
+
+    return () => {
+      activo = false
+      authListener.subscription.unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
     async function init() {
+      setSyncing(true)
       await cargarTareas()
       await cargarMisTareas()
       await syncFromSupabase()
@@ -276,8 +721,13 @@ export default function App() {
       await cargarMisTareas()
       setSyncing(false)
     }
-    init()
-  }, [])
+
+    if (session) {
+      init()
+    } else {
+      setSyncing(false)
+    }
+  }, [session])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -286,6 +736,26 @@ export default function App() {
 
   const vistaActiva = vistas.find(item => item.key === vista) || vistas[0]
   const VistaIcono = vistaActiva.icon
+
+  async function cerrarSesion() {
+    await supabase.auth.signOut()
+    setSession(null)
+  }
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-default-100 via-default-50 to-white">
+        <div className="flex items-center gap-3 text-sm text-default-500">
+          <Spinner size="sm" />
+          Verificando sesión...
+        </div>
+      </div>
+    )
+  }
+
+  if (!session) {
+    return <PaginaLogin onLogin={setSession} />
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-default-100 via-default-50 to-white">
@@ -332,6 +802,17 @@ export default function App() {
               {syncing ? 'Sincronizando...' : `${tareas.length} tareas`}
             </Chip>
           </NavbarItem>
+          <NavbarItem>
+            <Button
+              size="sm"
+              variant="light"
+              radius="lg"
+              startContent={<LogOut size={14} />}
+              onPress={cerrarSesion}
+            >
+              Salir
+            </Button>
+          </NavbarItem>
         </NavbarContent>
       </Navbar>
 
@@ -377,7 +858,7 @@ export default function App() {
         </div>
 
         <div className={vista === 'repuestos' ? 'block' : 'hidden'}>
-          <PaginaRepuestos />
+          <PaginaRepuestos session={session} />
         </div>
       </main>
     </div>
