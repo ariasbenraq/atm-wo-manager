@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:network": "vite --host 0.0.0.0 --port 5173",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "preview:network": "vite preview --host 0.0.0.0 --port 4173",
     "styles:build": "node scripts/build-tailwind-css.mjs",
     "predev": "npm run styles:build",
     "prebuild": "npm run styles:build"
