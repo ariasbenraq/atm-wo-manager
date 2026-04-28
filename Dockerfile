@@ -2,10 +2,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
+COPY package*.json ./
 RUN npm ci
 
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY . .
 RUN npm run build
 
 FROM nginx:alpine
