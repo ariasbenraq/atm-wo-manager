@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY . .
+COPY --from=builder /app/dist /usr/share/nginx/html
 RUN npm run build
 
 FROM nginx:alpine
