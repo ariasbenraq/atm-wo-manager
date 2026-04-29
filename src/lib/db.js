@@ -84,3 +84,17 @@ db.version(7).stores({
     repuesto.tieneStock = Boolean(repuesto.tieneStock)
   })
 })
+
+db.version(8).stores({
+  tareas:        '++localId, wo, id_atm, fecha, ce',
+  mis_tareas:    '++localId, &wo, id_atm, fecha, ce, estado, completadaEn',
+  repuestos:     '++localId, nombre, partNumber, descripcion, imagenUrl, tieneStock, creadoEn',
+  personal_cmca: '++localId, nombre',
+  personal_cmpd: '++localId, nombre',
+  motivos_aqr:   '++localId, descripcion',
+  cierres:       '++localId, wo',
+}).upgrade(async tx => {
+  await tx.table('repuestos').toCollection().modify(repuesto => {
+    repuesto.imagenUrl = typeof repuesto.imagenUrl === 'string' ? repuesto.imagenUrl : ''
+  })
+})

@@ -1750,6 +1750,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .text-\[0\.55rem\] {
   font-size: 0.55rem;
 }
+.text-\[10px\] {
+  font-size: 10px;
+}
 .text-\[11px\] {
   font-size: 11px;
 }
