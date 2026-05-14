@@ -981,6 +981,11 @@ export default function App() {
         </NavbarBrand>
         <NavbarContent justify="end">
           <NavbarItem>
+            <Chip size="sm" variant="flat" color={syncing ? 'warning' : 'success'}>
+              {syncing ? 'Sincronizando...' : `${tareas.length} tareas`}
+            </Chip>
+          </NavbarItem>
+          <NavbarItem>
             <Dropdown placement="bottom-end">
               <DropdownTrigger>
                 <Button
@@ -996,7 +1001,14 @@ export default function App() {
                 aria-label="Menú de navegación"
                 selectedKeys={[vista]}
                 selectionMode="single"
-                onAction={key => setVista(String(key))}
+                onAction={key => {
+                  if (String(key) === 'salir') {
+                    cerrarSesion()
+                    return
+                  }
+
+                  setVista(String(key))
+                }}
               >
                 {vistas.map(item => {
                   const Icon = item.icon
@@ -1010,24 +1022,15 @@ export default function App() {
                     </DropdownItem>
                   )
                 })}
+                <DropdownItem
+                  key="salir"
+                  color="danger"
+                  startContent={<LogOut size={16} />}
+                >
+                  Salir
+                </DropdownItem>
               </DropdownMenu>
             </Dropdown>
-          </NavbarItem>
-          <NavbarItem>
-            <Chip size="sm" variant="flat" color={syncing ? 'warning' : 'success'}>
-              {syncing ? 'Sincronizando...' : `${tareas.length} tareas`}
-            </Chip>
-          </NavbarItem>
-          <NavbarItem>
-            <Button
-              size="sm"
-              variant="light"
-              radius="lg"
-              startContent={<LogOut size={14} />}
-              onPress={cerrarSesion}
-            >
-              Salir
-            </Button>
           </NavbarItem>
         </NavbarContent>
       </Navbar>
