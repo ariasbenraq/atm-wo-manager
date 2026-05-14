@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { syncFromSupabase } from './lib/sync'
 import { db } from './lib/db'
 import { supabase } from './lib/supabase'
@@ -29,7 +29,7 @@ import {
   ModalBody,
   ModalFooter,
 } from '@heroui/react'
-import { Boxes, ClipboardList, LogOut, Menu, Package, Plus, Wrench } from 'lucide-react'
+import { Boxes, ClipboardList, Eye, LogOut, Menu, Package, Plus, Wrench } from 'lucide-react'
 
 const VISTA_INICIAL = 'tareas'
 
@@ -38,63 +38,6 @@ const vistas = [
   { key: 'mis-tareas', label: 'Mis tareas', icon: Wrench },
   { key: 'repuestos', label: 'Repuestos', icon: Package },
 ]
-
-function construirRutaImagen(userId, fileName) {
-  const extension = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : 'jpg'
-  const nombreBase = fileName
-    .replace(/\.[^/.]+$/, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40) || 'repuesto'
-
-  return `${userId}/${Date.now()}-${nombreBase}.${extension}`
-}
-
-async function subirImagenRepuesto(file, userId) {
-  const ruta = construirRutaImagen(userId, file.name)
-  const { error } = await supabase.storage
-    .from('repuestos')
-    .upload(ruta, file, {
-      cacheControl: '3600',
-      upsert: false,
-    })
-
-  if (error) throw error
-
-  const { data } = supabase.storage.from('repuestos').getPublicUrl(ruta)
-  return data.publicUrl
-}
-
-function MiniaturaRepuesto({ nombre, imagenUrl, className = 'h-14 w-14' }) {
-  const [errorCarga, setErrorCarga] = useState(false)
-
-  useEffect(() => {
-    setErrorCarga(false)
-  }, [imagenUrl])
-
-  if (!imagenUrl || errorCarga) {
-    return (
-      <div className={`${className} flex shrink-0 items-center justify-center rounded-xl border border-dashed border-default-300 bg-default-100 text-[10px] font-medium uppercase tracking-[0.16em] text-default-500`}>
-        Sin imagen
-      </div>
-    )
-  }
-
-  return (
-    <img
-      src={imagenUrl}
-      alt={`Referencia de ${nombre}`}
-      className={`${className} shrink-0 rounded-xl border border-default-200 bg-white object-cover`}
-      loading="lazy"
-      onError={() => setErrorCarga(true)}
-    />
-  )
-}
-
-function obtenerImagenRepuesto(repuesto) {
-  return String(repuesto?.image_url || repuesto?.imagen_url || repuesto?.imagenUrl || '').trim()
-}
 
 function PaginaLogin({ onLogin }) {
   const [email, setEmail] = useState('')
@@ -195,51 +138,23 @@ function PaginaLogin({ onLogin }) {
 }
 
 function PaginaRepuestos({ session }) {
-  const inputImagenRef = useRef(null)
-  const inputEditImagenRef = useRef(null)
   const [repuestos, setRepuestos] = useState([])
   const [nombre, setNombre] = useState('')
   const [partNumber, setPartNumber] = useState('')
   const [descripcion, setDescripcion] = useState('')
-  const [imagenArchivo, setImagenArchivo] = useState(null)
-  const [imagenPreview, setImagenPreview] = useState('')
   const [tieneStock, setTieneStock] = useState(false)
+  const [filtroNombre, setFiltroNombre] = useState('')
   const [errores, setErrores] = useState({})
   const [mensaje, setMensaje] = useState(null)
   const [cargandoLista, setCargandoLista] = useState(true)
-  const [creandoRepuesto, setCreandoRepuesto] = useState(false)
+  const [repuestoDetalle, setRepuestoDetalle] = useState(null)
   const [repuestoEditando, setRepuestoEditando] = useState(null)
   const [editNombre, setEditNombre] = useState('')
   const [editPartNumber, setEditPartNumber] = useState('')
   const [editDescripcion, setEditDescripcion] = useState('')
-  const [editImagenArchivo, setEditImagenArchivo] = useState(null)
-  const [editImagenPreview, setEditImagenPreview] = useState('')
   const [editTieneStock, setEditTieneStock] = useState(false)
   const [editErrores, setEditErrores] = useState({})
   const [guardandoEdicion, setGuardandoEdicion] = useState(false)
-
-  useEffect(() => {
-    if (!imagenArchivo) {
-      setImagenPreview('')
-      return undefined
-    }
-
-    const objectUrl = URL.createObjectURL(imagenArchivo)
-    setImagenPreview(objectUrl)
-
-    return () => URL.revokeObjectURL(objectUrl)
-  }, [imagenArchivo])
-
-  useEffect(() => {
-    if (!editImagenArchivo) {
-      return undefined
-    }
-
-    const objectUrl = URL.createObjectURL(editImagenArchivo)
-    setEditImagenPreview(objectUrl)
-
-    return () => URL.revokeObjectURL(objectUrl)
-  }, [editImagenArchivo])
 
   useEffect(() => {
     async function cargarRepuestos() {
@@ -262,19 +177,17 @@ function PaginaRepuestos({ session }) {
             nombre: repuesto.nombre,
             partNumber: repuesto.part_number,
             descripcion: repuesto.descripcion || '',
-            imagenUrl: obtenerImagenRepuesto(repuesto),
             tieneStock: Boolean(repuesto.tiene_stock),
             creadoEn: repuesto.created_at,
           })))
         }
       } catch {
       const local = await db.repuestos.orderBy('localId').reverse().toArray()
-      setRepuestos(local.map(repuesto => ({
+        setRepuestos(local.map(repuesto => ({
           id: repuesto.idRemoto || repuesto.localId,
           nombre: repuesto.nombre,
           part_number: repuesto.partNumber,
           descripcion: repuesto.descripcion || '',
-          imagen_url: obtenerImagenRepuesto(repuesto),
           tiene_stock: Boolean(repuesto.tieneStock),
         })))
         setMensaje({
@@ -300,10 +213,6 @@ function PaginaRepuestos({ session }) {
       nuevosErrores.partNumber = 'El part number es obligatorio.'
     }
 
-    if (imagenArchivo && !imagenArchivo.type.startsWith('image/')) {
-      nuevosErrores.imagen = 'Selecciona un archivo de imagen valido.'
-    }
-
     setErrores(nuevosErrores)
     return Object.keys(nuevosErrores).length === 0
   }
@@ -319,10 +228,6 @@ function PaginaRepuestos({ session }) {
       nuevosErrores.partNumber = 'El part number es obligatorio.'
     }
 
-    if (editImagenArchivo && !editImagenArchivo.type.startsWith('image/')) {
-      nuevosErrores.imagen = 'Selecciona un archivo de imagen valido.'
-    }
-
     setEditErrores(nuevosErrores)
     return Object.keys(nuevosErrores).length === 0
   }
@@ -332,29 +237,11 @@ function PaginaRepuestos({ session }) {
 
     if (!validarFormulario()) return
 
-    setCreandoRepuesto(true)
-
-    let imageUrl = null
-
-    try {
-      if (imagenArchivo) {
-        imageUrl = await subirImagenRepuesto(imagenArchivo, session.user.id)
-      }
-    } catch (error) {
-      setCreandoRepuesto(false)
-      setMensaje({
-        color: 'danger',
-        texto: `No se pudo subir la imagen: ${error.message}`,
-      })
-      return
-    }
-
     const payload = {
       nombre: nombre.trim(),
       part_number: partNumber.trim(),
       descripcion: descripcion.trim(),
       tiene_stock: tieneStock,
-      image_url: imageUrl,
       created_by: session.user.id,
     }
 
@@ -363,8 +250,6 @@ function PaginaRepuestos({ session }) {
       .insert(payload)
       .select('*')
       .single()
-
-    setCreandoRepuesto(false)
 
     if (error) {
       setMensaje({
@@ -381,7 +266,6 @@ function PaginaRepuestos({ session }) {
       nombre: data.nombre,
       partNumber: data.part_number,
       descripcion: data.descripcion || '',
-      imagenUrl: obtenerImagenRepuesto(data),
       tieneStock: Boolean(data.tiene_stock),
       creadoEn: data.created_at,
     })
@@ -390,9 +274,6 @@ function PaginaRepuestos({ session }) {
     setNombre('')
     setPartNumber('')
     setDescripcion('')
-    setImagenArchivo(null)
-    setImagenPreview('')
-    if (inputImagenRef.current) inputImagenRef.current.value = ''
     setTieneStock(false)
     setErrores({})
     setMensaje({
@@ -407,11 +288,16 @@ function PaginaRepuestos({ session }) {
     setEditNombre(repuesto.nombre || '')
     setEditPartNumber(repuesto.part_number || '')
     setEditDescripcion(repuesto.descripcion || '')
-    setEditImagenArchivo(null)
-    setEditImagenPreview(obtenerImagenRepuesto(repuesto))
     setEditTieneStock(Boolean(repuesto.tiene_stock))
     setEditErrores({})
-    if (inputEditImagenRef.current) inputEditImagenRef.current.value = ''
+  }
+
+  function abrirDetalle(repuesto) {
+    setRepuestoDetalle(repuesto)
+  }
+
+  function cerrarDetalle() {
+    setRepuestoDetalle(null)
   }
 
   function cerrarEdicion() {
@@ -419,11 +305,8 @@ function PaginaRepuestos({ session }) {
     setEditNombre('')
     setEditPartNumber('')
     setEditDescripcion('')
-    setEditImagenArchivo(null)
-    setEditImagenPreview('')
     setEditTieneStock(false)
     setEditErrores({})
-    if (inputEditImagenRef.current) inputEditImagenRef.current.value = ''
   }
 
   async function actualizarRepuesto() {
@@ -432,26 +315,10 @@ function PaginaRepuestos({ session }) {
 
     setGuardandoEdicion(true)
 
-    let imageUrl = obtenerImagenRepuesto(repuestoEditando) || null
-
-    try {
-      if (editImagenArchivo) {
-        imageUrl = await subirImagenRepuesto(editImagenArchivo, session.user.id)
-      }
-    } catch (error) {
-      setGuardandoEdicion(false)
-      setMensaje({
-        color: 'danger',
-        texto: `No se pudo subir la imagen: ${error.message}`,
-      })
-      return
-    }
-
     const payload = {
       nombre: editNombre.trim(),
       part_number: editPartNumber.trim(),
       descripcion: editDescripcion.trim(),
-      image_url: imageUrl,
       tiene_stock: editTieneStock,
       updated_at: new Date().toISOString(),
     }
@@ -480,7 +347,6 @@ function PaginaRepuestos({ session }) {
         repuesto.nombre = data.nombre
         repuesto.partNumber = data.part_number
         repuesto.descripcion = data.descripcion || ''
-        repuesto.imagenUrl = obtenerImagenRepuesto(data)
         repuesto.tieneStock = Boolean(data.tiene_stock)
         repuesto.creadoEn = data.created_at
       }
@@ -496,6 +362,11 @@ function PaginaRepuestos({ session }) {
       texto: `Repuesto ${data.nombre} actualizado correctamente.`,
     })
   }
+
+  const filtroNormalizado = filtroNombre.trim().toLowerCase()
+  const repuestosFiltrados = filtroNormalizado
+    ? repuestos.filter(repuesto => String(repuesto.nombre || '').toLowerCase().includes(filtroNormalizado))
+    : repuestos
 
   return (
     <div className="space-y-4">
@@ -553,55 +424,6 @@ function PaginaRepuestos({ session }) {
               variant="bordered"
               radius="lg"
             />
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              ref={inputImagenRef}
-              onChange={event => {
-                const file = event.target.files?.[0] || null
-                setImagenArchivo(file)
-                if (errores.imagen) {
-                  setErrores(prev => ({ ...prev, imagen: undefined }))
-                }
-              }}
-            />
-          </div>
-
-          <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
-            <div className="flex items-start gap-4">
-              <MiniaturaRepuesto nombre={nombre || 'Nuevo repuesto'} imagenUrl={imagenPreview} className="h-16 w-16" />
-              <div className="min-w-0 flex-1 space-y-2">
-                <p className="text-sm font-semibold text-default-700">Imagen de referencia</p>
-                <p className="text-xs text-default-500">
-                  Selecciona una imagen para subirla al bucket `repuestos` de Supabase Storage.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="bordered" radius="lg" onPress={() => inputImagenRef.current?.click()}>
-                    Seleccionar imagen
-                  </Button>
-                  {imagenArchivo && (
-                    <Button
-                      variant="light"
-                      radius="lg"
-                      onPress={() => {
-                        setImagenArchivo(null)
-                        setImagenPreview('')
-                        if (inputImagenRef.current) inputImagenRef.current.value = ''
-                      }}
-                    >
-                      Quitar
-                    </Button>
-                  )}
-                </div>
-                <p className="text-xs text-default-500">
-                  {imagenArchivo ? imagenArchivo.name : 'Aun no seleccionaste una imagen.'}
-                </p>
-                {errores.imagen && (
-                  <p className="text-xs text-danger-500">{errores.imagen}</p>
-                )}
-              </div>
-            </div>
           </div>
 
           <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
@@ -637,7 +459,6 @@ function PaginaRepuestos({ session }) {
               radius="lg"
               startContent={<Plus size={16} />}
               onPress={crearRepuesto}
-              isLoading={creandoRepuesto}
             >
               Crear repuesto
             </Button>
@@ -655,14 +476,26 @@ function PaginaRepuestos({ session }) {
 
       <Card shadow="sm" className="border border-default-200/70">
         <CardBody className="p-0">
-          <div className="flex items-center justify-between px-5 pt-5">
-            <div>
-              <p className="text-sm font-semibold text-default-800">Inventario base</p>
-              <p className="text-xs text-default-500">Los nuevos repuestos aparecen al instante.</p>
+          <div className="px-5 pt-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-default-800">Inventario base</p>
+                <p className="text-xs text-default-500">Los nuevos repuestos aparecen al instante.</p>
+              </div>
+              <Chip size="sm" variant="flat" color="warning" className="shrink-0">
+                {repuestosFiltrados.length} repuesto{repuestosFiltrados.length === 1 ? '' : 's'}
+              </Chip>
             </div>
-            <Chip size="sm" variant="flat" color="warning">
-              {repuestos.length} repuesto{repuestos.length === 1 ? '' : 's'}
-            </Chip>
+            <div className="mt-3 flex flex-col gap-3 md:max-w-[360px]">
+              <Input
+                label="Filtrar por nombre"
+                placeholder="Busca un repuesto"
+                value={filtroNombre}
+                onValueChange={setFiltroNombre}
+                variant="bordered"
+                radius="lg"
+              />
+            </div>
           </div>
           <Divider className="my-4" />
 
@@ -675,10 +508,14 @@ function PaginaRepuestos({ session }) {
             <div className="px-5 pb-5 text-sm text-default-400">
               Aún no hay repuestos registrados.
             </div>
+          ) : repuestosFiltrados.length === 0 ? (
+            <div className="px-5 pb-5 text-sm text-default-400">
+              No se encontraron repuestos con ese nombre.
+            </div>
           ) : (
             <ScrollShadow className="max-h-[55vh] px-5 pb-5">
               <div className="space-y-3 md:hidden">
-                {repuestos.map(repuesto => (
+                {repuestosFiltrados.map(repuesto => (
                   <div
                     key={repuesto.id || repuesto.localId}
                     className={`rounded-2xl border px-4 py-4 shadow-sm transition-colors ${
@@ -688,22 +525,17 @@ function PaginaRepuestos({ session }) {
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="flex min-w-0 gap-3">
-                        <div className="relative">
-                          <MiniaturaRepuesto nombre={repuesto.nombre} imagenUrl={obtenerImagenRepuesto(repuesto)} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className={`text-sm font-semibold ${
-                            repuesto.tiene_stock ? 'text-success-950' : 'text-danger-950'
-                          }`}>
-                            {repuesto.nombre}
-                          </p>
-                          <p className={`mt-1 break-all font-mono text-xs ${
-                            repuesto.tiene_stock ? 'text-success-800' : 'text-danger-800'
-                          }`}>
-                            {repuesto.part_number}
-                          </p>
-                        </div>
+                      <div className="min-w-0">
+                        <p className={`text-sm font-semibold ${
+                          repuesto.tiene_stock ? 'text-success-950' : 'text-danger-950'
+                        }`}>
+                          {repuesto.nombre}
+                        </p>
+                        <p className={`mt-1 break-all font-mono text-xs ${
+                          repuesto.tiene_stock ? 'text-success-800' : 'text-danger-800'
+                        }`}>
+                          {repuesto.part_number}
+                        </p>
                       </div>
                       <Chip
                         size="sm"
@@ -729,6 +561,16 @@ function PaginaRepuestos({ session }) {
                         size="sm"
                         variant="light"
                         radius="lg"
+                        aria-label={`Ver detalle del repuesto ${repuesto.nombre}`}
+                        onPress={() => abrirDetalle(repuesto)}
+                      >
+                        <Eye size={18} />
+                      </Button>
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="light"
+                        radius="lg"
                         aria-label={`Editar repuesto ${repuesto.nombre}`}
                         onPress={() => abrirEdicion(repuesto)}
                       >
@@ -740,7 +582,7 @@ function PaginaRepuestos({ session }) {
               </div>
 
               <div className="hidden overflow-hidden rounded-2xl border border-default-200 bg-white md:block">
-                <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_100px_minmax(0,1.1fr)_96px] gap-4 border-b border-default-200 bg-default-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-500">
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_100px_minmax(0,1.1fr)_136px] gap-4 border-b border-default-200 bg-default-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-500">
                   <span>Nombre</span>
                   <span>Part Number</span>
                   <span>Stock</span>
@@ -748,19 +590,16 @@ function PaginaRepuestos({ session }) {
                   <span className="text-right">Acción</span>
                 </div>
                 <div className="divide-y divide-default-100">
-                  {repuestos.map(repuesto => (
+                  {repuestosFiltrados.map(repuesto => (
                     <div
                       key={repuesto.id || repuesto.localId}
-                      className={`grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_100px_minmax(0,1.1fr)_96px] gap-4 px-4 py-3 transition-colors ${
+                      className={`grid grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_100px_minmax(0,1.1fr)_136px] gap-4 px-4 py-3 transition-colors ${
                         repuesto.tiene_stock
                           ? 'bg-success-50/70 hover:bg-success-50'
                           : 'bg-danger-50/70 hover:bg-danger-50'
                       }`}
                     >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="relative">
-                          <MiniaturaRepuesto nombre={repuesto.nombre} imagenUrl={obtenerImagenRepuesto(repuesto)} className="h-12 w-12" />
-                        </div>
+                      <div className="min-w-0">
                         <p className={`truncate text-sm font-medium ${
                           repuesto.tiene_stock ? 'text-success-900' : 'text-danger-900'
                         }`}>
@@ -790,7 +629,17 @@ function PaginaRepuestos({ session }) {
                           {repuesto.descripcion || 'Sin detalle adicional'}
                         </p>
                       </div>
-                      <div className="flex justify-end">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="light"
+                          radius="lg"
+                          aria-label={`Ver detalle del repuesto ${repuesto.nombre}`}
+                          onPress={() => abrirDetalle(repuesto)}
+                        >
+                          <Eye size={18} />
+                        </Button>
                         <Button
                           isIconOnly
                           size="sm"
@@ -810,6 +659,64 @@ function PaginaRepuestos({ session }) {
           )}
         </CardBody>
       </Card>
+
+      <Modal isOpen={Boolean(repuestoDetalle)} onOpenChange={abierto => !abierto && cerrarDetalle()}>
+        <ModalContent>
+          <>
+            <ModalHeader>Detalle del repuesto</ModalHeader>
+            <ModalBody className="space-y-4">
+              <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+                  Nombre completo
+                </p>
+                <p className="mt-2 break-words text-sm font-semibold text-default-800">
+                  {repuestoDetalle?.nombre || 'Sin nombre'}
+                </p>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+                    Part number
+                  </p>
+                  <p className="mt-2 break-all font-mono text-sm text-default-700">
+                    {repuestoDetalle?.part_number || 'Sin part number'}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+                    Estado
+                  </p>
+                  <div className="mt-2">
+                    <Chip
+                      size="sm"
+                      variant="flat"
+                      color={repuestoDetalle?.tiene_stock ? 'success' : 'danger'}
+                    >
+                      {repuestoDetalle?.tiene_stock ? 'Con stock' : 'Sin stock'}
+                    </Chip>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+                  Detalle
+                </p>
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-default-700">
+                  {repuestoDetalle?.descripcion || 'Sin detalle adicional'}
+                </p>
+              </div>
+            </ModalBody>
+            <ModalFooter>
+              <Button color="primary" onPress={cerrarDetalle}>
+                Cerrar
+              </Button>
+            </ModalFooter>
+          </>
+        </ModalContent>
+      </Modal>
 
       <Modal isOpen={Boolean(repuestoEditando)} onOpenChange={abierto => !abierto && cerrarEdicion()}>
         <ModalContent>
@@ -847,54 +754,6 @@ function PaginaRepuestos({ session }) {
                 variant="bordered"
                 radius="lg"
               />
-              <input
-                ref={inputEditImagenRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={event => {
-                  const file = event.target.files?.[0] || null
-                  setEditImagenArchivo(file)
-                  if (editErrores.imagen) {
-                    setEditErrores(prev => ({ ...prev, imagen: undefined }))
-                  }
-                }}
-              />
-              <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
-                <div className="flex items-start gap-4">
-                  <MiniaturaRepuesto nombre={editNombre || 'Repuesto'} imagenUrl={editImagenPreview} className="h-16 w-16" />
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <p className="text-sm font-semibold text-default-700">Imagen actual</p>
-                    <p className="text-xs text-default-500">
-                      Puedes reemplazar la imagen subiendo un nuevo archivo al bucket `repuestos`.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="bordered" radius="lg" onPress={() => inputEditImagenRef.current?.click()}>
-                        Reemplazar imagen
-                      </Button>
-                      {editImagenArchivo && (
-                        <Button
-                          variant="light"
-                          radius="lg"
-                          onPress={() => {
-                            setEditImagenArchivo(null)
-                            setEditImagenPreview(obtenerImagenRepuesto(repuestoEditando))
-                            if (inputEditImagenRef.current) inputEditImagenRef.current.value = ''
-                          }}
-                        >
-                          Cancelar cambio
-                        </Button>
-                      )}
-                    </div>
-                    <p className="text-xs text-default-500">
-                      {editImagenArchivo ? editImagenArchivo.name : 'Se mantendra la imagen actual si no subes otra.'}
-                    </p>
-                    {editErrores.imagen && (
-                      <p className="text-xs text-danger-500">{editErrores.imagen}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
               <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
                 <p className="text-sm font-semibold text-default-700">Stock actual</p>
                 <div className="mt-3 flex gap-2">
