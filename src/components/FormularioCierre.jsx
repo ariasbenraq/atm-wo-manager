@@ -79,6 +79,20 @@ function formatearHoraYFecha(hora, fecha) {
   return [hora, fechaTexto].filter(Boolean).join(' · ')
 }
 
+function obtenerMarcaTiempoTarea(tarea) {
+  const fecha = String(tarea?.fecha || '').trim()
+  const hora = String(tarea?.hora || '').trim() || '00:00'
+
+  if (!fecha) return 0
+
+  const matchIso = fecha.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!matchIso) return 0
+
+  const [, year, month, day] = matchIso
+  const marca = new Date(`${year}-${month}-${day}T${hora.length === 5 ? `${hora}:00` : hora}`)
+  return Number.isNaN(marca.getTime()) ? 0 : marca.getTime()
+}
+
 export default function FormularioCierre({ tareas, onMarcarCompletada, onEliminarTarea }) {
   const [busqueda, setBusqueda] = useState('')
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null)
@@ -102,8 +116,12 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
       t.id_atm?.toLowerCase().includes(q)
     )
   })
-  const tareasPendientes = tareasFiltradas.filter(t => t.estado !== 'completada')
-  const tareasCompletadas = tareasFiltradas.filter(t => t.estado === 'completada')
+  const tareasPendientes = tareasFiltradas
+    .filter(t => t.estado !== 'completada')
+    .sort((a, b) => obtenerMarcaTiempoTarea(a) - obtenerMarcaTiempoTarea(b))
+  const tareasCompletadas = tareasFiltradas
+    .filter(t => t.estado === 'completada')
+    .sort((a, b) => obtenerMarcaTiempoTarea(a) - obtenerMarcaTiempoTarea(b))
   const pendientesVisibles = (busqueda ? tareasPendientes : tareasPendientes.slice(0, 8))
   const completadasVisibles = (busqueda ? tareasCompletadas : tareasCompletadas.slice(0, 8))
 

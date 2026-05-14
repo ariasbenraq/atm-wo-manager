@@ -814,6 +814,15 @@ export default function App() {
     setMisTareas(local)
   }
 
+  function construirPayloadMisTarea(tarea, userId) {
+    return {
+      user_id: userId,
+      tarea_wo: tarea.wo,
+      estado: tarea.estado || 'pendiente',
+      completada_at: tarea.completadaEn || null,
+    }
+  }
+
   async function agregarAMisTareas(tarea) {
     if (!tarea?.wo) return
 
@@ -828,6 +837,20 @@ export default function App() {
 
     await db.mis_tareas.add(tareaPendiente)
     setMisTareas(prev => [tareaPendiente, ...prev])
+
+    try {
+      const { error } = await supabase
+        .from('mis_tareas')
+        .upsert(construirPayloadMisTarea(tareaPendiente, session.user.id), {
+          onConflict: 'user_id,tarea_wo',
+        })
+
+      if (error && error.code !== '23505') {
+        throw error
+      }
+    } catch (error) {
+      console.warn('No se pudo guardar la tarea en Supabase.', error)
+    }
   }
 
   async function marcarTareaCompletada(wo) {
@@ -845,6 +868,21 @@ export default function App() {
         ? { ...tarea, estado: 'completada', completadaEn }
         : tarea
     )))
+
+    try {
+      const { error } = await supabase
+        .from('mis_tareas')
+        .update({
+          estado: 'completada',
+          completada_at: completadaEn,
+        })
+        .eq('user_id', session.user.id)
+        .eq('tarea_wo', wo)
+
+      if (error) throw error
+    } catch (error) {
+      console.warn('No se pudo actualizar la tarea en Supabase.', error)
+    }
   }
 
   async function eliminarDeMisTareas(wo) {
@@ -852,6 +890,18 @@ export default function App() {
 
     await db.mis_tareas.where('wo').equals(wo).delete()
     setMisTareas(prev => prev.filter(tarea => tarea.wo !== wo))
+
+    try {
+      const { error } = await supabase
+        .from('mis_tareas')
+        .delete()
+        .eq('user_id', session.user.id)
+        .eq('tarea_wo', wo)
+
+      if (error) throw error
+    } catch (error) {
+      console.warn('No se pudo eliminar la tarea en Supabase.', error)
+    }
   }
 
   useEffect(() => {
@@ -882,7 +932,7 @@ export default function App() {
       setSyncing(true)
       await cargarTareas()
       await cargarMisTareas()
-      await syncFromSupabase()
+      await syncFromSupabase(session.user.id)
       await cargarTareas()
       await cargarMisTareas()
       setSyncing(false)
