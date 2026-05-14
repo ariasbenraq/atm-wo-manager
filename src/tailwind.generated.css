@@ -1353,6 +1353,10 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
   border-block-style: var(--tw-border-style);
   border-block-width: calc(1.75rem / 2);
 }
+.border-t {
+  border-top-style: var(--tw-border-style);
+  border-top-width: 1px;
+}
 .border-b {
   border-bottom-style: var(--tw-border-style);
   border-bottom-width: 1px;
@@ -1655,6 +1659,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .pt-3 {
   padding-top: calc(var(--spacing) * 3);
 }
+.pt-4 {
+  padding-top: calc(var(--spacing) * 4);
+}
 .pt-5 {
   padding-top: calc(var(--spacing) * 5);
 }
@@ -1763,6 +1770,10 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
   --tw-leading: calc(var(--spacing) * 5);
   line-height: calc(var(--spacing) * 5);
 }
+.leading-6 {
+  --tw-leading: calc(var(--spacing) * 6);
+  line-height: calc(var(--spacing) * 6);
+}
 .leading-\[1\.15\] {
   --tw-leading: 1.15;
   line-height: 1.15;
@@ -1833,6 +1844,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 }
 .whitespace-nowrap {
   white-space: nowrap;
+}
+.whitespace-pre-wrap {
+  white-space: pre-wrap;
 }
 .text-black {
   color: var(--color-black);
@@ -3239,6 +3253,11 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .md\:hidden {
   @media (width >= 48rem) {
     display: none;
+  }
+}
+.md\:max-w-\[360px\] {
+  @media (width >= 48rem) {
+    max-width: 360px;
   }
 }
 .md\:grid-cols-2 {

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Card, CardBody, CardHeader, Input, Chip, Divider, ScrollShadow, Button } from '@heroui/react'
 import { Search, MapPin, Clock, CalendarDays, Plus, Check, X } from 'lucide-react'
+import { formatearFecha } from '../lib/date'
 
 const chipColor = (id) => {
   if (!id) return 'default'
@@ -131,7 +132,7 @@ export default function ListaTareas({ tareas, misTareas = [], onAgregarAMisTarea
                           </span>
                           {t.fecha && (
                             <span className="flex items-center gap-1 text-xs text-default-400">
-                              <CalendarDays size={11} />{t.fecha}
+                              <CalendarDays size={11} />{formatearFecha(t.fecha)}
                             </span>
                           )}
                         </div>

@@ -29,7 +29,7 @@ import {
   ModalBody,
   ModalFooter,
 } from '@heroui/react'
-import { Boxes, ClipboardList, LogOut, Menu, Package, Plus, Wrench } from 'lucide-react'
+import { Boxes, ClipboardList, Eye, LogOut, Menu, Package, Plus, Wrench } from 'lucide-react'
 
 const VISTA_INICIAL = 'tareas'
 
@@ -143,9 +143,11 @@ function PaginaRepuestos({ session }) {
   const [partNumber, setPartNumber] = useState('')
   const [descripcion, setDescripcion] = useState('')
   const [tieneStock, setTieneStock] = useState(false)
+  const [filtroNombre, setFiltroNombre] = useState('')
   const [errores, setErrores] = useState({})
   const [mensaje, setMensaje] = useState(null)
   const [cargandoLista, setCargandoLista] = useState(true)
+  const [repuestoDetalle, setRepuestoDetalle] = useState(null)
   const [repuestoEditando, setRepuestoEditando] = useState(null)
   const [editNombre, setEditNombre] = useState('')
   const [editPartNumber, setEditPartNumber] = useState('')
@@ -180,7 +182,7 @@ function PaginaRepuestos({ session }) {
           })))
         }
       } catch {
-        const local = await db.repuestos.orderBy('localId').reverse().toArray()
+      const local = await db.repuestos.orderBy('localId').reverse().toArray()
         setRepuestos(local.map(repuesto => ({
           id: repuesto.idRemoto || repuesto.localId,
           nombre: repuesto.nombre,
@@ -240,7 +242,6 @@ function PaginaRepuestos({ session }) {
       part_number: partNumber.trim(),
       descripcion: descripcion.trim(),
       tiene_stock: tieneStock,
-      imagen_url: null,
       created_by: session.user.id,
     }
 
@@ -289,6 +290,14 @@ function PaginaRepuestos({ session }) {
     setEditDescripcion(repuesto.descripcion || '')
     setEditTieneStock(Boolean(repuesto.tiene_stock))
     setEditErrores({})
+  }
+
+  function abrirDetalle(repuesto) {
+    setRepuestoDetalle(repuesto)
+  }
+
+  function cerrarDetalle() {
+    setRepuestoDetalle(null)
   }
 
   function cerrarEdicion() {
@@ -353,6 +362,11 @@ function PaginaRepuestos({ session }) {
       texto: `Repuesto ${data.nombre} actualizado correctamente.`,
     })
   }
+
+  const filtroNormalizado = filtroNombre.trim().toLowerCase()
+  const repuestosFiltrados = filtroNormalizado
+    ? repuestos.filter(repuesto => String(repuesto.nombre || '').toLowerCase().includes(filtroNormalizado))
+    : repuestos
 
   return (
     <div className="space-y-4">
@@ -462,14 +476,26 @@ function PaginaRepuestos({ session }) {
 
       <Card shadow="sm" className="border border-default-200/70">
         <CardBody className="p-0">
-          <div className="flex items-center justify-between px-5 pt-5">
-            <div>
-              <p className="text-sm font-semibold text-default-800">Inventario base</p>
-              <p className="text-xs text-default-500">Los nuevos repuestos aparecen al instante.</p>
+          <div className="px-5 pt-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-default-800">Inventario base</p>
+                <p className="text-xs text-default-500">Los nuevos repuestos aparecen al instante.</p>
+              </div>
+              <Chip size="sm" variant="flat" color="warning" className="shrink-0">
+                {repuestosFiltrados.length} repuesto{repuestosFiltrados.length === 1 ? '' : 's'}
+              </Chip>
             </div>
-            <Chip size="sm" variant="flat" color="warning">
-              {repuestos.length} repuesto{repuestos.length === 1 ? '' : 's'}
-            </Chip>
+            <div className="mt-3 flex flex-col gap-3 md:max-w-[360px]">
+              <Input
+                label="Filtrar por nombre"
+                placeholder="Busca un repuesto"
+                value={filtroNombre}
+                onValueChange={setFiltroNombre}
+                variant="bordered"
+                radius="lg"
+              />
+            </div>
           </div>
           <Divider className="my-4" />
 
@@ -482,10 +508,14 @@ function PaginaRepuestos({ session }) {
             <div className="px-5 pb-5 text-sm text-default-400">
               Aún no hay repuestos registrados.
             </div>
+          ) : repuestosFiltrados.length === 0 ? (
+            <div className="px-5 pb-5 text-sm text-default-400">
+              No se encontraron repuestos con ese nombre.
+            </div>
           ) : (
             <ScrollShadow className="max-h-[55vh] px-5 pb-5">
               <div className="space-y-3 md:hidden">
-                {repuestos.map(repuesto => (
+                {repuestosFiltrados.map(repuesto => (
                   <div
                     key={repuesto.id || repuesto.localId}
                     className={`rounded-2xl border px-4 py-4 shadow-sm transition-colors ${
@@ -531,6 +561,16 @@ function PaginaRepuestos({ session }) {
                         size="sm"
                         variant="light"
                         radius="lg"
+                        aria-label={`Ver detalle del repuesto ${repuesto.nombre}`}
+                        onPress={() => abrirDetalle(repuesto)}
+                      >
+                        <Eye size={18} />
+                      </Button>
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="light"
+                        radius="lg"
                         aria-label={`Editar repuesto ${repuesto.nombre}`}
                         onPress={() => abrirEdicion(repuesto)}
                       >
@@ -542,7 +582,7 @@ function PaginaRepuestos({ session }) {
               </div>
 
               <div className="hidden overflow-hidden rounded-2xl border border-default-200 bg-white md:block">
-                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_100px_minmax(0,1.1fr)_96px] gap-4 border-b border-default-200 bg-default-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-500">
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_100px_minmax(0,1.1fr)_136px] gap-4 border-b border-default-200 bg-default-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-500">
                   <span>Nombre</span>
                   <span>Part Number</span>
                   <span>Stock</span>
@@ -550,10 +590,10 @@ function PaginaRepuestos({ session }) {
                   <span className="text-right">Acción</span>
                 </div>
                 <div className="divide-y divide-default-100">
-                  {repuestos.map(repuesto => (
+                  {repuestosFiltrados.map(repuesto => (
                     <div
                       key={repuesto.id || repuesto.localId}
-                      className={`grid grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_100px_minmax(0,1.1fr)_96px] gap-4 px-4 py-3 transition-colors ${
+                      className={`grid grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_100px_minmax(0,1.1fr)_136px] gap-4 px-4 py-3 transition-colors ${
                         repuesto.tiene_stock
                           ? 'bg-success-50/70 hover:bg-success-50'
                           : 'bg-danger-50/70 hover:bg-danger-50'
@@ -589,7 +629,17 @@ function PaginaRepuestos({ session }) {
                           {repuesto.descripcion || 'Sin detalle adicional'}
                         </p>
                       </div>
-                      <div className="flex justify-end">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="light"
+                          radius="lg"
+                          aria-label={`Ver detalle del repuesto ${repuesto.nombre}`}
+                          onPress={() => abrirDetalle(repuesto)}
+                        >
+                          <Eye size={18} />
+                        </Button>
                         <Button
                           isIconOnly
                           size="sm"
@@ -609,6 +659,64 @@ function PaginaRepuestos({ session }) {
           )}
         </CardBody>
       </Card>
+
+      <Modal isOpen={Boolean(repuestoDetalle)} onOpenChange={abierto => !abierto && cerrarDetalle()}>
+        <ModalContent>
+          <>
+            <ModalHeader>Detalle del repuesto</ModalHeader>
+            <ModalBody className="space-y-4">
+              <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+                  Nombre completo
+                </p>
+                <p className="mt-2 break-words text-sm font-semibold text-default-800">
+                  {repuestoDetalle?.nombre || 'Sin nombre'}
+                </p>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+                    Part number
+                  </p>
+                  <p className="mt-2 break-all font-mono text-sm text-default-700">
+                    {repuestoDetalle?.part_number || 'Sin part number'}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+                    Estado
+                  </p>
+                  <div className="mt-2">
+                    <Chip
+                      size="sm"
+                      variant="flat"
+                      color={repuestoDetalle?.tiene_stock ? 'success' : 'danger'}
+                    >
+                      {repuestoDetalle?.tiene_stock ? 'Con stock' : 'Sin stock'}
+                    </Chip>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+                  Detalle
+                </p>
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-default-700">
+                  {repuestoDetalle?.descripcion || 'Sin detalle adicional'}
+                </p>
+              </div>
+            </ModalBody>
+            <ModalFooter>
+              <Button color="primary" onPress={cerrarDetalle}>
+                Cerrar
+              </Button>
+            </ModalFooter>
+          </>
+        </ModalContent>
+      </Modal>
 
       <Modal isOpen={Boolean(repuestoEditando)} onOpenChange={abierto => !abierto && cerrarEdicion()}>
         <ModalContent>
@@ -706,6 +814,15 @@ export default function App() {
     setMisTareas(local)
   }
 
+  function construirPayloadMisTarea(tarea, userId) {
+    return {
+      user_id: userId,
+      tarea_wo: tarea.wo,
+      estado: tarea.estado || 'pendiente',
+      completada_at: tarea.completadaEn || null,
+    }
+  }
+
   async function agregarAMisTareas(tarea) {
     if (!tarea?.wo) return
 
@@ -720,6 +837,20 @@ export default function App() {
 
     await db.mis_tareas.add(tareaPendiente)
     setMisTareas(prev => [tareaPendiente, ...prev])
+
+    try {
+      const { error } = await supabase
+        .from('mis_tareas')
+        .upsert(construirPayloadMisTarea(tareaPendiente, session.user.id), {
+          onConflict: 'user_id,tarea_wo',
+        })
+
+      if (error && error.code !== '23505') {
+        throw error
+      }
+    } catch (error) {
+      console.warn('No se pudo guardar la tarea en Supabase.', error)
+    }
   }
 
   async function marcarTareaCompletada(wo) {
@@ -737,6 +868,21 @@ export default function App() {
         ? { ...tarea, estado: 'completada', completadaEn }
         : tarea
     )))
+
+    try {
+      const { error } = await supabase
+        .from('mis_tareas')
+        .update({
+          estado: 'completada',
+          completada_at: completadaEn,
+        })
+        .eq('user_id', session.user.id)
+        .eq('tarea_wo', wo)
+
+      if (error) throw error
+    } catch (error) {
+      console.warn('No se pudo actualizar la tarea en Supabase.', error)
+    }
   }
 
   async function eliminarDeMisTareas(wo) {
@@ -744,6 +890,18 @@ export default function App() {
 
     await db.mis_tareas.where('wo').equals(wo).delete()
     setMisTareas(prev => prev.filter(tarea => tarea.wo !== wo))
+
+    try {
+      const { error } = await supabase
+        .from('mis_tareas')
+        .delete()
+        .eq('user_id', session.user.id)
+        .eq('tarea_wo', wo)
+
+      if (error) throw error
+    } catch (error) {
+      console.warn('No se pudo eliminar la tarea en Supabase.', error)
+    }
   }
 
   useEffect(() => {
@@ -774,7 +932,7 @@ export default function App() {
       setSyncing(true)
       await cargarTareas()
       await cargarMisTareas()
-      await syncFromSupabase()
+      await syncFromSupabase(session.user.id)
       await cargarTareas()
       await cargarMisTareas()
       setSyncing(false)
@@ -823,6 +981,11 @@ export default function App() {
         </NavbarBrand>
         <NavbarContent justify="end">
           <NavbarItem>
+            <Chip size="sm" variant="flat" color={syncing ? 'warning' : 'success'}>
+              {syncing ? 'Sincronizando...' : `${tareas.length} tareas`}
+            </Chip>
+          </NavbarItem>
+          <NavbarItem>
             <Dropdown placement="bottom-end">
               <DropdownTrigger>
                 <Button
@@ -838,7 +1001,14 @@ export default function App() {
                 aria-label="Menú de navegación"
                 selectedKeys={[vista]}
                 selectionMode="single"
-                onAction={key => setVista(String(key))}
+                onAction={key => {
+                  if (String(key) === 'salir') {
+                    cerrarSesion()
+                    return
+                  }
+
+                  setVista(String(key))
+                }}
               >
                 {vistas.map(item => {
                   const Icon = item.icon
@@ -852,24 +1022,15 @@ export default function App() {
                     </DropdownItem>
                   )
                 })}
+                <DropdownItem
+                  key="salir"
+                  color="danger"
+                  startContent={<LogOut size={16} />}
+                >
+                  Salir
+                </DropdownItem>
               </DropdownMenu>
             </Dropdown>
-          </NavbarItem>
-          <NavbarItem>
-            <Chip size="sm" variant="flat" color={syncing ? 'warning' : 'success'}>
-              {syncing ? 'Sincronizando...' : `${tareas.length} tareas`}
-            </Chip>
-          </NavbarItem>
-          <NavbarItem>
-            <Button
-              size="sm"
-              variant="light"
-              radius="lg"
-              startContent={<LogOut size={14} />}
-              onPress={cerrarSesion}
-            >
-              Salir
-            </Button>
           </NavbarItem>
         </NavbarContent>
       </Navbar>
