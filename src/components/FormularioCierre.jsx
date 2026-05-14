@@ -6,7 +6,8 @@ import {
   Chip, Divider, ScrollShadow, Modal, ModalContent,
   ModalHeader, ModalBody, ModalFooter
 } from '@heroui/react'
-import { Search, Clock, CheckCircle2, Trash2 } from 'lucide-react'
+import { ArrowLeft, Search, Clock, CheckCircle2, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
+import { formatearFecha, formatearFechaHora } from '../lib/date'
 
 const chipColor = (id) => {
   if (!id) return 'default'
@@ -73,10 +74,16 @@ function CampoResumen({ label, valor, mono = false }) {
   )
 }
 
+function formatearHoraYFecha(hora, fecha) {
+  const fechaTexto = formatearFecha(fecha)
+  return [hora, fechaTexto].filter(Boolean).join(' · ')
+}
+
 export default function FormularioCierre({ tareas, onMarcarCompletada, onEliminarTarea }) {
   const [busqueda, setBusqueda] = useState('')
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null)
   const [mostrarLista, setMostrarLista] = useState(true)
+  const [completadasExpandidas, setCompletadasExpandidas] = useState([])
   const [confirmacion, setConfirmacion] = useState(null)
   const [ds, setDs] = useState(null)
   const [arribo, setArribo] = useState(null)
@@ -112,6 +119,16 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
     setBusqueda('')
     setMostrarLista(true)
     setDs(null); setArribo(null); setInicio(null); setFin(null); setRetorno(null)
+  }
+
+  function alternarCompletada(wo) {
+    if (!wo) return
+
+    setCompletadasExpandidas(prev => (
+      prev.includes(wo)
+        ? prev.filter(item => item !== wo)
+        : [...prev, wo]
+    ))
   }
 
   function abrirConfirmacion(tipo, tarea) {
@@ -279,11 +296,11 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
                           </div>
                           <div className="grid grid-cols-2 gap-2">
                             <CampoResumen label="WO" valor={t.wo} mono />
-                            <CampoResumen label="ATM" valor={t.id_atm} mono />
+                            <CampoResumen label="Hora" valor={t.hora} mono />
+                            <CampoResumen label="Fecha" valor={formatearFecha(t.fecha)} mono />
                             <CampoResumen label="CE" valor={t.ce || 'Sin usuario'} />
                             <CampoResumen label="Distrito" valor={t.distrito} />
-                            <CampoResumen label="Hora" valor={t.hora} mono />
-                            <CampoResumen label="Nombre" valor={t.nombre} />
+                            <CampoResumen label="Dirección" valor={t.direccion} />
                           </div>
                         </div>
                         <div className="mt-3 flex justify-end gap-2">
@@ -348,37 +365,53 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
                     className="border border-default-200/80 bg-white"
                   >
                     <CardBody className="p-4">
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-default-700">{t.nombre}</p>
-                          <p className="mt-1 text-xs text-default-400">
-                            Completada {t.completadaEn ? new Date(t.completadaEn).toLocaleString() : ''}
-                          </p>
+                      <button
+                        type="button"
+                        className="w-full text-left"
+                        onClick={() => alternarCompletada(t.wo)}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-default-700">{t.nombre}</p>
+                            <p className="mt-1 text-xs text-default-400">
+                              Completada {t.completadaEn ? formatearFechaHora(t.completadaEn) : ''}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Chip size="sm" variant="flat" color="success" className="shrink-0">
+                              Completada
+                            </Chip>
+                            <span className="text-default-400">
+                              {completadasExpandidas.includes(t.wo) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </span>
+                          </div>
                         </div>
-                        <Chip size="sm" variant="flat" color="success" className="shrink-0">
-                          Completada
-                        </Chip>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <CampoResumen label="WO" valor={t.wo} mono />
-                        <CampoResumen label="ATM" valor={t.id_atm} mono />
-                        <CampoResumen label="CE" valor={t.ce || 'Sin usuario'} />
-                        <CampoResumen label="Distrito" valor={t.distrito} />
-                        <CampoResumen label="Hora" valor={t.hora} mono />
-                        <CampoResumen label="Nombre" valor={t.nombre} />
-                      </div>
-                      <div className="mt-3 flex justify-end">
-                        <Button
-                          size="sm"
-                          color="danger"
-                          variant="flat"
-                          radius="lg"
-                          startContent={<Trash2 size={14} />}
-                          onPress={() => eliminarTarea(t)}
-                        >
-                          Eliminar
-                        </Button>
-                      </div>
+                      </button>
+
+                      {completadasExpandidas.includes(t.wo) && (
+                        <>
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            <CampoResumen label="WO" valor={t.wo} mono />
+                            <CampoResumen label="Hora" valor={t.hora} mono />
+                            <CampoResumen label="Fecha" valor={formatearFecha(t.fecha)} mono />
+                            <CampoResumen label="CE" valor={t.ce || 'Sin usuario'} />
+                            <CampoResumen label="Distrito" valor={t.distrito} />
+                            <CampoResumen label="Dirección" valor={t.direccion} />
+                          </div>
+                          <div className="mt-3 flex justify-end">
+                            <Button
+                              size="sm"
+                              color="danger"
+                              variant="flat"
+                              radius="lg"
+                              startContent={<Trash2 size={14} />}
+                              onPress={() => eliminarTarea(t)}
+                            >
+                              Eliminar
+                            </Button>
+                          </div>
+                        </>
+                      )}
                     </CardBody>
                   </Card>
                 ))}
@@ -397,52 +430,42 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
       {tareaSeleccionada && (
         <>
           <Card shadow="sm">
-            <CardHeader className="flex justify-between pb-0">
-              <p className="text-sm font-semibold">Detalle de tarea</p>
-              <div className="flex items-center gap-2">
+            <CardHeader className="flex flex-col gap-3 pb-0">
+              <div className="min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-semibold">Detalle de tarea</p>
+                  <div className="flex shrink-0 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => copiarTexto(tareaSeleccionada.id_atm, 'ID ATM')}
+                      className="w-fit rounded-medium cursor-copy active:scale-95 transition-transform"
+                      title="Toca para copiar ID ATM"
+                    >
+                      <Chip
+                        size="sm"
+                        variant="flat"
+                        color={chipColor(tareaSeleccionada.id_atm)}
+                        className="font-mono"
+                      >
+                        {tareaSeleccionada.id_atm}
+                      </Chip>
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-1 text-xs text-default-400">
+                  Acciones y datos completos de la tarea seleccionada.
+                </p>
                 <Button
                   size="sm"
-                  variant="light"
+                  color="default"
+                  variant="flat"
                   radius="lg"
+                  className="mt-3"
+                  startContent={<ArrowLeft size={14} />}
                   onPress={limpiarSeleccion}
                 >
                   Volver a lista
                 </Button>
-                <Button
-                  size="sm"
-                  color="success"
-                  variant="flat"
-                  radius="lg"
-                  startContent={<CheckCircle2 size={14} />}
-                  onPress={() => marcarCompletada(tareaSeleccionada)}
-                >
-                  Marcar completada
-                </Button>
-                <Button
-                  size="sm"
-                  color="danger"
-                  variant="flat"
-                  radius="lg"
-                  startContent={<Trash2 size={14} />}
-                  onPress={() => eliminarTarea(tareaSeleccionada)}
-                >
-                  Eliminar
-                </Button>
-                <button
-                  type="button"
-                  onClick={() => copiarTexto(tareaSeleccionada.id_atm, 'ID ATM')}
-                  className="rounded-medium cursor-copy active:scale-95 transition-transform"
-                  title="Toca para copiar ID ATM"
-                >
-                  <Chip
-                    size="sm"
-                    variant="flat"
-                    color={chipColor(tareaSeleccionada.id_atm)}
-                    className="font-mono"
-                  >
-                    {tareaSeleccionada.id_atm}
-                  </Chip>
-                </button>
               </div>
             </CardHeader>
             <Divider className="mt-3" />
@@ -466,7 +489,8 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
                   copiable
                   onCopiar={() => copiarTexto(tareaSeleccionada.serie, 'Serie')}
                 />
-                <CampoInfo label="Fecha" valor={tareaSeleccionada.fecha} />
+                <CampoInfo label="Hora" valor={tareaSeleccionada.hora} mono />
+                <CampoInfo label="Fecha" valor={formatearFecha(tareaSeleccionada.fecha)} />
                 <CampoInfo
                   label="Dirección"
                   valor={tareaSeleccionada.direccion}
@@ -485,6 +509,29 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
                   copiable
                   onCopiar={() => copiarTexto(tareaSeleccionada.ce, 'Usuario asignado')}
                 />
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-2 border-t border-default-100 pt-4">
+                <Button
+                  size="sm"
+                  color="success"
+                  variant="flat"
+                  radius="lg"
+                  startContent={<CheckCircle2 size={14} />}
+                  onPress={() => marcarCompletada(tareaSeleccionada)}
+                >
+                  Marcar completada
+                </Button>
+                <Button
+                  size="sm"
+                  color="danger"
+                  variant="flat"
+                  radius="lg"
+                  startContent={<Trash2 size={14} />}
+                  onPress={() => eliminarTarea(tareaSeleccionada)}
+                >
+                  Eliminar
+                </Button>
               </div>
 
             </CardBody>
