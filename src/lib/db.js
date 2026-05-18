@@ -108,3 +108,23 @@ db.version(9).stores({
     delete repuesto.imagenUrl
   })
 })
+
+db.version(10).stores({
+  tareas:        '++localId, wo, id_atm, fecha, ce',
+  mis_tareas:    '++localId, &wo, id_atm, fecha, ce, estado, completadaEn, ds, arribo, inicio, fin, retorno, tiemposUpdatedAt, tiemposSyncPendiente',
+  repuestos:     '++localId, nombre, partNumber, descripcion, tieneStock, creadoEn',
+  personal_cmca: '++localId, nombre',
+  personal_cmpd: '++localId, nombre',
+  motivos_aqr:   '++localId, descripcion',
+  cierres:       '++localId, wo',
+}).upgrade(async tx => {
+  await tx.table('mis_tareas').toCollection().modify(tarea => {
+    tarea.ds = tarea.ds || null
+    tarea.arribo = tarea.arribo || null
+    tarea.inicio = tarea.inicio || null
+    tarea.fin = tarea.fin || null
+    tarea.retorno = tarea.retorno || null
+    tarea.tiemposUpdatedAt = tarea.tiemposUpdatedAt || null
+    tarea.tiemposSyncPendiente = Boolean(tarea.tiemposSyncPendiente)
+  })
+})

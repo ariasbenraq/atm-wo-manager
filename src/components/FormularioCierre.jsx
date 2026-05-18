@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import TimePicker from 'react-time-picker'
-import 'react-time-picker/dist/TimePicker.css'
+import dayjs from 'dayjs'
 import {
   Card, CardBody, CardHeader, Input, Button,
   Chip, Divider, ScrollShadow, Modal, ModalContent,
   ModalHeader, ModalBody, ModalFooter
 } from '@heroui/react'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { DesktopTimePicker, MobileTimePicker } from '@mui/x-date-pickers'
 import { ArrowLeft, Search, Clock, CheckCircle2, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import { formatearFecha, formatearFechaHora } from '../lib/date'
 
@@ -34,31 +35,156 @@ function CampoInfo({ label, valor, mono = false, copiable = false, onCopiar }) {
   )
 }
 
+function normalizarHora(valor) {
+  if (!valor) return null
+
+  if (dayjs.isDayjs(valor) && valor.isValid()) {
+    return valor.format('HH:mm')
+  }
+
+  if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+    const horas = String(valor.getHours()).padStart(2, '0')
+    const minutos = String(valor.getMinutes()).padStart(2, '0')
+    return `${horas}:${minutos}`
+  }
+
+  const texto = String(valor).trim()
+  if (!texto) return null
+
+  const match = texto.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/)
+  if (!match) return texto
+
+  const [, horas, minutos] = match
+  return `${horas.padStart(2, '0')}:${minutos}`
+}
+
+function convertirHoraADayjs(valor) {
+  const hora = normalizarHora(valor)
+  if (!hora) return null
+
+  const [horas, minutos] = hora.split(':').map(Number)
+  if (Number.isNaN(horas) || Number.isNaN(minutos)) return null
+
+  return dayjs().hour(horas).minute(minutos).second(0).millisecond(0)
+}
+
+function HoraPickerInteractivo({ label, value, onChange }) {
+  const esDesktop = useMediaQuery('(pointer: fine)')
+  const [abierto, setAbierto] = useState(false)
+  const PickerComponent = esDesktop ? DesktopTimePicker : MobileTimePicker
+
+  function handleChange(nuevoValor) {
+    onChange(normalizarHora(nuevoValor))
+  }
+
+  return (
+    <PickerComponent
+      label={label}
+      value={convertirHoraADayjs(value)}
+      onChange={handleChange}
+      open={abierto}
+      onOpen={() => setAbierto(true)}
+      onClose={() => setAbierto(false)}
+      ampm={false}
+      format="HH:mm"
+      openTo="hours"
+      views={['hours', 'minutes']}
+      closeOnSelect={esDesktop}
+      slots={{}}
+      slotProps={{
+        field: {
+          clearable: true,
+          onClear: () => onChange(null),
+          readOnly: true,
+        },
+        textField: {
+          fullWidth: true,
+          size: 'small',
+          placeholder: '00:00',
+          onClick: () => setAbierto(true),
+          sx: {
+            '& .MuiOutlinedInput-root': {
+              borderRadius: '16px',
+              background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98))',
+              transition: 'box-shadow 160ms ease, border-color 160ms ease',
+              '& fieldset': {
+                borderColor: 'rgba(148, 163, 184, 0.32)',
+              },
+              '&:hover fieldset': {
+                borderColor: 'rgba(59, 130, 246, 0.42)',
+              },
+              '&.Mui-focused': {
+                boxShadow: '0 0 0 4px rgba(59, 130, 246, 0.12)',
+              },
+              '&.Mui-focused fieldset': {
+                borderColor: 'rgb(59, 130, 246)',
+              },
+            },
+            '& .MuiInputBase-input': {
+              cursor: 'pointer',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              fontSize: '1.05rem',
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              fontVariantNumeric: 'tabular-nums',
+              color: 'rgb(31, 41, 55)',
+            },
+            '& .MuiInputAdornment-root .MuiButtonBase-root': {
+              color: 'rgb(59, 130, 246)',
+            },
+          },
+        },
+        desktopPaper: {
+          sx: {
+            mt: 1,
+            borderRadius: '20px',
+            border: '1px solid rgba(148, 163, 184, 0.22)',
+            boxShadow: '0 24px 54px rgba(15, 23, 42, 0.18)',
+          },
+        },
+        mobilePaper: {
+          sx: {
+            borderRadius: '24px',
+          },
+        },
+        layout: {
+          sx: {
+            '.MuiDialogActions-root, .MuiPickersLayout-actionBar': {
+              px: 2,
+              pb: 2,
+            },
+          },
+        },
+        actionBar: {
+          actions: ['clear', 'cancel', 'accept'],
+        },
+      }}
+    />
+  )
+}
+
 function SelectorHora({ label, value, onChange, onAhora }) {
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-default-100 last:border-0">
-      <span className="w-16 text-sm font-medium text-default-600 shrink-0">{label}</span>
-      <div className="flex-1 border border-default-200 rounded-xl px-3 py-2 bg-default-50">
-        <TimePicker
-          onChange={onChange}
-          value={value}
-          disableClock={false}
-          clearIcon={null}
-          format="HH:mm"
-          className="w-full"
-        />
+    <div className="border-b border-default-100 py-3 last:border-0">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="text-sm font-semibold text-default-700">{label}</span>
+        <Button
+          size="sm"
+          color="primary"
+          variant="flat"
+          radius="lg"
+          onPress={onAhora}
+          startContent={<Clock size={12} />}
+          className="shrink-0"
+        >
+          Ahora
+        </Button>
       </div>
-      <Button
-        size="sm"
-        color="primary"
-        variant="solid"
-        radius="lg"
-        onPress={onAhora}
-        startContent={<Clock size={12} />}
-        className="shrink-0"
-      >
-        Ahora
-      </Button>
+      <HoraPickerInteractivo
+        label={label}
+        value={value}
+        onChange={onChange}
+      />
     </div>
   )
 }
@@ -72,11 +198,6 @@ function CampoResumen({ label, valor, mono = false }) {
       </p>
     </div>
   )
-}
-
-function formatearHoraYFecha(hora, fecha) {
-  const fechaTexto = formatearFecha(fecha)
-  return [hora, fechaTexto].filter(Boolean).join(' · ')
 }
 
 function obtenerMarcaTiempoTarea(tarea) {
@@ -93,7 +214,7 @@ function obtenerMarcaTiempoTarea(tarea) {
   return Number.isNaN(marca.getTime()) ? 0 : marca.getTime()
 }
 
-export default function FormularioCierre({ tareas, onMarcarCompletada, onEliminarTarea }) {
+export default function FormularioCierre({ tareas, onMarcarCompletada, onEliminarTarea, onGuardarTiempos }) {
   const [busqueda, setBusqueda] = useState('')
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null)
   const [mostrarLista, setMostrarLista] = useState(true)
@@ -124,12 +245,23 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
     .sort((a, b) => obtenerMarcaTiempoTarea(a) - obtenerMarcaTiempoTarea(b))
   const pendientesVisibles = (busqueda ? tareasPendientes : tareasPendientes.slice(0, 8))
   const completadasVisibles = (busqueda ? tareasCompletadas : tareasCompletadas.slice(0, 8))
+  const tareaActiva = tareaSeleccionada
+    ? (tareas.find(t => t.wo === tareaSeleccionada.wo) || tareaSeleccionada)
+    : null
+
+  function cargarTiempos(tarea) {
+    setDs(normalizarHora(tarea?.ds))
+    setArribo(normalizarHora(tarea?.arribo))
+    setInicio(normalizarHora(tarea?.inicio))
+    setFin(normalizarHora(tarea?.fin))
+    setRetorno(normalizarHora(tarea?.retorno))
+  }
 
   function seleccionarTarea(tarea) {
     setTareaSeleccionada(tarea)
     setBusqueda(tarea.nombre)
     setMostrarLista(false)
-    setDs(null); setArribo(null); setInicio(null); setFin(null); setRetorno(null)
+    cargarTiempos(tarea)
   }
 
   function limpiarSeleccion() {
@@ -213,21 +345,62 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
   }
 
   function ahora() {
-    const d = new Date()
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    return normalizarHora(new Date())
+  }
+
+  async function guardarTiempos(cambios) {
+    if (!tareaActiva?.wo) return
+    await onGuardarTiempos?.(tareaActiva.wo, cambios)
   }
 
   function calcularRetorno(horaFin, esUltima) {
-    if (!horaFin) return
+    if (!horaFin) return null
     const [h, m] = horaFin.split(':').map(Number)
     const total = h * 60 + m + (esUltima ? 60 : 20)
     const hh = String(Math.floor(total / 60) % 24).padStart(2, '0')
     const mm = String(total % 60).padStart(2, '0')
-    setRetorno(`${hh}:${mm}`)
+    return `${hh}:${mm}`
   }
 
-  function handleFin(v) { setFin(v); if (v) calcularRetorno(v, ultimaAtencion) }
-  function handleUltima(esUltima) { setUltimaAtencion(esUltima); if (fin) calcularRetorno(fin, esUltima) }
+  async function actualizarDs(valor) {
+    const hora = normalizarHora(valor)
+    setDs(hora)
+    await guardarTiempos({ ds: hora })
+  }
+
+  async function actualizarArribo(valor) {
+    const hora = normalizarHora(valor)
+    setArribo(hora)
+    await guardarTiempos({ arribo: hora })
+  }
+
+  async function actualizarInicio(valor) {
+    const hora = normalizarHora(valor)
+    setInicio(hora)
+    await guardarTiempos({ inicio: hora })
+  }
+
+  async function handleFin(valor) {
+    const hora = normalizarHora(valor)
+    const nuevoRetorno = hora ? calcularRetorno(hora, ultimaAtencion) : null
+    setFin(hora)
+    setRetorno(nuevoRetorno)
+    await guardarTiempos({ fin: hora, retorno: nuevoRetorno })
+  }
+
+  async function handleUltima(esUltima) {
+    setUltimaAtencion(esUltima)
+    if (!fin) return
+    const nuevoRetorno = calcularRetorno(fin, esUltima)
+    setRetorno(nuevoRetorno)
+    await guardarTiempos({ retorno: nuevoRetorno })
+  }
+
+  async function actualizarRetorno(valor) {
+    const hora = normalizarHora(valor)
+    setRetorno(hora)
+    await guardarTiempos({ retorno: hora })
+  }
 
   async function copiarTexto(texto, etiqueta = 'valor') {
     if (!texto) return
@@ -455,17 +628,17 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
                   <div className="flex shrink-0 justify-end">
                     <button
                       type="button"
-                      onClick={() => copiarTexto(tareaSeleccionada.id_atm, 'ID ATM')}
+                      onClick={() => copiarTexto(tareaActiva.id_atm, 'ID ATM')}
                       className="w-fit rounded-medium cursor-copy active:scale-95 transition-transform"
                       title="Toca para copiar ID ATM"
                     >
                       <Chip
                         size="sm"
                         variant="flat"
-                        color={chipColor(tareaSeleccionada.id_atm)}
+                        color={chipColor(tareaActiva.id_atm)}
                         className="font-mono"
                       >
-                        {tareaSeleccionada.id_atm}
+                        {tareaActiva.id_atm}
                       </Chip>
                     </button>
                   </div>
@@ -491,41 +664,41 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <CampoInfo
                   label="WO"
-                  valor={tareaSeleccionada.wo}
+                  valor={tareaActiva.wo}
                   copiable
-                  onCopiar={() => copiarTexto(tareaSeleccionada.wo, 'WO')}
+                  onCopiar={() => copiarTexto(tareaActiva.wo, 'WO')}
                 />
                 <CampoInfo
                   label="Modelo"
-                  valor={tareaSeleccionada.modelo}
+                  valor={tareaActiva.modelo}
                   copiable
-                  onCopiar={() => copiarTexto(tareaSeleccionada.modelo, 'Modelo')}
+                  onCopiar={() => copiarTexto(tareaActiva.modelo, 'Modelo')}
                 />
                 <CampoInfo
                   label="Serie"
-                  valor={tareaSeleccionada.serie}
+                  valor={tareaActiva.serie}
                   copiable
-                  onCopiar={() => copiarTexto(tareaSeleccionada.serie, 'Serie')}
+                  onCopiar={() => copiarTexto(tareaActiva.serie, 'Serie')}
                 />
-                <CampoInfo label="Hora" valor={tareaSeleccionada.hora} mono />
-                <CampoInfo label="Fecha" valor={formatearFecha(tareaSeleccionada.fecha)} />
+                <CampoInfo label="Hora" valor={tareaActiva.hora} mono />
+                <CampoInfo label="Fecha" valor={formatearFecha(tareaActiva.fecha)} />
                 <CampoInfo
                   label="Dirección"
-                  valor={tareaSeleccionada.direccion}
+                  valor={tareaActiva.direccion}
                   copiable
-                  onCopiar={() => copiarTexto(tareaSeleccionada.direccion, 'Dirección')}
+                  onCopiar={() => copiarTexto(tareaActiva.direccion, 'Dirección')}
                 />
                 <CampoInfo
                   label="Agencia"
-                  valor={tareaSeleccionada.nombre}
+                  valor={tareaActiva.nombre}
                   copiable
-                  onCopiar={() => copiarTexto(tareaSeleccionada.nombre, 'Agencia')}
+                  onCopiar={() => copiarTexto(tareaActiva.nombre, 'Agencia')}
                 />
                 <CampoInfo
                   label="Usuario asignado"
-                  valor={tareaSeleccionada.ce}
+                  valor={tareaActiva.ce}
                   copiable
-                  onCopiar={() => copiarTexto(tareaSeleccionada.ce, 'Usuario asignado')}
+                  onCopiar={() => copiarTexto(tareaActiva.ce, 'Usuario asignado')}
                 />
               </div>
 
@@ -536,7 +709,7 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
                   variant="flat"
                   radius="lg"
                   startContent={<CheckCircle2 size={14} />}
-                  onPress={() => marcarCompletada(tareaSeleccionada)}
+                  onPress={() => marcarCompletada(tareaActiva)}
                 >
                   Marcar completada
                 </Button>
@@ -546,7 +719,7 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
                   variant="flat"
                   radius="lg"
                   startContent={<Trash2 size={14} />}
-                  onPress={() => eliminarTarea(tareaSeleccionada)}
+                  onPress={() => eliminarTarea(tareaActiva)}
                 >
                   Eliminar
                 </Button>
@@ -562,9 +735,9 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
             </CardHeader>
             <Divider className="mt-3" />
             <CardBody>
-              <SelectorHora label="DS" value={ds} onChange={setDs} onAhora={() => setDs(ahora())} />
-              <SelectorHora label="Arribo" value={arribo} onChange={setArribo} onAhora={() => setArribo(ahora())} />
-              <SelectorHora label="Inicio" value={inicio} onChange={setInicio} onAhora={() => setInicio(ahora())} />
+              <SelectorHora label="DS" value={ds} onChange={actualizarDs} onAhora={() => actualizarDs(ahora())} />
+              <SelectorHora label="Arribo" value={arribo} onChange={actualizarArribo} onAhora={() => actualizarArribo(ahora())} />
+              <SelectorHora label="Inicio" value={inicio} onChange={actualizarInicio} onAhora={() => actualizarInicio(ahora())} />
               <SelectorHora label="Fin" value={fin} onChange={handleFin} onAhora={() => handleFin(ahora())} />
 
               {/* Retorno */}
@@ -581,9 +754,12 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
                         onPress={() => handleUltima(true)}>+1 hora</Button>
                     </div>
                   </div>
-                  <div className="border border-default-200 rounded-xl px-3 py-2 bg-white">
-                    <TimePicker onChange={setRetorno} value={retorno}
-                      disableClock={false} clearIcon={null} format="HH:mm" className="w-full" />
+                  <div className="rounded-2xl bg-white">
+                    <HoraPickerInteractivo
+                      label="Retorno"
+                      value={retorno}
+                      onChange={actualizarRetorno}
+                    />
                   </div>
                 </div>
               </div>
@@ -600,7 +776,7 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
                       .map(([label, valor]) => (
                         <div key={label} className="flex items-center gap-2">
                           <span className="text-xs text-default-500 w-14">{label}</span>
-                          <span className="text-sm font-mono font-semibold text-white">{valor}</span>
+                          <span className="text-sm font-mono font-semibold text-white">{normalizarHora(valor)}</span>
                         </div>
                       ))}
                   </div>

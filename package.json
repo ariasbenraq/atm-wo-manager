@@ -15,16 +15,20 @@
     "prebuild": "npm run styles:build"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
     "@heroui/react": "^2.8.10",
+    "@mui/material": "^9.0.1",
+    "@mui/x-date-pickers": "^9.2.0",
     "@supabase/supabase-js": "^2.99.0",
     "@tailwindcss/vite": "^4.2.1",
+    "dayjs": "^1.11.20",
     "dexie": "^4.3.0",
     "dexie-react-hooks": "^4.2.0",
     "framer-motion": "^12.35.2",
     "lucide-react": "^0.577.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-time-picker": "^8.0.2",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {

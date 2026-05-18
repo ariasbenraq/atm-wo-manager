@@ -760,9 +760,6 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .w-14 {
   width: calc(var(--spacing) * 14);
 }
-.w-16 {
-  width: calc(var(--spacing) * 16);
-}
 .w-\[25\%\] {
   width: 25%;
 }

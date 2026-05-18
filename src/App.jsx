@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { syncFromSupabase } from './lib/sync'
 import { db } from './lib/db'
 import { supabase } from './lib/supabase'
@@ -820,8 +820,46 @@ export default function App() {
       tarea_wo: tarea.wo,
       estado: tarea.estado || 'pendiente',
       completada_at: tarea.completadaEn || null,
+      ds: tarea.ds || null,
+      arribo: tarea.arribo || null,
+      inicio: tarea.inicio || null,
+      fin: tarea.fin || null,
+      retorno: tarea.retorno || null,
+      tiempos_updated_at: tarea.tiemposUpdatedAt || null,
     }
   }
+
+  async function marcarTiemposSincronizados(wo, tiemposSyncPendiente) {
+    await db.mis_tareas.where('wo').equals(wo).modify({ tiemposSyncPendiente })
+    setMisTareas(prev => prev.map(tarea => (
+      tarea.wo === wo
+        ? { ...tarea, tiemposSyncPendiente }
+        : tarea
+    )))
+  }
+
+  const sincronizarTiemposPendientes = useCallback(async (userId) => {
+    if (!userId) return
+
+    const pendientes = await db.mis_tareas
+      .filter(tarea => Boolean(tarea.tiemposSyncPendiente))
+      .toArray()
+
+    for (const tarea of pendientes) {
+      try {
+        const { error } = await supabase
+          .from('mis_tareas')
+          .upsert(construirPayloadMisTarea(tarea, userId), {
+            onConflict: 'user_id,tarea_wo',
+          })
+
+        if (error) throw error
+        await marcarTiemposSincronizados(tarea.wo, false)
+      } catch (error) {
+        console.warn(`No se pudo sincronizar los tiempos de la tarea ${tarea.wo}.`, error)
+      }
+    }
+  }, [])
 
   async function agregarAMisTareas(tarea) {
     if (!tarea?.wo) return
@@ -833,6 +871,13 @@ export default function App() {
       ...tarea,
       estado: 'pendiente',
       completadaEn: null,
+      ds: null,
+      arribo: null,
+      inicio: null,
+      fin: null,
+      retorno: null,
+      tiemposUpdatedAt: null,
+      tiemposSyncPendiente: false,
     }
 
     await db.mis_tareas.add(tareaPendiente)
@@ -904,6 +949,48 @@ export default function App() {
     }
   }
 
+  async function guardarTiemposMisTarea(wo, cambios) {
+    if (!wo) return
+
+    const tareaActual = await db.mis_tareas.where('wo').equals(wo).first()
+    if (!tareaActual) return
+
+    const tiemposUpdatedAt = new Date().toISOString()
+    const tareaActualizada = {
+      ...tareaActual,
+      ...cambios,
+      tiemposUpdatedAt,
+      tiemposSyncPendiente: true,
+    }
+
+    await db.mis_tareas.where('wo').equals(wo).modify({
+      ...cambios,
+      tiemposUpdatedAt,
+      tiemposSyncPendiente: true,
+    })
+
+    setMisTareas(prev => prev.map(tarea => (
+      tarea.wo === wo
+        ? { ...tarea, ...cambios, tiemposUpdatedAt, tiemposSyncPendiente: true }
+        : tarea
+    )))
+
+    if (!session?.user?.id) return
+
+    try {
+      const { error } = await supabase
+        .from('mis_tareas')
+        .upsert(construirPayloadMisTarea(tareaActualizada, session.user.id), {
+          onConflict: 'user_id,tarea_wo',
+        })
+
+      if (error) throw error
+      await marcarTiemposSincronizados(wo, false)
+    } catch (error) {
+      console.warn(`No se pudo guardar en Supabase los tiempos de la tarea ${wo}.`, error)
+    }
+  }
+
   useEffect(() => {
     let activo = true
 
@@ -933,6 +1020,8 @@ export default function App() {
       await cargarTareas()
       await cargarMisTareas()
       await syncFromSupabase(session.user.id)
+      await sincronizarTiemposPendientes(session.user.id)
+      await syncFromSupabase(session.user.id)
       await cargarTareas()
       await cargarMisTareas()
       setSyncing(false)
@@ -943,7 +1032,7 @@ export default function App() {
     } else {
       setSyncing(false)
     }
-  }, [session])
+  }, [session, sincronizarTiemposPendientes])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -1073,6 +1162,7 @@ export default function App() {
             tareas={misTareas}
             onMarcarCompletada={marcarTareaCompletada}
             onEliminarTarea={eliminarDeMisTareas}
+            onGuardarTiempos={guardarTiemposMisTarea}
           />
         </div>
 
