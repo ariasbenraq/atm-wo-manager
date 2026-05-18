@@ -5,6 +5,7 @@ import { supabase } from './lib/supabase'
 import ImportarExcel from './components/ImportarExcel'
 import ListaTareas from './components/ListaTareas'
 import FormularioCierre from './components/FormularioCierre'
+import FormularioNuevaTarea from './components/FormularioNuevaTarea'
 import {
   Navbar,
   NavbarBrand,
@@ -65,11 +66,11 @@ function obtenerProximaTareaEnVentana(tareas, ahoraMs) {
     .sort((a, b) => a.marca - b.marca)[0] || null
 }
 
-function formatearTiempoRestante(ms) {
+function formatearTiempoRestanteCorto(ms) {
   const minutos = Math.max(0, Math.ceil(ms / 60000))
-  if (minutos <= 1) return 'en menos de 1 min'
-  if (minutos < 60) return `en ${minutos} min`
-  return 'en 1 hora'
+  if (minutos <= 1) return 'EN 1 MIN'
+  if (minutos < 60) return `EN ${minutos} MIN`
+  return 'EN 1 HORA'
 }
 
 function PaginaLogin({ onLogin }) {
@@ -832,8 +833,11 @@ export default function App() {
   const [syncing, setSyncing] = useState(true)
   const [session, setSession] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
+  const [creandoTarea, setCreandoTarea] = useState(false)
   const [ahoraMs, setAhoraMs] = useState(() => Date.now())
   const [indiceAlertaProximaTarea, setIndiceAlertaProximaTarea] = useState(0)
+  const [modalProximaTareaAbierto, setModalProximaTareaAbierto] = useState(false)
+  const [tareaInicialMisTareasWo, setTareaInicialMisTareasWo] = useState(null)
   const [vista, setVista] = useState(() => {
     if (typeof window === 'undefined') return VISTA_INICIAL
     return sessionStorage.getItem('atm-wo-vista') || VISTA_INICIAL
@@ -1026,6 +1030,46 @@ export default function App() {
     }
   }
 
+  async function crearTareaManual(tarea) {
+    const wo = String(tarea?.wo || '').trim()
+    if (!wo) {
+      throw new Error('La WO es obligatoria.')
+    }
+
+    setCreandoTarea(true)
+
+    try {
+      const existente = await db.tareas.where('wo').equals(wo).first()
+      if (existente) {
+        throw new Error(`La WO ${wo} ya existe.`)
+      }
+
+      const nuevaTarea = {
+        wo,
+        modelo: String(tarea?.modelo || '').trim(),
+        serie: String(tarea?.serie || '').trim(),
+        id_atm: String(tarea?.id_atm || '').trim(),
+        nombre: String(tarea?.nombre || '').trim(),
+        direccion: String(tarea?.direccion || '').trim(),
+        distrito: String(tarea?.distrito || '').trim(),
+        fecha: String(tarea?.fecha || '').trim(),
+        hora: String(tarea?.hora || '').trim(),
+        ce: String(tarea?.ce || '').trim(),
+      }
+
+      const { error } = await supabase
+        .from('tareas')
+        .upsert(nuevaTarea, { onConflict: 'wo' })
+
+      if (error) throw error
+
+      await db.tareas.add(nuevaTarea)
+      setTareas(prev => [nuevaTarea, ...prev])
+    } finally {
+      setCreandoTarea(false)
+    }
+  }
+
   useEffect(() => {
     let activo = true
 
@@ -1086,15 +1130,17 @@ export default function App() {
   const detallesAlerta = proximaTarea
     ? [
       { etiqueta: 'Agencia', valor: proximaTarea.tarea.nombre || 'Sin agencia' },
-      { etiqueta: 'ID ATM', valor: proximaTarea.tarea.id_atm || 'Sin ID ATM' },
       { etiqueta: 'Dirección', valor: proximaTarea.tarea.direccion || 'Sin dirección' },
+      { etiqueta: 'ID ATM', valor: proximaTarea.tarea.id_atm || 'Sin ID ATM' },
+      { etiqueta: 'Modelo', valor: proximaTarea.tarea.modelo || 'Sin modelo' },
+      { etiqueta: 'WO', valor: proximaTarea.tarea.wo || 'Sin WO' },
     ]
     : []
   const proximaTareaWo = proximaTarea?.tarea?.wo || null
   const totalDetallesAlerta = detallesAlerta.length
   const detalleActivoAlerta = detallesAlerta[indiceAlertaProximaTarea % (detallesAlerta.length || 1)] || null
-  const tiempoRestanteProximaTarea = proximaTarea
-    ? formatearTiempoRestante(proximaTarea.marca - ahoraMs)
+  const encabezadoAlerta = proximaTarea
+    ? `PROXIMA TAREA ${formatearTiempoRestanteCorto(proximaTarea.marca - ahoraMs)}`
     : ''
 
   useEffect(() => {
@@ -1106,7 +1152,7 @@ export default function App() {
 
     const timer = window.setInterval(() => {
       setIndiceAlertaProximaTarea(prev => (prev + 1) % totalDetallesAlerta)
-    }, 5000)
+    }, 10000)
 
     return () => window.clearInterval(timer)
   }, [proximaTareaWo, totalDetallesAlerta])
@@ -1117,6 +1163,18 @@ export default function App() {
   async function cerrarSesion() {
     await supabase.auth.signOut()
     setSession(null)
+  }
+
+  function abrirModalProximaTarea() {
+    if (!proximaTarea?.tarea) return
+    setModalProximaTareaAbierto(true)
+  }
+
+  function irAProximaTarea() {
+    if (!proximaTarea?.tarea?.wo) return
+    setVista('mis-tareas')
+    setTareaInicialMisTareasWo(proximaTarea.tarea.wo)
+    setModalProximaTareaAbierto(false)
   }
 
   if (authLoading) {
@@ -1136,47 +1194,65 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-default-100 via-default-50 to-white">
-      <Navbar isBordered maxWidth="md" className="bg-white/85 backdrop-blur-md">
-        <NavbarBrand>
-          <p className="font-bold text-inherit tracking-tight font-mono">ATM·WO</p>
-        </NavbarBrand>
-        <NavbarContent justify="center" className="flex-1 px-2">
-          <Fade in={Boolean(proximaTarea && detalleActivoAlerta)} timeout={350} key={`${proximaTarea?.tarea?.wo || 'sin-tarea'}-${indiceAlertaProximaTarea}`}>
-            <div className="w-full max-w-md">
-              {proximaTarea && detalleActivoAlerta ? (
-                <MuiAlert
-                  severity="info"
-                  variant="filled"
-                  icon={false}
-                  sx={{
+      <Navbar isBordered maxWidth="md" className="relative flex-wrap items-center bg-white/85 backdrop-blur-md">
+        <NavbarBrand className="hidden sm:flex min-w-[112px]" />
+        <NavbarContent
+          justify="center"
+          className="order-1 min-w-0 flex-1 px-3 py-2 sm:order-2 sm:basis-auto sm:px-2 sm:py-0"
+        >
+          <div className="w-full min-w-0 max-w-full sm:mx-auto sm:max-w-lg">
+            {proximaTarea && detalleActivoAlerta ? (
+              <MuiAlert
+                severity="info"
+                variant="standard"
+                icon={false}
+                onClick={abrirModalProximaTarea}
+                sx={{
+                  width: '100%',
+                  maxWidth: '100%',
+                  px: 0,
+                  py: 0,
+                  borderRadius: 0,
+                  backgroundColor: 'transparent',
+                  color: 'rgb(24, 24, 27)',
+                  boxShadow: 'none',
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                  minWidth: 0,
+                  '&::before': {
+                    display: 'none',
+                  },
+                  '& .MuiAlert-message': {
                     width: '100%',
-                    borderRadius: '16px',
-                    py: 0.75,
-                    px: 1.5,
-                    alignItems: 'center',
-                    background: 'linear-gradient(135deg, #0f766e, #0ea5e9)',
-                    boxShadow: '0 14px 30px rgba(14, 116, 144, 0.22)',
-                    '& .MuiAlert-message': {
-                      width: '100%',
-                      overflow: 'hidden',
-                    },
-                  }}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80">
-                      Se acerca la próxima tarea {tiempoRestanteProximaTarea}
-                    </p>
-                    <p className="truncate text-sm font-semibold text-white">
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    py: 0,
+                  },
+                }}
+              >
+                <div className="min-w-0 overflow-hidden text-center leading-tight">
+                  <p className="overflow-hidden whitespace-nowrap text-[10px] font-semibold text-default-600 sm:text-[11px]">
+                    {encabezadoAlerta}
+                  </p>
+                  <Fade
+                    in={Boolean(detalleActivoAlerta)}
+                    timeout={500}
+                    key={`${proximaTareaWo || 'sin-tarea'}-${indiceAlertaProximaTarea}`}
+                  >
+                    <p className="overflow-hidden whitespace-nowrap text-xs font-semibold text-default-900 sm:text-sm">
                       {detalleActivoAlerta.etiqueta}: {detalleActivoAlerta.valor}
                     </p>
-                  </div>
-                </MuiAlert>
-              ) : <div />}
-            </div>
-          </Fade>
+                  </Fade>
+                </div>
+              </MuiAlert>
+            ) : <div />}
+          </div>
         </NavbarContent>
-        <NavbarContent justify="end">
-          <NavbarItem>
+        <NavbarContent
+          justify="end"
+          className="order-2 ml-auto shrink-0 basis-auto px-3 py-2 sm:order-3 sm:px-0 sm:py-0"
+        >
+          <NavbarItem className="hidden sm:flex">
             <Chip size="sm" variant="flat" color={syncing ? 'warning' : 'success'}>
               {syncing ? 'Sincronizando...' : `${tareas.length} tareas`}
             </Chip>
@@ -1257,6 +1333,10 @@ export default function App() {
 
         <div className={vista === 'tareas' ? 'block space-y-4' : 'hidden'}>
           <ImportarExcel onImportado={cargarTareas} />
+          <FormularioNuevaTarea
+            onCrearTarea={crearTareaManual}
+            cargando={creandoTarea}
+          />
           <ListaTareas
             tareas={tareas}
             misTareas={misTareas}
@@ -1266,10 +1346,12 @@ export default function App() {
 
         <div className={vista === 'mis-tareas' ? 'block' : 'hidden'}>
           <FormularioCierre
+            key={tareaInicialMisTareasWo || 'mis-tareas-default'}
             tareas={misTareas}
             onMarcarCompletada={marcarTareaCompletada}
             onEliminarTarea={eliminarDeMisTareas}
             onGuardarTiempos={guardarTiemposMisTarea}
+            tareaInicialWo={tareaInicialMisTareasWo}
           />
         </div>
 
@@ -1277,6 +1359,61 @@ export default function App() {
           <PaginaRepuestos session={session} />
         </div>
       </main>
+
+      <Modal
+        isOpen={modalProximaTareaAbierto}
+        onOpenChange={abierto => setModalProximaTareaAbierto(abierto)}
+      >
+        <ModalContent>
+          <>
+            <ModalHeader>Próxima tarea</ModalHeader>
+            <ModalBody>
+              {proximaTarea?.tarea ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl bg-default-50 px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-wide text-default-400">Agencia</p>
+                    <p className="text-sm font-semibold text-default-800">{proximaTarea.tarea.nombre || '—'}</p>
+                  </div>
+                  <div className="rounded-xl bg-default-50 px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-wide text-default-400">WO</p>
+                    <p className="text-sm font-mono font-semibold text-default-800">{proximaTarea.tarea.wo || '—'}</p>
+                  </div>
+                  <div className="rounded-xl bg-default-50 px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-wide text-default-400">ID ATM</p>
+                    <p className="text-sm font-mono font-semibold text-default-800">{proximaTarea.tarea.id_atm || '—'}</p>
+                  </div>
+                  <div className="rounded-xl bg-default-50 px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-wide text-default-400">Modelo</p>
+                    <p className="text-sm font-semibold text-default-800">{proximaTarea.tarea.modelo || '—'}</p>
+                  </div>
+                  <div className="rounded-xl bg-default-50 px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-wide text-default-400">Fecha</p>
+                    <p className="text-sm font-semibold text-default-800">{proximaTarea.tarea.fecha || '—'}</p>
+                  </div>
+                  <div className="rounded-xl bg-default-50 px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-wide text-default-400">Hora</p>
+                    <p className="text-sm font-mono font-semibold text-default-800">{proximaTarea.tarea.hora || '—'}</p>
+                  </div>
+                  <div className="col-span-2 rounded-xl bg-default-50 px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-wide text-default-400">Dirección</p>
+                    <p className="text-sm font-semibold text-default-800">{proximaTarea.tarea.direccion || '—'}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-default-500">No hay una tarea próxima disponible.</p>
+              )}
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" onPress={() => setModalProximaTareaAbierto(false)}>
+                Cerrar
+              </Button>
+              <Button color="primary" onPress={irAProximaTarea} isDisabled={!proximaTarea?.tarea?.wo}>
+                Ir a la tarea
+              </Button>
+            </ModalFooter>
+          </>
+        </ModalContent>
+      </Modal>
     </div>
   )
 }

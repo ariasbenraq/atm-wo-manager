@@ -382,6 +382,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .order-3 {
   order: 3;
 }
+.col-span-2 {
+  grid-column: span 2 / span 2;
+}
 .-m-2 {
   margin: calc(var(--spacing) * -2);
 }
@@ -1077,6 +1080,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 }
 .appearance-none {
   appearance: none;
+}
+.grid-cols-1 {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
 }
 .grid-cols-2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1873,6 +1879,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .text-default-800 {
   color: var(--color-default-800);
 }
+.text-default-900 {
+  color: var(--color-default-900);
+}
 .text-inherit {
   color: inherit;
 }
@@ -1899,12 +1908,6 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 }
 .text-white {
   color: var(--color-white);
-}
-.text-white\/80 {
-  color: color-mix(in srgb, #fff 80%, transparent);
-  @supports (color: color-mix(in lab, red, red)) {
-    color: color-mix(in oklab, var(--color-white) 80%, transparent);
-  }
 }
 .tabular-nums {
   --tw-numeric-spacing: tabular-nums;
@@ -3250,6 +3253,11 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .sm\:\[--slide-exit\:0px\] {
   @media (width >= 40rem) {
     --slide-exit: 0px;
+  }
+}
+.md\:col-span-2 {
+  @media (width >= 48rem) {
+    grid-column: span 2 / span 2;
   }
 }
 .md\:block {

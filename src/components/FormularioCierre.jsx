@@ -214,17 +214,21 @@ function obtenerMarcaTiempoTarea(tarea) {
   return Number.isNaN(marca.getTime()) ? 0 : marca.getTime()
 }
 
-export default function FormularioCierre({ tareas, onMarcarCompletada, onEliminarTarea, onGuardarTiempos }) {
-  const [busqueda, setBusqueda] = useState('')
-  const [tareaSeleccionada, setTareaSeleccionada] = useState(null)
-  const [mostrarLista, setMostrarLista] = useState(true)
+export default function FormularioCierre({ tareas, onMarcarCompletada, onEliminarTarea, onGuardarTiempos, tareaInicialWo = null }) {
+  const tareaInicial = tareaInicialWo
+    ? (tareas.find(t => t.wo === tareaInicialWo) || null)
+    : null
+
+  const [busqueda, setBusqueda] = useState(tareaInicial?.nombre || '')
+  const [tareaSeleccionada, setTareaSeleccionada] = useState(tareaInicial)
+  const [mostrarLista, setMostrarLista] = useState(!tareaInicial)
   const [completadasExpandidas, setCompletadasExpandidas] = useState([])
   const [confirmacion, setConfirmacion] = useState(null)
-  const [ds, setDs] = useState(null)
-  const [arribo, setArribo] = useState(null)
-  const [inicio, setInicio] = useState(null)
-  const [fin, setFin] = useState(null)
-  const [retorno, setRetorno] = useState(null)
+  const [ds, setDs] = useState(normalizarHora(tareaInicial?.ds))
+  const [arribo, setArribo] = useState(normalizarHora(tareaInicial?.arribo))
+  const [inicio, setInicio] = useState(normalizarHora(tareaInicial?.inicio))
+  const [fin, setFin] = useState(normalizarHora(tareaInicial?.fin))
+  const [retorno, setRetorno] = useState(normalizarHora(tareaInicial?.retorno))
   const [ultimaAtencion, setUltimaAtencion] = useState(false)
 
   const tareasFiltradas = tareas.filter(t => {
