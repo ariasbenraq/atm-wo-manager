@@ -1815,6 +1815,10 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
   --tw-tracking: 0.16em;
   letter-spacing: 0.16em;
 }
+.tracking-\[0\.18em\] {
+  --tw-tracking: 0.18em;
+  letter-spacing: 0.18em;
+}
 .tracking-tight {
   --tw-tracking: var(--tracking-tight);
   letter-spacing: var(--tracking-tight);
@@ -1895,6 +1899,12 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 }
 .text-white {
   color: var(--color-white);
+}
+.text-white\/80 {
+  color: color-mix(in srgb, #fff 80%, transparent);
+  @supports (color: color-mix(in lab, red, red)) {
+    color: color-mix(in oklab, var(--color-white) 80%, transparent);
+  }
 }
 .tabular-nums {
   --tw-numeric-spacing: tabular-nums;

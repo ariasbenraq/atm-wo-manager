@@ -20,7 +20,7 @@ import {
   DropdownTrigger,
   Divider,
   Input,
-  Alert,
+  Alert as HeroAlert,
   ScrollShadow,
   Spinner,
   Modal,
@@ -29,6 +29,8 @@ import {
   ModalBody,
   ModalFooter,
 } from '@heroui/react'
+import MuiAlert from '@mui/material/Alert'
+import Fade from '@mui/material/Fade'
 import { Boxes, ClipboardList, Eye, LogOut, Menu, Package, Plus, Wrench } from 'lucide-react'
 
 const VISTA_INICIAL = 'tareas'
@@ -38,6 +40,37 @@ const vistas = [
   { key: 'mis-tareas', label: 'Mis tareas', icon: Wrench },
   { key: 'repuestos', label: 'Repuestos', icon: Package },
 ]
+
+function obtenerMarcaTiempoProgramada(tarea) {
+  const fecha = String(tarea?.fecha || '').trim()
+  const hora = String(tarea?.hora || '').trim() || '00:00'
+
+  if (!fecha) return 0
+
+  const matchIso = fecha.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!matchIso) return 0
+
+  const [, year, month, day] = matchIso
+  const marca = new Date(`${year}-${month}-${day}T${hora.length === 5 ? `${hora}:00` : hora}`)
+  return Number.isNaN(marca.getTime()) ? 0 : marca.getTime()
+}
+
+function obtenerProximaTareaEnVentana(tareas, ahoraMs) {
+  const limite = ahoraMs + (60 * 60 * 1000)
+
+  return tareas
+    .filter(tarea => tarea?.estado !== 'completada')
+    .map(tarea => ({ tarea, marca: obtenerMarcaTiempoProgramada(tarea) }))
+    .filter(item => item.marca >= ahoraMs && item.marca <= limite)
+    .sort((a, b) => a.marca - b.marca)[0] || null
+}
+
+function formatearTiempoRestante(ms) {
+  const minutos = Math.max(0, Math.ceil(ms / 60000))
+  if (minutos <= 1) return 'en menos de 1 min'
+  if (minutos < 60) return `en ${minutos} min`
+  return 'en 1 hora'
+}
 
 function PaginaLogin({ onLogin }) {
   const [email, setEmail] = useState('')
@@ -124,7 +157,7 @@ function PaginaLogin({ onLogin }) {
             </Button>
 
             {mensaje && (
-              <Alert
+              <HeroAlert
                 color={mensaje.color}
                 title="No se pudo iniciar sesión"
                 description={mensaje.texto}
@@ -465,7 +498,7 @@ function PaginaRepuestos({ session }) {
           </div>
 
           {mensaje && (
-            <Alert
+            <HeroAlert
               color={mensaje.color}
               title="Inventario actualizado"
               description={mensaje.texto}
@@ -799,6 +832,8 @@ export default function App() {
   const [syncing, setSyncing] = useState(true)
   const [session, setSession] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
+  const [ahoraMs, setAhoraMs] = useState(() => Date.now())
+  const [indiceAlertaProximaTarea, setIndiceAlertaProximaTarea] = useState(0)
   const [vista, setVista] = useState(() => {
     if (typeof window === 'undefined') return VISTA_INICIAL
     return sessionStorage.getItem('atm-wo-vista') || VISTA_INICIAL
@@ -1039,6 +1074,43 @@ export default function App() {
     sessionStorage.setItem('atm-wo-vista', vista)
   }, [vista])
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setAhoraMs(Date.now())
+    }, 30000)
+
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const proximaTarea = obtenerProximaTareaEnVentana(misTareas, ahoraMs)
+  const detallesAlerta = proximaTarea
+    ? [
+      { etiqueta: 'Agencia', valor: proximaTarea.tarea.nombre || 'Sin agencia' },
+      { etiqueta: 'ID ATM', valor: proximaTarea.tarea.id_atm || 'Sin ID ATM' },
+      { etiqueta: 'Dirección', valor: proximaTarea.tarea.direccion || 'Sin dirección' },
+    ]
+    : []
+  const proximaTareaWo = proximaTarea?.tarea?.wo || null
+  const totalDetallesAlerta = detallesAlerta.length
+  const detalleActivoAlerta = detallesAlerta[indiceAlertaProximaTarea % (detallesAlerta.length || 1)] || null
+  const tiempoRestanteProximaTarea = proximaTarea
+    ? formatearTiempoRestante(proximaTarea.marca - ahoraMs)
+    : ''
+
+  useEffect(() => {
+    setIndiceAlertaProximaTarea(0)
+  }, [proximaTareaWo])
+
+  useEffect(() => {
+    if (!proximaTareaWo || totalDetallesAlerta <= 1) return
+
+    const timer = window.setInterval(() => {
+      setIndiceAlertaProximaTarea(prev => (prev + 1) % totalDetallesAlerta)
+    }, 5000)
+
+    return () => window.clearInterval(timer)
+  }, [proximaTareaWo, totalDetallesAlerta])
+
   const vistaActiva = vistas.find(item => item.key === vista) || vistas[0]
   const VistaIcono = vistaActiva.icon
 
@@ -1068,6 +1140,41 @@ export default function App() {
         <NavbarBrand>
           <p className="font-bold text-inherit tracking-tight font-mono">ATM·WO</p>
         </NavbarBrand>
+        <NavbarContent justify="center" className="flex-1 px-2">
+          <Fade in={Boolean(proximaTarea && detalleActivoAlerta)} timeout={350} key={`${proximaTarea?.tarea?.wo || 'sin-tarea'}-${indiceAlertaProximaTarea}`}>
+            <div className="w-full max-w-md">
+              {proximaTarea && detalleActivoAlerta ? (
+                <MuiAlert
+                  severity="info"
+                  variant="filled"
+                  icon={false}
+                  sx={{
+                    width: '100%',
+                    borderRadius: '16px',
+                    py: 0.75,
+                    px: 1.5,
+                    alignItems: 'center',
+                    background: 'linear-gradient(135deg, #0f766e, #0ea5e9)',
+                    boxShadow: '0 14px 30px rgba(14, 116, 144, 0.22)',
+                    '& .MuiAlert-message': {
+                      width: '100%',
+                      overflow: 'hidden',
+                    },
+                  }}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80">
+                      Se acerca la próxima tarea {tiempoRestanteProximaTarea}
+                    </p>
+                    <p className="truncate text-sm font-semibold text-white">
+                      {detalleActivoAlerta.etiqueta}: {detalleActivoAlerta.valor}
+                    </p>
+                  </div>
+                </MuiAlert>
+              ) : <div />}
+            </div>
+          </Fade>
+        </NavbarContent>
         <NavbarContent justify="end">
           <NavbarItem>
             <Chip size="sm" variant="flat" color={syncing ? 'warning' : 'success'}>
