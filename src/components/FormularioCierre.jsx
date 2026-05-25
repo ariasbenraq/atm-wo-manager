@@ -547,7 +547,16 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
 
             <div>
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-default-700">Completadas</p>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 cursor-pointer hover:opacity-70 transition-opacity"
+                    onClick={() => setCompletadasMinimizadas(true)}
+                  >
+                    <p className="text-sm font-semibold text-default-700">Completadas</p>
+                    {tareasCompletadas.length > 3 && !completadasMinimizadas && (
+                      <ChevronUp size={14} className="text-default-400" />
+                    )}
+                  </button>
                   <Chip size="sm" variant="flat" color="success">
                     {tareasCompletadas.length}
                   </Chip>
