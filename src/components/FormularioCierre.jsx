@@ -189,9 +189,16 @@ function SelectorHora({ label, value, onChange, onAhora }) {
   )
 }
 
-function CampoResumen({ label, valor, mono = false }) {
+function CampoResumen({ label, valor, mono = false, copiable = false, onCopiar }) {
   return (
-    <div className="min-w-0 rounded-lg bg-default-50 px-3 py-2">
+    <div
+      className={`min-w-0 rounded-lg bg-default-50 px-3 py-2 ${copiable ? 'cursor-copy active:opacity-70' : ''}`}
+      onClick={copiable ? onCopiar : undefined}
+      role={copiable ? 'button' : undefined}
+      tabIndex={copiable ? 0 : undefined}
+      onKeyDown={copiable ? (e) => (e.key === 'Enter' || e.key === ' ') && onCopiar?.() : undefined}
+      title={copiable ? `Toca para copiar ${label}` : undefined}
+    >
       <p className="text-[11px] uppercase tracking-wide text-default-400">{label}</p>
       <p className={`truncate text-sm font-medium text-default-700 ${mono ? 'font-mono' : ''}`}>
         {valor || '—'}
@@ -480,23 +487,41 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
                         <div className="rounded-lg px-1 py-1">
                           <div className="mb-3 flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <p className="text-sm font-semibold text-default-800">{t.nombre}</p>
+                              <p
+                                className="text-sm font-semibold text-default-800 cursor-copy active:opacity-70 w-fit"
+                                onClick={() => copiarTexto(t.nombre, 'Agencia')}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && copiarTexto(t.nombre, 'Agencia')}
+                                title="Toca para copiar agencia"
+                              >
+                                {t.nombre}
+                              </p>
                               <p className="mt-1 text-xs text-default-500">
                                 Datos principales para gestionar la tarea
                               </p>
                             </div>
-                            <Chip size="sm" variant="flat" color={chipColor(t.id_atm)}
-                              className="shrink-0 font-mono text-xs">
+                            <Chip
+                              size="sm"
+                              variant="flat"
+                              color={chipColor(t.id_atm)}
+                              className="shrink-0 font-mono text-xs cursor-copy active:opacity-70"
+                              onClick={() => copiarTexto(t.id_atm, 'ID ATM')}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && copiarTexto(t.id_atm, 'ID ATM')}
+                              title="Toca para copiar ID ATM"
+                            >
                               {t.id_atm || 'Sin ATM'}
                             </Chip>
                           </div>
                           <div className="grid grid-cols-2 gap-2">
-                            <CampoResumen label="WO" valor={t.wo} mono />
+                            <CampoResumen label="WO" valor={t.wo} mono copiable onCopiar={() => copiarTexto(t.wo, 'WO')} />
                             <CampoResumen label="Hora" valor={t.hora} mono />
                             <CampoResumen label="Fecha" valor={formatearFecha(t.fecha)} mono />
                             <CampoResumen label="CE" valor={t.ce || 'Sin usuario'} />
                             <CampoResumen label="Distrito" valor={t.distrito} />
-                            <CampoResumen label="Dirección" valor={t.direccion} />
+                            <CampoResumen label="Dirección" valor={t.direccion} copiable onCopiar={() => copiarTexto(t.direccion, 'Dirección')} />
                           </div>
                         </div>
                         <div className="mt-3 flex justify-end gap-2">
@@ -607,7 +632,16 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <p className="text-sm font-semibold text-default-700">{t.nombre}</p>
+                                <p
+                                  className="text-sm font-semibold text-default-700 cursor-copy active:opacity-70 w-fit"
+                                  onClick={e => { e.stopPropagation(); copiarTexto(t.nombre, 'Agencia') }}
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && copiarTexto(t.nombre, 'Agencia')}
+                                  title="Toca para copiar agencia"
+                                >
+                                  {t.nombre}
+                                </p>
                                 <p className="mt-1 text-xs text-default-400">
                                   Completada {t.completadaEn ? formatearFechaHora(t.completadaEn) : ''}
                                 </p>
@@ -626,12 +660,12 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
                           {completadasExpandidas.includes(t.wo) && (
                             <>
                               <div className="mt-3 grid grid-cols-2 gap-2">
-                                <CampoResumen label="WO" valor={t.wo} mono />
+                                <CampoResumen label="WO" valor={t.wo} mono copiable onCopiar={() => copiarTexto(t.wo, 'WO')} />
                                 <CampoResumen label="Hora" valor={t.hora} mono />
                                 <CampoResumen label="Fecha" valor={formatearFecha(t.fecha)} mono />
                                 <CampoResumen label="CE" valor={t.ce || 'Sin usuario'} />
                                 <CampoResumen label="Distrito" valor={t.distrito} />
-                                <CampoResumen label="Dirección" valor={t.direccion} />
+                                <CampoResumen label="Dirección" valor={t.direccion} copiable onCopiar={() => copiarTexto(t.direccion, 'Dirección')} />
                               </div>
                               <div className="mt-3 flex justify-end">
                                 <Button

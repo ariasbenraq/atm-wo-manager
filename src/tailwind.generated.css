@@ -3014,6 +3014,13 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
     }
   }
 }
+.hover\:opacity-70 {
+  &:hover {
+    @media (hover: hover) {
+      opacity: 70%;
+    }
+  }
+}
 .hover\:opacity-100 {
   &:hover {
     @media (hover: hover) {
