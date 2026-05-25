@@ -3,7 +3,7 @@ import dayjs from 'dayjs'
 import { Card, CardBody, CardHeader, Input, Button, Alert, Divider } from '@heroui/react'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { DatePicker, DesktopTimePicker, MobileTimePicker } from '@mui/x-date-pickers'
-import { PlusSquare } from 'lucide-react'
+import { PlusSquare, ChevronDown, ChevronUp } from 'lucide-react'
 
 const VALORES_INICIALES = {
   wo: '',
@@ -212,6 +212,7 @@ export default function FormularioNuevaTarea({ onCrearTarea, cargando = false })
   const [formulario, setFormulario] = useState(VALORES_INICIALES)
   const [errores, setErrores] = useState({})
   const [mensaje, setMensaje] = useState(null)
+  const [expandido, setExpandido] = useState(false)
 
   function actualizarCampo(campo, valor) {
     setFormulario(prev => ({ ...prev, [campo]: valor }))
@@ -270,10 +271,21 @@ export default function FormularioNuevaTarea({ onCrearTarea, cargando = false })
 
   return (
     <Card shadow="sm">
-      <CardHeader className="flex gap-3 pb-0">
-        <PlusSquare size={18} className="text-default-400" />
-        <p className="text-sm font-semibold">Agregar tarea manual</p>
-      </CardHeader>
+      <button
+        type="button"
+        className="w-full text-left py-3"
+         onClick={() => setExpandido(prev => !prev)}
+      >
+        <CardHeader className="flex gap-3 py-0">
+          <PlusSquare size={18} className="text-default-400" />
+          <p className="text-sm font-semibold">Agregar tarea manual</p>
+          <span className="ml-auto text-default-400">
+            {expandido ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </span>
+        </CardHeader>
+      </button>
+      {expandido && (
+        <>
       <Divider className="mt-3" />
       <CardBody className="space-y-3">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -370,6 +382,8 @@ export default function FormularioNuevaTarea({ onCrearTarea, cargando = false })
           />
         )}
       </CardBody>
+        </>
+      )}
     </Card>
   )
 }
