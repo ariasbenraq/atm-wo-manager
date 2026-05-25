@@ -223,6 +223,7 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
   const [tareaSeleccionada, setTareaSeleccionada] = useState(tareaInicial)
   const [mostrarLista, setMostrarLista] = useState(!tareaInicial)
   const [completadasExpandidas, setCompletadasExpandidas] = useState([])
+  const [completadasMinimizadas, setCompletadasMinimizadas] = useState(true)
   const [confirmacion, setConfirmacion] = useState(null)
   const [ds, setDs] = useState(normalizarHora(tareaInicial?.ds))
   const [arribo, setArribo] = useState(normalizarHora(tareaInicial?.arribo))
@@ -544,81 +545,111 @@ export default function FormularioCierre({ tareas, onMarcarCompletada, onElimina
             )}
           </div>
 
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-sm font-semibold text-default-700">Completadas</p>
-              <Chip size="sm" variant="flat" color="success">
-                {tareasCompletadas.length}
-              </Chip>
-            </div>
-            {completadasVisibles.length > 0 ? (
-              <div className="space-y-3">
-                {completadasVisibles.map((t, i) => (
+            <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-default-700">Completadas</p>
+                  <Chip size="sm" variant="flat" color="success">
+                    {tareasCompletadas.length}
+                  </Chip>
+                </div>
+                {tareasCompletadas.length > 3 && completadasMinimizadas ? (
                   <Card
-                    key={t.wo || i}
                     shadow="sm"
-                    className="border border-default-200/80 bg-white"
+                    className="border border-default-200/80 bg-white cursor-pointer transition-colors hover:bg-default-50"
                   >
                     <CardBody className="p-4">
                       <button
                         type="button"
                         className="w-full text-left"
-                        onClick={() => alternarCompletada(t.wo)}
+                        onClick={() => setCompletadasMinimizadas(false)}
                       >
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-sm font-semibold text-default-700">{t.nombre}</p>
+                            <p className="text-sm font-semibold text-default-700">
+                              {tareasCompletadas.length} tareas completadas
+                            </p>
                             <p className="mt-1 text-xs text-default-400">
-                              Completada {t.completadaEn ? formatearFechaHora(t.completadaEn) : ''}
+                              Toca para ver detalle
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Chip size="sm" variant="flat" color="success" className="shrink-0">
-                              Completada
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Chip size="sm" variant="flat" color="success">
+                              Completadas
                             </Chip>
-                            <span className="text-default-400">
-                              {completadasExpandidas.includes(t.wo) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                            </span>
+                            <ChevronDown size={16} className="text-default-400" />
                           </div>
                         </div>
                       </button>
-
-                      {completadasExpandidas.includes(t.wo) && (
-                        <>
-                          <div className="mt-3 grid grid-cols-2 gap-2">
-                            <CampoResumen label="WO" valor={t.wo} mono />
-                            <CampoResumen label="Hora" valor={t.hora} mono />
-                            <CampoResumen label="Fecha" valor={formatearFecha(t.fecha)} mono />
-                            <CampoResumen label="CE" valor={t.ce || 'Sin usuario'} />
-                            <CampoResumen label="Distrito" valor={t.distrito} />
-                            <CampoResumen label="Dirección" valor={t.direccion} />
-                          </div>
-                          <div className="mt-3 flex justify-end">
-                            <Button
-                              size="sm"
-                              color="danger"
-                              variant="flat"
-                              radius="lg"
-                              startContent={<Trash2 size={14} />}
-                              onPress={() => eliminarTarea(t)}
-                            >
-                              Eliminar
-                            </Button>
-                          </div>
-                        </>
-                      )}
                     </CardBody>
                   </Card>
-                ))}
+                ) : completadasVisibles.length > 0 ? (
+                  <div className="space-y-3">
+                    {completadasVisibles.map((t, i) => (
+                      <Card
+                        key={t.wo || i}
+                        shadow="sm"
+                        className="border border-default-200/80 bg-white"
+                      >
+                        <CardBody className="p-4">
+                          <button
+                            type="button"
+                            className="w-full text-left"
+                            onClick={() => alternarCompletada(t.wo)}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-default-700">{t.nombre}</p>
+                                <p className="mt-1 text-xs text-default-400">
+                                  Completada {t.completadaEn ? formatearFechaHora(t.completadaEn) : ''}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Chip size="sm" variant="flat" color="success" className="shrink-0">
+                                  Completada
+                                </Chip>
+                                <span className="text-default-400">
+                                  {completadasExpandidas.includes(t.wo) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+
+                          {completadasExpandidas.includes(t.wo) && (
+                            <>
+                              <div className="mt-3 grid grid-cols-2 gap-2">
+                                <CampoResumen label="WO" valor={t.wo} mono />
+                                <CampoResumen label="Hora" valor={t.hora} mono />
+                                <CampoResumen label="Fecha" valor={formatearFecha(t.fecha)} mono />
+                                <CampoResumen label="CE" valor={t.ce || 'Sin usuario'} />
+                                <CampoResumen label="Distrito" valor={t.distrito} />
+                                <CampoResumen label="Dirección" valor={t.direccion} />
+                              </div>
+                              <div className="mt-3 flex justify-end">
+                                <Button
+                                  size="sm"
+                                  color="danger"
+                                  variant="flat"
+                                  radius="lg"
+                                  startContent={<Trash2 size={14} />}
+                                  onPress={() => eliminarTarea(t)}
+                                >
+                                  Eliminar
+                                </Button>
+                              </div>
+                            </>
+                          )}
+                        </CardBody>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-default-200 bg-white px-4 py-4 text-sm text-default-400 shadow-sm">
+                    {busqueda
+                      ? `No se encontraron tareas completadas para "${busqueda}".`
+                      : 'Aun no hay tareas completadas.'}
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="rounded-xl border border-default-200 bg-white px-4 py-4 text-sm text-default-400 shadow-sm">
-                {busqueda
-                  ? `No se encontraron tareas completadas para "${busqueda}".`
-                  : 'Aun no hay tareas completadas.'}
-              </div>
-            )}
-          </div>
         </CardBody>
       </Card>
 
