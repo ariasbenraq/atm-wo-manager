@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
 import { syncFromSupabase } from '../lib/sync'
@@ -12,6 +12,8 @@ export function AppProvider({ children }) {
   const [session, setSession] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [creandoTarea, setCreandoTarea] = useState(false)
+  const [sesionExpirada, setSesionExpirada] = useState(false)
+  const cierreManualRef = useRef(false)
 
   const cargarTareas = useCallback(async () => {
     const local = await db.tareas.toArray()
@@ -237,6 +239,7 @@ export function AppProvider({ children }) {
   }, [setCreandoTarea, setTareas])
 
   const cerrarSesion = useCallback(async () => {
+    cierreManualRef.current = true
     await supabase.auth.signOut()
     setSession(null)
   }, [])
@@ -253,8 +256,19 @@ export function AppProvider({ children }) {
 
     initAuth()
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nuevaSession) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, nuevaSession) => {
       if (!activo) return
+
+      if ((event === 'SIGNED_OUT' || event === 'USER_DELETED') && !cierreManualRef.current) {
+        setSesionExpirada(true)
+      }
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (nuevaSession) {
+          setSesionExpirada(false)
+        }
+      }
+      cierreManualRef.current = false
+
       setSession(nuevaSession ?? null)
     })
 
@@ -291,6 +305,7 @@ export function AppProvider({ children }) {
     session,
     authLoading,
     creandoTarea,
+    sesionExpirada,
     setTareas,
     setMisTareas,
     setSession,
@@ -304,7 +319,7 @@ export function AppProvider({ children }) {
     crearTareaManual,
     cerrarSesion,
   }), [
-    tareas, misTareas, syncing, session, authLoading, creandoTarea,
+    tareas, misTareas, syncing, session, authLoading, creandoTarea, sesionExpirada,
     cargarTareas, cargarMisTareas, agregarAMisTareas, marcarTareaCompletada,
     eliminarDeMisTareas, guardarTiemposMisTarea, crearTareaManual, cerrarSesion,
   ])

@@ -3365,6 +3365,11 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
     padding: calc(var(--spacing) * 8);
   }
 }
+.md\:px-6 {
+  @media (width >= 48rem) {
+    padding-inline: calc(var(--spacing) * 6);
+  }
+}
 .rtl\:right-auto {
   &:where(:dir(rtl), [dir="rtl"], [dir="rtl"] *) {
     right: auto;

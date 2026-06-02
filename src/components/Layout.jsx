@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
+import { supabase } from '../lib/supabase'
 import {
   Navbar,
   NavbarBrand,
@@ -16,11 +17,13 @@ import {
   DropdownTrigger,
   Divider,
   Spinner,
+  Input,
   Modal,
   ModalContent,
   ModalHeader,
   ModalBody,
   ModalFooter,
+  Alert as HeroAlert,
 } from '@heroui/react'
 import MuiAlert from '@mui/material/Alert'
 import Fade from '@mui/material/Fade'
@@ -64,12 +67,17 @@ function formatearTiempoRestanteCorto(ms) {
 }
 
 export default function Layout() {
-  const { session, authLoading, misTareas, syncing, tareas, cerrarSesion } = useApp()
+  const { session, authLoading, misTareas, syncing, tareas, cerrarSesion, sesionExpirada } = useApp()
   const navigate = useNavigate()
   const location = useLocation()
   const [ahoraMs, setAhoraMs] = useState(() => Date.now())
   const [indiceAlertaProximaTarea, setIndiceAlertaProximaTarea] = useState(0)
   const [modalProximaTareaAbierto, setModalProximaTareaAbierto] = useState(false)
+  const [modalReLoginAbierto, setModalReLoginAbierto] = useState(false)
+  const [emailReLogin, setEmailReLogin] = useState('')
+  const [passwordReLogin, setPasswordReLogin] = useState('')
+  const [reLoginCargando, setReLoginCargando] = useState(false)
+  const [reLoginError, setReLoginError] = useState(null)
 
   useEffect(() => {
     if (!authLoading && !session) {
@@ -124,7 +132,7 @@ export default function Layout() {
     )
   }
 
-  if (!session) {
+  if (!session && !sesionExpirada) {
     return null
   }
 
@@ -141,6 +149,27 @@ export default function Layout() {
     if (!proximaTarea?.tarea?.wo) return
     setModalProximaTareaAbierto(false)
     navigate(`/mis-tareas?wo=${proximaTarea.tarea.wo}`)
+  }
+
+  async function handleReLogin() {
+    setReLoginCargando(true)
+    setReLoginError(null)
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: emailReLogin.trim(),
+      password: passwordReLogin,
+    })
+
+    setReLoginCargando(false)
+
+    if (error) {
+      setReLoginError(error.message)
+      return
+    }
+
+    setEmailReLogin('')
+    setPasswordReLogin('')
+    setModalReLoginAbierto(false)
   }
 
   return (
@@ -259,6 +288,27 @@ export default function Layout() {
         </NavbarContent>
       </Navbar>
 
+      {sesionExpirada && !session && (
+        <div className="max-w-3xl mx-auto px-4 md:px-6 pt-4">
+          <HeroAlert
+            color="warning"
+            title="Sesión expirada"
+            description="Tus datos locales aún están disponibles. Inicia sesión de nuevo para seguir sincronizando."
+            endContent={
+              <Button
+                size="sm"
+                color="warning"
+                variant="flat"
+                radius="lg"
+                onPress={() => setModalReLoginAbierto(true)}
+              >
+                Iniciar sesión
+              </Button>
+            }
+          />
+        </div>
+      )}
+
       <main className="max-w-3xl mx-auto p-4 md:p-6 space-y-4 md:space-y-5 pb-10">
         <Card shadow="none" className="border border-default-200/70 rounded-2xl bg-white/80 backdrop-blur-sm">
           <CardBody className="p-4 md:p-5">
@@ -335,6 +385,67 @@ export default function Layout() {
               </Button>
               <Button color="primary" onPress={irAProximaTarea} isDisabled={!proximaTarea?.tarea?.wo}>
                 Ir a la tarea
+              </Button>
+            </ModalFooter>
+          </>
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        isOpen={modalReLoginAbierto}
+        onOpenChange={abierto => {
+          setModalReLoginAbierto(abierto)
+          if (!abierto) {
+            setEmailReLogin('')
+            setPasswordReLogin('')
+            setReLoginError(null)
+          }
+        }}
+      >
+        <ModalContent>
+          <>
+            <ModalHeader>Iniciar sesión</ModalHeader>
+            <ModalBody className="space-y-3">
+              <Input
+                label="Correo"
+                type="email"
+                placeholder="tecnico@ncr.com"
+                value={emailReLogin}
+                onValueChange={setEmailReLogin}
+                variant="bordered"
+                radius="lg"
+              />
+              <Input
+                label="Contraseña"
+                type="password"
+                placeholder="••••••••"
+                value={passwordReLogin}
+                onValueChange={setPasswordReLogin}
+                variant="bordered"
+                radius="lg"
+              />
+              {reLoginError && (
+                <p className="text-sm text-danger">{reLoginError}</p>
+              )}
+            </ModalBody>
+            <ModalFooter>
+              <Button
+                variant="light"
+                onPress={() => {
+                  setModalReLoginAbierto(false)
+                  setEmailReLogin('')
+                  setPasswordReLogin('')
+                  setReLoginError(null)
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                color="primary"
+                onPress={handleReLogin}
+                isLoading={reLoginCargando}
+              >
+                Entrar
               </Button>
             </ModalFooter>
           </>
