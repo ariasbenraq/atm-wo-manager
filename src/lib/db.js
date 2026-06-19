@@ -128,3 +128,18 @@ db.version(10).stores({
     tarea.tiemposSyncPendiente = Boolean(tarea.tiemposSyncPendiente)
   })
 })
+
+db.version(11).stores({
+  tareas:         '++localId, wo, id_atm, fecha, ce',
+  mis_tareas:     '++localId, &wo, id_atm, fecha, ce, estado, completadaEn, ds, arribo, inicio, fin, retorno, tiemposUpdatedAt, tiemposSyncPendiente',
+  repuestos:      '++localId, nombre, partNumber, descripcion, tieneStock, compatibilidad, creadoEn',
+  userSpareParts: '++localId, userId, sparePartId',
+  personal_cmca:  '++localId, nombre',
+  personal_cmpd:  '++localId, nombre',
+  motivos_aqr:    '++localId, descripcion',
+  cierres:        '++localId, wo',
+}).upgrade(async tx => {
+  await tx.table('repuestos').toCollection().modify(repuesto => {
+    repuesto.compatibilidad = repuesto.compatibilidad || ''
+  })
+})

@@ -7,7 +7,7 @@ import {
   Divider, ScrollShadow, Alert as HeroAlert,
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
 } from '@heroui/react'
-import { Boxes, Eye, Plus } from 'lucide-react'
+import { Boxes, Eye, Plus, Copy, Check, BookmarkPlus, BookmarkCheck } from 'lucide-react'
 
 export default function RepuestosPage() {
   const { session } = useApp()
@@ -15,7 +15,7 @@ export default function RepuestosPage() {
   const [nombre, setNombre] = useState('')
   const [partNumber, setPartNumber] = useState('')
   const [descripcion, setDescripcion] = useState('')
-  const [tieneStock, setTieneStock] = useState(false)
+  const [compatibilidad, setCompatibilidad] = useState('')
   const [filtroNombre, setFiltroNombre] = useState('')
   const [errores, setErrores] = useState({})
   const [mensaje, setMensaje] = useState(null)
@@ -25,55 +25,82 @@ export default function RepuestosPage() {
   const [editNombre, setEditNombre] = useState('')
   const [editPartNumber, setEditPartNumber] = useState('')
   const [editDescripcion, setEditDescripcion] = useState('')
-  const [editTieneStock, setEditTieneStock] = useState(false)
+  const [editCompatibilidad, setEditCompatibilidad] = useState('')
   const [editErrores, setEditErrores] = useState({})
   const [guardandoEdicion, setGuardandoEdicion] = useState(false)
+  const [listaPersonal, setListaPersonal] = useState(new Set())
+  const [copiandoId, setCopiandoId] = useState(null)
+  const [creandoRepuesto, setCreandoRepuesto] = useState(false)
+
+  async function cargarRepuestos() {
+    setCargandoLista(true)
+
+    try {
+      const { data, error } = await supabase
+        .from('repuestos')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      setRepuestos(data || [])
+
+      await db.repuestos.clear()
+      if (data?.length) {
+        await db.repuestos.bulkAdd(data.map(r => ({
+          idRemoto: r.id,
+          nombre: r.nombre,
+          partNumber: r.part_number,
+          descripcion: r.descripcion || '',
+          tieneStock: Boolean(r.tiene_stock),
+          compatibilidad: r.compatibility || '',
+          creadoEn: r.created_at,
+        })))
+      }
+    } catch {
+      const local = await db.repuestos.orderBy('localId').reverse().toArray()
+      setRepuestos(local.map(r => ({
+        id: r.idRemoto || r.localId,
+        nombre: r.nombre,
+        part_number: r.partNumber,
+        descripcion: r.descripcion || '',
+        compatibility: r.compatibilidad || '',
+      })))
+      setMensaje({
+        color: 'warning',
+        texto: 'No se pudo sincronizar con Supabase. Mostrando el inventario local disponible.',
+      })
+    } finally {
+      setCargandoLista(false)
+    }
+  }
+
+  async function cargarListaPersonal(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('user_spare_parts')
+        .select('spare_part_id')
+        .eq('user_id', userId)
+
+      if (!error && data) {
+        setListaPersonal(new Set(data.map(i => i.spare_part_id)))
+      }
+    } catch {
+      // silently fail for personal list
+    }
+  }
 
   useEffect(() => {
-    async function cargarRepuestos() {
-      setCargandoLista(true)
-
-      try {
-        const { data, error } = await supabase
-          .from('repuestos')
-          .select('*')
-          .order('created_at', { ascending: false })
-
-        if (error) throw error
-
-        setRepuestos(data || [])
-
-        await db.repuestos.clear()
-        if (data?.length) {
-          await db.repuestos.bulkAdd(data.map(repuesto => ({
-            idRemoto: repuesto.id,
-            nombre: repuesto.nombre,
-            partNumber: repuesto.part_number,
-            descripcion: repuesto.descripcion || '',
-            tieneStock: Boolean(repuesto.tiene_stock),
-            creadoEn: repuesto.created_at,
-          })))
-        }
-      } catch {
-      const local = await db.repuestos.orderBy('localId').reverse().toArray()
-        setRepuestos(local.map(repuesto => ({
-          id: repuesto.idRemoto || repuesto.localId,
-          nombre: repuesto.nombre,
-          part_number: repuesto.partNumber,
-          descripcion: repuesto.descripcion || '',
-          tiene_stock: Boolean(repuesto.tieneStock),
-        })))
-        setMensaje({
-          color: 'warning',
-          texto: 'No se pudo sincronizar con Supabase. Mostrando el inventario local disponible.',
-        })
-      } finally {
-        setCargandoLista(false)
-      }
-    }
-
     cargarRepuestos()
   }, [])
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      cargarListaPersonal(session.user.id)
+    } else {
+      setListaPersonal(new Set())
+    }
+  }, [session?.user?.id])
 
   function validarFormulario() {
     const nuevosErrores = {}
@@ -114,7 +141,7 @@ export default function RepuestosPage() {
       nombre: nombre.trim(),
       part_number: partNumber.trim(),
       descripcion: descripcion.trim(),
-      tiene_stock: tieneStock,
+      compatibility: compatibilidad.trim() || null,
       created_by: session.user.id,
     }
 
@@ -140,19 +167,30 @@ export default function RepuestosPage() {
       partNumber: data.part_number,
       descripcion: data.descripcion || '',
       tieneStock: Boolean(data.tiene_stock),
+      compatibilidad: data.compatibility || '',
       creadoEn: data.created_at,
     })
 
     setRepuestos(prev => [data, ...prev])
-    setNombre('')
-    setPartNumber('')
-    setDescripcion('')
-    setTieneStock(false)
-    setErrores({})
+    cerrarCrear()
     setMensaje({
       color: 'success',
       texto: `Repuesto ${data.nombre} agregado correctamente.`,
     })
+  }
+
+  function abrirCrear() {
+    setMensaje(null)
+    setCreandoRepuesto(true)
+  }
+
+  function cerrarCrear() {
+    setCreandoRepuesto(false)
+    setNombre('')
+    setPartNumber('')
+    setDescripcion('')
+    setCompatibilidad('')
+    setErrores({})
   }
 
   function abrirEdicion(repuesto) {
@@ -161,7 +199,7 @@ export default function RepuestosPage() {
     setEditNombre(repuesto.nombre || '')
     setEditPartNumber(repuesto.part_number || '')
     setEditDescripcion(repuesto.descripcion || '')
-    setEditTieneStock(Boolean(repuesto.tiene_stock))
+    setEditCompatibilidad(repuesto.compatibility || '')
     setEditErrores({})
   }
 
@@ -178,7 +216,7 @@ export default function RepuestosPage() {
     setEditNombre('')
     setEditPartNumber('')
     setEditDescripcion('')
-    setEditTieneStock(false)
+    setEditCompatibilidad('')
     setEditErrores({})
   }
 
@@ -192,7 +230,7 @@ export default function RepuestosPage() {
       nombre: editNombre.trim(),
       part_number: editPartNumber.trim(),
       descripcion: editDescripcion.trim(),
-      tiene_stock: editTieneStock,
+      compatibility: editCompatibilidad.trim() || null,
       updated_at: new Date().toISOString(),
     }
 
@@ -215,19 +253,17 @@ export default function RepuestosPage() {
       return
     }
 
-    await db.repuestos.toCollection().modify(repuesto => {
-      if (repuesto.idRemoto === repuestoEditando.id) {
-        repuesto.nombre = data.nombre
-        repuesto.partNumber = data.part_number
-        repuesto.descripcion = data.descripcion || ''
-        repuesto.tieneStock = Boolean(data.tiene_stock)
-        repuesto.creadoEn = data.created_at
+    await db.repuestos.toCollection().modify(r => {
+      if (r.idRemoto === repuestoEditando.id) {
+        r.nombre = data.nombre
+        r.partNumber = data.part_number
+        r.descripcion = data.descripcion || ''
+        r.compatibilidad = data.compatibility || ''
+        r.creadoEn = data.created_at
       }
     })
 
-    setRepuestos(prev => prev.map(repuesto => (
-      repuesto.id === data.id ? data : repuesto
-    )))
+    setRepuestos(prev => prev.map(r => (r.id === data.id ? data : r)))
 
     cerrarEdicion()
     setMensaje({
@@ -236,116 +272,196 @@ export default function RepuestosPage() {
     })
   }
 
+  async function copiarPartNumber(repuesto) {
+    const texto = `${repuesto.nombre}\nPart Number: ${repuesto.part_number}`
+    let ok = false
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(texto)
+        ok = true
+      }
+    } catch {
+      // fallback
+    }
+
+    if (!ok) {
+      try {
+        const textarea = document.createElement('textarea')
+        textarea.value = texto
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+        ok = true
+      } catch {
+        // both methods failed
+      }
+    }
+
+    if (ok) {
+      setCopiandoId(repuesto.id || repuesto.localId)
+      setTimeout(() => setCopiandoId(null), 2000)
+    } else {
+      setMensaje({
+        color: 'danger',
+        texto: 'No se pudo copiar al portapapeles.',
+      })
+    }
+  }
+
+  async function toggleListaPersonal(sparePartId) {
+    if (!session?.user?.id) return
+
+    if (listaPersonal.has(sparePartId)) {
+      const { error } = await supabase
+        .from('user_spare_parts')
+        .delete()
+        .eq('user_id', session.user.id)
+        .eq('spare_part_id', sparePartId)
+
+      if (error) {
+        setMensaje({
+          color: 'danger',
+          texto: 'No se pudo quitar el repuesto de tu lista.',
+        })
+      } else {
+        setListaPersonal(prev => {
+          const next = new Set(prev)
+          next.delete(sparePartId)
+          return next
+        })
+      }
+    } else {
+      const { error } = await supabase
+        .from('user_spare_parts')
+        .insert({ user_id: session.user.id, spare_part_id: sparePartId })
+
+      if (error && error.code !== '23505') {
+        setMensaje({
+          color: 'danger',
+          texto: 'No se pudo agregar el repuesto a tu lista.',
+        })
+      } else {
+        setListaPersonal(prev => {
+          const next = new Set(prev)
+          next.add(sparePartId)
+          return next
+        })
+      }
+    }
+  }
+
   const filtroNormalizado = filtroNombre.trim().toLowerCase()
   const repuestosFiltrados = filtroNormalizado
-    ? repuestos.filter(repuesto => String(repuesto.nombre || '').toLowerCase().includes(filtroNormalizado))
+    ? repuestos.filter(r => String(r.nombre || '').toLowerCase().includes(filtroNormalizado))
     : repuestos
+
+  function renderCard(repuesto) {
+    const key = repuesto.id || repuesto.localId
+    const enLista = listaPersonal.has(repuesto.id)
+    const fueCopiado = copiandoId === key
+
+    return (
+      <div
+        key={key}
+        className="rounded-2xl border border-default-200/70 bg-white px-4 py-4 shadow-sm transition-colors"
+      >
+        <p className="text-sm font-semibold text-default-900">
+          {repuesto.nombre}
+        </p>
+        <p className="mt-1 break-all font-mono text-xs text-default-600">
+          Part Number: {repuesto.part_number}
+        </p>
+        {repuesto.compatibility && (
+          <p className="mt-2 text-xs text-default-500">
+            Compatible con: {repuesto.compatibility}
+          </p>
+        )}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="flat"
+            color={fueCopiado ? 'success' : 'default'}
+            radius="lg"
+            startContent={fueCopiado ? <Check size={14} /> : <Copy size={14} />}
+            onPress={() => copiarPartNumber(repuesto)}
+          >
+            {fueCopiado ? 'Copiado' : 'Copiar Part Number'}
+          </Button>
+          <Button
+            size="sm"
+            variant={enLista ? 'solid' : 'flat'}
+            color={enLista ? 'primary' : 'default'}
+            radius="lg"
+            startContent={enLista ? <BookmarkCheck size={14} /> : <BookmarkPlus size={14} />}
+            isDisabled={!session}
+            onPress={() => toggleListaPersonal(repuesto.id)}
+          >
+            {enLista ? 'En mi lista' : 'Agregar a mi lista'}
+          </Button>
+        </div>
+        <div className="mt-3 flex justify-end gap-1">
+          <Button
+            isIconOnly
+            size="sm"
+            variant="light"
+            radius="lg"
+            aria-label={`Ver detalle del repuesto ${repuesto.nombre}`}
+            onPress={() => abrirDetalle(repuesto)}
+          >
+            <Eye size={18} />
+          </Button>
+          <Button
+            isIconOnly
+            size="sm"
+            variant="light"
+            radius="lg"
+            aria-label={`Editar repuesto ${repuesto.nombre}`}
+            onPress={() => abrirEdicion(repuesto)}
+          >
+            <span className="material-symbols-outlined text-[18px] leading-none">edit</span>
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
-      <Card shadow="sm" className="border border-default-200/70">
-        <CardBody className="p-6 md:p-8 space-y-5">
-          <div className="flex items-start gap-4">
-            <div className="rounded-2xl bg-warning-100 p-3 text-warning-700">
-              <Boxes size={22} />
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-lg font-semibold text-default-800">Repuestos</h2>
-              <p className="text-sm text-default-500">
-                Registra el inventario base con nombre y part number para tener una referencia
-                inmediata dentro de la aplicación.
-              </p>
-            </div>
-          </div>
+      {mensaje && (
+        <HeroAlert
+          color={mensaje.color}
+          title="Inventario actualizado"
+          description={mensaje.texto}
+        />
+      )}
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <Input
-              label="Nombre del repuesto"
-              placeholder="Ej. Fuente de poder"
-              value={nombre}
-              onValueChange={value => {
-                setNombre(value)
-                if (errores.nombre) {
-                  setErrores(prev => ({ ...prev, nombre: undefined }))
-                }
-              }}
-              isInvalid={Boolean(errores.nombre)}
-              errorMessage={errores.nombre}
-              variant="bordered"
-              radius="lg"
-            />
-            <Input
-              label="Part number"
-              placeholder="Ej. NCR-00992-AX"
-              value={partNumber}
-              onValueChange={value => {
-                setPartNumber(value)
-                if (errores.partNumber) {
-                  setErrores(prev => ({ ...prev, partNumber: undefined }))
-                }
-              }}
-              isInvalid={Boolean(errores.partNumber)}
-              errorMessage={errores.partNumber}
-              variant="bordered"
-              radius="lg"
-            />
-            <Input
-              label="Detalle"
-              placeholder="Ej. Compatible con ATM SelfServ 80"
-              value={descripcion}
-              onValueChange={setDescripcion}
-              variant="bordered"
-              radius="lg"
-            />
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <div className="rounded-2xl bg-warning-100 p-3 text-warning-700">
+            <Boxes size={22} />
           </div>
-
-          <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
-            <p className="text-sm font-semibold text-default-700">Stock actual</p>
-            <p className="mt-1 text-xs text-default-500">
-              Indica si este repuesto está disponible actualmente.
+          <div className="space-y-2">
+            <h2 className="text-lg font-semibold text-default-800">Repuestos</h2>
+            <p className="text-sm text-default-500">
+              Registra el inventario base con nombre y part number para tener una referencia
+              inmediata dentro de la aplicación.
             </p>
-            <div className="mt-3 flex gap-2">
-              <Button
-                size="sm"
-                radius="lg"
-                color={tieneStock ? 'success' : 'default'}
-                variant={tieneStock ? 'solid' : 'bordered'}
-                onPress={() => setTieneStock(true)}
-              >
-                Con stock
-              </Button>
-              <Button
-                size="sm"
-                radius="lg"
-                color={!tieneStock ? 'danger' : 'default'}
-                variant={!tieneStock ? 'solid' : 'bordered'}
-                onPress={() => setTieneStock(false)}
-              >
-                Sin stock
-              </Button>
-            </div>
           </div>
-
-          <div className="flex justify-end">
-            <Button
-              color="primary"
-              radius="lg"
-              startContent={<Plus size={16} />}
-              onPress={crearRepuesto}
-            >
-              Crear repuesto
-            </Button>
-          </div>
-
-          {mensaje && (
-            <HeroAlert
-              color={mensaje.color}
-              title="Inventario actualizado"
-              description={mensaje.texto}
-            />
-          )}
-        </CardBody>
-      </Card>
+        </div>
+        <Button
+          color="primary"
+          radius="lg"
+          startContent={<Plus size={16} />}
+          onPress={abrirCrear}
+          className="shrink-0"
+        >
+          Crear repuesto
+        </Button>
+      </div>
 
       <Card shadow="sm" className="border border-default-200/70">
         <CardBody className="p-0">
@@ -387,150 +503,75 @@ export default function RepuestosPage() {
           ) : (
             <ScrollShadow className="max-h-[55vh] px-5 pb-5">
               <div className="space-y-3 md:hidden">
-                {repuestosFiltrados.map(repuesto => (
-                  <div
-                    key={repuesto.id || repuesto.localId}
-                    className={`rounded-2xl border px-4 py-4 shadow-sm transition-colors ${
-                      repuesto.tiene_stock
-                        ? 'border-success-200 bg-success-50/80'
-                        : 'border-danger-200 bg-danger-50/80'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className={`text-sm font-semibold ${
-                          repuesto.tiene_stock ? 'text-success-950' : 'text-danger-950'
-                        }`}>
-                          {repuesto.nombre}
-                        </p>
-                        <p className={`mt-1 break-all font-mono text-xs ${
-                          repuesto.tiene_stock ? 'text-success-800' : 'text-danger-800'
-                        }`}>
-                          {repuesto.part_number}
-                        </p>
-                      </div>
-                      <Chip
-                        size="sm"
-                        variant="flat"
-                        color={repuesto.tiene_stock ? 'success' : 'danger'}
-                      >
-                        {repuesto.tiene_stock ? 'Con stock' : 'Sin stock'}
-                      </Chip>
-                    </div>
-
-                    <div className="mt-4 rounded-xl bg-white/70 px-3 py-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
-                        Detalle
-                      </p>
-                      <p className="mt-1 text-sm leading-5 text-default-700">
-                        {repuesto.descripcion || 'Sin detalle adicional'}
-                      </p>
-                    </div>
-
-                    <div className="mt-4 flex justify-end">
-                      <Button
-                        isIconOnly
-                        size="sm"
-                        variant="light"
-                        radius="lg"
-                        aria-label={`Ver detalle del repuesto ${repuesto.nombre}`}
-                        onPress={() => abrirDetalle(repuesto)}
-                      >
-                        <Eye size={18} />
-                      </Button>
-                      <Button
-                        isIconOnly
-                        size="sm"
-                        variant="light"
-                        radius="lg"
-                        aria-label={`Editar repuesto ${repuesto.nombre}`}
-                        onPress={() => abrirEdicion(repuesto)}
-                      >
-                        <span className="material-symbols-outlined text-[18px] leading-none">edit</span>
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                {repuestosFiltrados.map(renderCard)}
               </div>
-
-              <div className="hidden overflow-hidden rounded-2xl border border-default-200 bg-white md:block">
-                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_100px_minmax(0,1.1fr)_136px] gap-4 border-b border-default-200 bg-default-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-500">
-                  <span>Nombre</span>
-                  <span>Part Number</span>
-                  <span>Stock</span>
-                  <span>Detalle</span>
-                  <span className="text-right">Acción</span>
-                </div>
-                <div className="divide-y divide-default-100">
-                  {repuestosFiltrados.map(repuesto => (
-                    <div
-                      key={repuesto.id || repuesto.localId}
-                      className={`grid grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_100px_minmax(0,1.1fr)_136px] gap-4 px-4 py-3 transition-colors ${
-                        repuesto.tiene_stock
-                          ? 'bg-success-50/70 hover:bg-success-50'
-                          : 'bg-danger-50/70 hover:bg-danger-50'
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <p className={`truncate text-sm font-medium ${
-                          repuesto.tiene_stock ? 'text-success-900' : 'text-danger-900'
-                        }`}>
-                          {repuesto.nombre}
-                        </p>
-                      </div>
-                      <div className="min-w-0">
-                        <p className={`truncate font-mono text-sm ${
-                          repuesto.tiene_stock ? 'text-success-800' : 'text-danger-800'
-                        }`}>
-                          {repuesto.part_number}
-                        </p>
-                      </div>
-                      <div className="min-w-0">
-                        <Chip
-                          size="sm"
-                          variant="flat"
-                          color={repuesto.tiene_stock ? 'success' : 'danger'}
-                        >
-                          {repuesto.tiene_stock ? 'Disponible' : 'Sin stock'}
-                        </Chip>
-                      </div>
-                      <div className="min-w-0">
-                        <p className={`line-clamp-2 text-xs leading-5 ${
-                          repuesto.tiene_stock ? 'text-success-700' : 'text-danger-700'
-                        }`}>
-                          {repuesto.descripcion || 'Sin detalle adicional'}
-                        </p>
-                      </div>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="light"
-                          radius="lg"
-                          aria-label={`Ver detalle del repuesto ${repuesto.nombre}`}
-                          onPress={() => abrirDetalle(repuesto)}
-                        >
-                          <Eye size={18} />
-                        </Button>
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="light"
-                          radius="lg"
-                          aria-label={`Editar repuesto ${repuesto.nombre}`}
-                          onPress={() => abrirEdicion(repuesto)}
-                        >
-                          <span className="material-symbols-outlined text-[18px] leading-none">edit</span>
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <div className="hidden md:grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {repuestosFiltrados.map(renderCard)}
               </div>
             </ScrollShadow>
           )}
         </CardBody>
       </Card>
+
+      <Modal isOpen={creandoRepuesto} onOpenChange={abierto => !abierto && cerrarCrear()}>
+        <ModalContent>
+          <>
+            <ModalHeader>Crear repuesto</ModalHeader>
+            <ModalBody className="space-y-3">
+              <Input
+                label="Nombre del repuesto"
+                placeholder="Ej. Fuente de poder"
+                value={nombre}
+                onValueChange={value => {
+                  setNombre(value)
+                  if (errores.nombre) setErrores(prev => ({ ...prev, nombre: undefined }))
+                }}
+                isInvalid={Boolean(errores.nombre)}
+                errorMessage={errores.nombre}
+                variant="bordered"
+                radius="lg"
+              />
+              <Input
+                label="Part number"
+                placeholder="Ej. NCR-00992-AX"
+                value={partNumber}
+                onValueChange={value => {
+                  setPartNumber(value)
+                  if (errores.partNumber) setErrores(prev => ({ ...prev, partNumber: undefined }))
+                }}
+                isInvalid={Boolean(errores.partNumber)}
+                errorMessage={errores.partNumber}
+                variant="bordered"
+                radius="lg"
+              />
+              <Input
+                label="Detalle"
+                placeholder="Ej. Compatible con ATM SelfServ 80"
+                value={descripcion}
+                onValueChange={setDescripcion}
+                variant="bordered"
+                radius="lg"
+              />
+              <Input
+                label="Compatibilidad"
+                placeholder="Ej. NCR 6683, NCR 6625"
+                value={compatibilidad}
+                onValueChange={setCompatibilidad}
+                variant="bordered"
+                radius="lg"
+              />
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" onPress={cerrarCrear}>
+                Cancelar
+              </Button>
+              <Button color="primary" onPress={crearRepuesto}>
+                Crear repuesto
+              </Button>
+            </ModalFooter>
+          </>
+        </ModalContent>
+      </Modal>
 
       <Modal isOpen={Boolean(repuestoDetalle)} onOpenChange={abierto => !abierto && cerrarDetalle()}>
         <ModalContent>
@@ -556,20 +597,16 @@ export default function RepuestosPage() {
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
-                    Estado
-                  </p>
-                  <div className="mt-2">
-                    <Chip
-                      size="sm"
-                      variant="flat"
-                      color={repuestoDetalle?.tiene_stock ? 'success' : 'danger'}
-                    >
-                      {repuestoDetalle?.tiene_stock ? 'Con stock' : 'Sin stock'}
-                    </Chip>
+                {repuestoDetalle?.compatibility && (
+                  <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+                      Compatibilidad
+                    </p>
+                    <p className="mt-2 text-sm text-default-700">
+                      {repuestoDetalle.compatibility}
+                    </p>
                   </div>
-                </div>
+                )}
               </div>
 
               <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
@@ -626,29 +663,14 @@ export default function RepuestosPage() {
                 variant="bordered"
                 radius="lg"
               />
-              <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
-                <p className="text-sm font-semibold text-default-700">Stock actual</p>
-                <div className="mt-3 flex gap-2">
-                  <Button
-                    size="sm"
-                    radius="lg"
-                    color={editTieneStock ? 'success' : 'default'}
-                    variant={editTieneStock ? 'solid' : 'bordered'}
-                    onPress={() => setEditTieneStock(true)}
-                  >
-                    Con stock
-                  </Button>
-                  <Button
-                    size="sm"
-                    radius="lg"
-                    color={!editTieneStock ? 'danger' : 'default'}
-                    variant={!editTieneStock ? 'solid' : 'bordered'}
-                    onPress={() => setEditTieneStock(false)}
-                  >
-                    Sin stock
-                  </Button>
-                </div>
-              </div>
+              <Input
+                label="Compatibilidad"
+                placeholder="Ej. NCR 6683, NCR 6625"
+                value={editCompatibilidad}
+                onValueChange={setEditCompatibilidad}
+                variant="bordered"
+                radius="lg"
+              />
             </ModalBody>
             <ModalFooter>
               <Button variant="light" onPress={cerrarEdicion}>
