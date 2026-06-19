@@ -3,14 +3,17 @@ import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
 import {
-  Card, CardBody, Input, Button, Chip,
-  Divider, ScrollShadow, Alert as HeroAlert,
+  Input, Button, Chip,
+  ScrollShadow, Alert as HeroAlert,
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
 } from '@heroui/react'
-import { Boxes, Eye, Plus, Copy, Check, BookmarkPlus, BookmarkCheck } from 'lucide-react'
+import { Boxes, Plus, Search, Check, List, BookmarkPlus } from 'lucide-react'
+import RepuestoCard from '../components/RepuestoCard'
 
 export default function RepuestosPage() {
   const { session } = useApp()
+  const userId = session?.user?.id
+
   const [repuestos, setRepuestos] = useState([])
   const [nombre, setNombre] = useState('')
   const [partNumber, setPartNumber] = useState('')
@@ -28,9 +31,16 @@ export default function RepuestosPage() {
   const [editCompatibilidad, setEditCompatibilidad] = useState('')
   const [editErrores, setEditErrores] = useState({})
   const [guardandoEdicion, setGuardandoEdicion] = useState(false)
-  const [listaPersonal, setListaPersonal] = useState(new Set())
   const [copiandoId, setCopiandoId] = useState(null)
   const [creandoRepuesto, setCreandoRepuesto] = useState(false)
+
+  const [repuestoSeleccionado, setRepuestoSeleccionado] = useState(null)
+  const [listasDisponibles, setListasDisponibles] = useState([])
+  const [cargandoListasModal, setCargandoListasModal] = useState(false)
+  const [creandoListaModal, setCreandoListaModal] = useState(false)
+  const [nombreNuevaLista, setNombreNuevaLista] = useState('')
+  const [errorNuevaLista, setErrorNuevaLista] = useState(null)
+  const [listaAgregada, setListaAgregada] = useState(null)
 
   async function cargarRepuestos() {
     setCargandoLista(true)
@@ -65,6 +75,7 @@ export default function RepuestosPage() {
         part_number: r.partNumber,
         descripcion: r.descripcion || '',
         compatibility: r.compatibilidad || '',
+        tiene_stock: Boolean(r.tieneStock),
       })))
       setMensaje({
         color: 'warning',
@@ -75,32 +86,9 @@ export default function RepuestosPage() {
     }
   }
 
-  async function cargarListaPersonal(userId) {
-    try {
-      const { data, error } = await supabase
-        .from('user_spare_parts')
-        .select('spare_part_id')
-        .eq('user_id', userId)
-
-      if (!error && data) {
-        setListaPersonal(new Set(data.map(i => i.spare_part_id)))
-      }
-    } catch {
-      // silently fail for personal list
-    }
-  }
-
   useEffect(() => {
     cargarRepuestos()
   }, [])
-
-  useEffect(() => {
-    if (session?.user?.id) {
-      cargarListaPersonal(session.user.id)
-    } else {
-      setListaPersonal(new Set())
-    }
-  }, [session?.user?.id])
 
   function validarFormulario() {
     const nuevosErrores = {}
@@ -142,7 +130,7 @@ export default function RepuestosPage() {
       part_number: partNumber.trim(),
       descripcion: descripcion.trim(),
       compatibility: compatibilidad.trim() || null,
-      created_by: session.user.id,
+      created_by: userId,
     }
 
     const { data, error } = await supabase
@@ -173,10 +161,7 @@ export default function RepuestosPage() {
 
     setRepuestos(prev => [data, ...prev])
     cerrarCrear()
-    setMensaje({
-      color: 'success',
-      texto: `Repuesto ${data.nombre} agregado correctamente.`,
-    })
+    setMensaje({ color: 'success', texto: `Repuesto ${data.nombre} agregado correctamente.` })
   }
 
   function abrirCrear() {
@@ -266,10 +251,7 @@ export default function RepuestosPage() {
     setRepuestos(prev => prev.map(r => (r.id === data.id ? data : r)))
 
     cerrarEdicion()
-    setMensaje({
-      color: 'success',
-      texto: `Repuesto ${data.nombre} actualizado correctamente.`,
-    })
+    setMensaje({ color: 'success', texto: `Repuesto ${data.nombre} actualizado correctamente.` })
   }
 
   async function copiarPartNumber(repuesto) {
@@ -297,7 +279,7 @@ export default function RepuestosPage() {
         document.body.removeChild(textarea)
         ok = true
       } catch {
-        // both methods failed
+        // fallback
       }
     }
 
@@ -305,53 +287,94 @@ export default function RepuestosPage() {
       setCopiandoId(repuesto.id || repuesto.localId)
       setTimeout(() => setCopiandoId(null), 2000)
     } else {
-      setMensaje({
-        color: 'danger',
-        texto: 'No se pudo copiar al portapapeles.',
-      })
+      setMensaje({ color: 'danger', texto: 'No se pudo copiar al portapapeles.' })
     }
   }
 
-  async function toggleListaPersonal(sparePartId) {
-    if (!session?.user?.id) return
+  async function abrirSelectorLista(repuesto) {
+    setRepuestoSeleccionado(repuesto)
+    setListaAgregada(null)
+    setCreandoListaModal(false)
+    setNombreNuevaLista('')
+    setErrorNuevaLista(null)
 
-    if (listaPersonal.has(sparePartId)) {
-      const { error } = await supabase
-        .from('user_spare_parts')
-        .delete()
-        .eq('user_id', session.user.id)
-        .eq('spare_part_id', sparePartId)
+    if (!userId) return
 
-      if (error) {
-        setMensaje({
-          color: 'danger',
-          texto: 'No se pudo quitar el repuesto de tu lista.',
-        })
-      } else {
-        setListaPersonal(prev => {
-          const next = new Set(prev)
-          next.delete(sparePartId)
-          return next
-        })
-      }
-    } else {
-      const { error } = await supabase
-        .from('user_spare_parts')
-        .insert({ user_id: session.user.id, spare_part_id: sparePartId })
+    setCargandoListasModal(true)
+    try {
+      const { data, error } = await supabase
+        .from('spare_part_lists')
+        .select('*')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
 
-      if (error && error.code !== '23505') {
-        setMensaje({
-          color: 'danger',
-          texto: 'No se pudo agregar el repuesto a tu lista.',
-        })
-      } else {
-        setListaPersonal(prev => {
-          const next = new Set(prev)
-          next.add(sparePartId)
-          return next
-        })
-      }
+      if (!error) setListasDisponibles(data || [])
+    } catch {
+      setListasDisponibles([])
+    } finally {
+      setCargandoListasModal(false)
     }
+  }
+
+  function cerrarSelectorLista() {
+    setRepuestoSeleccionado(null)
+    setListasDisponibles([])
+    setCreandoListaModal(false)
+    setNombreNuevaLista('')
+    setErrorNuevaLista(null)
+    setListaAgregada(null)
+  }
+
+  async function agregarALista(listaId) {
+    if (!userId || !repuestoSeleccionado) return
+
+    const { error } = await supabase
+      .from('spare_part_list_items')
+      .insert({ list_id: listaId, spare_part_id: repuestoSeleccionado.id })
+
+    if (error && error.code !== '23505') {
+      setMensaje({ color: 'danger', texto: 'No se pudo agregar el repuesto a la lista.' })
+      return
+    }
+
+    await db.sparePartListItems.add({
+      listId: listaId,
+      sparePartId: repuestoSeleccionado.id,
+      createdAt: new Date().toISOString(),
+    })
+
+    setListaAgregada(listaId)
+    setTimeout(() => cerrarSelectorLista(), 1200)
+  }
+
+  async function crearListaYAgregar() {
+    setErrorNuevaLista(null)
+    const name = nombreNuevaLista.trim()
+    if (!name) {
+      setErrorNuevaLista('El nombre es obligatorio.')
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('spare_part_lists')
+      .insert({ user_id: userId, name })
+      .select('*')
+      .single()
+
+    if (error) {
+      setErrorNuevaLista(error.message)
+      return
+    }
+
+    await db.sparePartLists.add({
+      idRemoto: data.id,
+      userId: data.user_id,
+      name: data.name,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    })
+
+    await agregarALista(data.id)
   }
 
   const filtroNormalizado = filtroNombre.trim().toLowerCase()
@@ -359,78 +382,8 @@ export default function RepuestosPage() {
     ? repuestos.filter(r => String(r.nombre || '').toLowerCase().includes(filtroNormalizado))
     : repuestos
 
-  function renderCard(repuesto) {
-    const key = repuesto.id || repuesto.localId
-    const enLista = listaPersonal.has(repuesto.id)
-    const fueCopiado = copiandoId === key
-
-    return (
-      <div
-        key={key}
-        className="rounded-2xl border border-default-200/70 bg-white px-4 py-4 shadow-sm transition-colors"
-      >
-        <p className="text-sm font-semibold text-default-900">
-          {repuesto.nombre}
-        </p>
-        <p className="mt-1 break-all font-mono text-xs text-default-600">
-          Part Number: {repuesto.part_number}
-        </p>
-        {repuesto.compatibility && (
-          <p className="mt-2 text-xs text-default-500">
-            Compatible con: {repuesto.compatibility}
-          </p>
-        )}
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant="flat"
-            color={fueCopiado ? 'success' : 'default'}
-            radius="lg"
-            startContent={fueCopiado ? <Check size={14} /> : <Copy size={14} />}
-            onPress={() => copiarPartNumber(repuesto)}
-          >
-            {fueCopiado ? 'Copiado' : 'Copiar Part Number'}
-          </Button>
-          <Button
-            size="sm"
-            variant={enLista ? 'solid' : 'flat'}
-            color={enLista ? 'primary' : 'default'}
-            radius="lg"
-            startContent={enLista ? <BookmarkCheck size={14} /> : <BookmarkPlus size={14} />}
-            isDisabled={!session}
-            onPress={() => toggleListaPersonal(repuesto.id)}
-          >
-            {enLista ? 'En mi lista' : 'Agregar a mi lista'}
-          </Button>
-        </div>
-        <div className="mt-3 flex justify-end gap-1">
-          <Button
-            isIconOnly
-            size="sm"
-            variant="light"
-            radius="lg"
-            aria-label={`Ver detalle del repuesto ${repuesto.nombre}`}
-            onPress={() => abrirDetalle(repuesto)}
-          >
-            <Eye size={18} />
-          </Button>
-          <Button
-            isIconOnly
-            size="sm"
-            variant="light"
-            radius="lg"
-            aria-label={`Editar repuesto ${repuesto.nombre}`}
-            onPress={() => abrirEdicion(repuesto)}
-          >
-            <span className="material-symbols-outlined text-[18px] leading-none">edit</span>
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {mensaje && (
         <HeroAlert
           color={mensaje.color}
@@ -440,15 +393,14 @@ export default function RepuestosPage() {
       )}
 
       <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-4">
-          <div className="rounded-2xl bg-warning-100 p-3 text-warning-700">
-            <Boxes size={22} />
+        <div className="flex items-start gap-3">
+          <div className="rounded-xl bg-warning-50 p-2.5 text-warning-600">
+            <Boxes size={20} />
           </div>
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold text-default-800">Repuestos</h2>
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold text-default-900 leading-tight">Repuestos</h2>
             <p className="text-sm text-default-500">
-              Registra el inventario base con nombre y part number para tener una referencia
-              inmediata dentro de la aplicación.
+              Inventario base de repuestos técnicos
             </p>
           </div>
         </div>
@@ -457,66 +409,86 @@ export default function RepuestosPage() {
           radius="lg"
           startContent={<Plus size={16} />}
           onPress={abrirCrear}
-          className="shrink-0"
+          className="shrink-0 shadow-sm"
         >
           Crear repuesto
         </Button>
       </div>
 
-      <Card shadow="sm" className="border border-default-200/70">
-        <CardBody className="p-0">
-          <div className="px-5 pt-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-default-800">Inventario base</p>
-                <p className="text-xs text-default-500">Los nuevos repuestos aparecen al instante.</p>
-              </div>
-              <Chip size="sm" variant="flat" color="warning" className="shrink-0">
-                {repuestosFiltrados.length} repuesto{repuestosFiltrados.length === 1 ? '' : 's'}
-              </Chip>
-            </div>
-            <div className="mt-3 flex flex-col gap-3 md:max-w-[360px]">
-              <Input
-                label="Filtrar por nombre"
-                placeholder="Busca un repuesto"
-                value={filtroNombre}
-                onValueChange={setFiltroNombre}
-                variant="bordered"
-                radius="lg"
-              />
-            </div>
+      <div className="rounded-xl border border-default-200 bg-white overflow-hidden">
+        <div className="px-5 pt-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-default-900">Inventario</p>
+            <Chip size="sm" variant="flat" color="warning" className="shrink-0 text-[12px] font-medium">
+              {repuestosFiltrados.length} repuesto{repuestosFiltrados.length === 1 ? '' : 's'}
+            </Chip>
           </div>
-          <Divider className="my-4" />
+          <div className="mt-4">
+            <Input
+              label=""
+              placeholder="Buscar por nombre..."
+              value={filtroNombre}
+              onValueChange={setFiltroNombre}
+              variant="bordered"
+              radius="lg"
+              size="sm"
+              startContent={<Search size={15} className="text-default-400" />}
+              classNames={{
+                inputWrapper: 'bg-default-50 border-default-200',
+              }}
+            />
+          </div>
+        </div>
+        <div className="border-b border-default-100 mt-5" />
 
-          {cargandoLista ? (
-            <div className="flex items-center gap-3 px-5 pb-5 text-sm text-default-500">
-              Cargando repuestos...
+        {cargandoLista ? (
+          <div className="px-5 py-4 text-sm text-default-400">Cargando repuestos...</div>
+        ) : repuestos.length === 0 ? (
+          <div className="px-5 py-4 text-sm text-default-400">
+            Aún no hay repuestos registrados.
+          </div>
+        ) : repuestosFiltrados.length === 0 ? (
+          <div className="px-5 py-4 text-sm text-default-400">
+            No se encontraron repuestos con ese nombre.
+          </div>
+        ) : (
+          <ScrollShadow className="max-h-[55vh] px-5 pb-5">
+            <div className="space-y-3 md:hidden">
+              {repuestosFiltrados.map(repuesto => (
+                <RepuestoCard
+                  key={repuesto.id || repuesto.localId}
+                  repuesto={repuesto}
+                  session={session}
+                  copiandoId={copiandoId}
+                  onCopy={copiarPartNumber}
+                  onAddToList={abrirSelectorLista}
+                  onViewDetail={abrirDetalle}
+                  onEdit={abrirEdicion}
+                />
+              ))}
             </div>
-          ) : repuestos.length === 0 ? (
-            <div className="px-5 pb-5 text-sm text-default-400">
-              Aún no hay repuestos registrados.
+            <div className="hidden md:grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {repuestosFiltrados.map(repuesto => (
+                <RepuestoCard
+                  key={repuesto.id || repuesto.localId}
+                  repuesto={repuesto}
+                  session={session}
+                  copiandoId={copiandoId}
+                  onCopy={copiarPartNumber}
+                  onAddToList={abrirSelectorLista}
+                  onViewDetail={abrirDetalle}
+                  onEdit={abrirEdicion}
+                />
+              ))}
             </div>
-          ) : repuestosFiltrados.length === 0 ? (
-            <div className="px-5 pb-5 text-sm text-default-400">
-              No se encontraron repuestos con ese nombre.
-            </div>
-          ) : (
-            <ScrollShadow className="max-h-[55vh] px-5 pb-5">
-              <div className="space-y-3 md:hidden">
-                {repuestosFiltrados.map(renderCard)}
-              </div>
-              <div className="hidden md:grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-                {repuestosFiltrados.map(renderCard)}
-              </div>
-            </ScrollShadow>
-          )}
-        </CardBody>
-      </Card>
+          </ScrollShadow>
+        )}
+      </div>
 
       <Modal isOpen={creandoRepuesto} onOpenChange={abierto => !abierto && cerrarCrear()}>
         <ModalContent>
           <>
-            <ModalHeader>Crear repuesto</ModalHeader>
+            <ModalHeader className="text-default-900">Crear repuesto</ModalHeader>
             <ModalBody className="space-y-3">
               <Input
                 label="Nombre del repuesto"
@@ -562,10 +534,10 @@ export default function RepuestosPage() {
               />
             </ModalBody>
             <ModalFooter>
-              <Button variant="light" onPress={cerrarCrear}>
+              <Button variant="light" radius="lg" onPress={cerrarCrear}>
                 Cancelar
               </Button>
-              <Button color="primary" onPress={crearRepuesto}>
+              <Button color="primary" radius="lg" onPress={crearRepuesto}>
                 Crear repuesto
               </Button>
             </ModalFooter>
@@ -576,9 +548,9 @@ export default function RepuestosPage() {
       <Modal isOpen={Boolean(repuestoDetalle)} onOpenChange={abierto => !abierto && cerrarDetalle()}>
         <ModalContent>
           <>
-            <ModalHeader>Detalle del repuesto</ModalHeader>
+            <ModalHeader className="text-default-900">Detalle del repuesto</ModalHeader>
             <ModalBody className="space-y-4">
-              <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
+              <div className="rounded-xl border border-default-200 bg-default-50 p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
                   Nombre completo
                 </p>
@@ -588,7 +560,7 @@ export default function RepuestosPage() {
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
+                <div className="rounded-xl border border-default-200 bg-default-50 p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
                     Part number
                   </p>
@@ -598,7 +570,7 @@ export default function RepuestosPage() {
                 </div>
 
                 {repuestoDetalle?.compatibility && (
-                  <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
+                  <div className="rounded-xl border border-default-200 bg-default-50 p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
                       Compatibilidad
                     </p>
@@ -609,7 +581,7 @@ export default function RepuestosPage() {
                 )}
               </div>
 
-              <div className="rounded-2xl border border-default-200 bg-default-50 p-4">
+              <div className="rounded-xl border border-default-200 bg-default-50 p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
                   Detalle
                 </p>
@@ -619,7 +591,7 @@ export default function RepuestosPage() {
               </div>
             </ModalBody>
             <ModalFooter>
-              <Button color="primary" onPress={cerrarDetalle}>
+              <Button color="primary" radius="lg" onPress={cerrarDetalle}>
                 Cerrar
               </Button>
             </ModalFooter>
@@ -630,7 +602,7 @@ export default function RepuestosPage() {
       <Modal isOpen={Boolean(repuestoEditando)} onOpenChange={abierto => !abierto && cerrarEdicion()}>
         <ModalContent>
           <>
-            <ModalHeader>Editar repuesto</ModalHeader>
+            <ModalHeader className="text-default-900">Editar repuesto</ModalHeader>
             <ModalBody className="space-y-3">
               <Input
                 label="Nombre del repuesto"
@@ -673,14 +645,143 @@ export default function RepuestosPage() {
               />
             </ModalBody>
             <ModalFooter>
-              <Button variant="light" onPress={cerrarEdicion}>
+              <Button variant="light" radius="lg" onPress={cerrarEdicion}>
                 Cancelar
               </Button>
-              <Button color="primary" onPress={actualizarRepuesto} isLoading={guardandoEdicion}>
+              <Button color="primary" radius="lg" onPress={actualizarRepuesto} isLoading={guardandoEdicion}>
                 Guardar cambios
               </Button>
             </ModalFooter>
           </>
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(repuestoSeleccionado)}
+        onOpenChange={abierto => !abierto && cerrarSelectorLista()}
+      >
+        <ModalContent>
+          {creandoListaModal ? (
+            <>
+              <ModalHeader className="text-default-900">Crear nueva lista</ModalHeader>
+              <ModalBody>
+                <Input
+                  label="Nombre de la lista"
+                  placeholder="Ej. ATM Plaza Norte"
+                  value={nombreNuevaLista}
+                  onValueChange={v => {
+                    setNombreNuevaLista(v)
+                    if (errorNuevaLista) setErrorNuevaLista(null)
+                  }}
+                  isInvalid={Boolean(errorNuevaLista)}
+                  errorMessage={errorNuevaLista}
+                  variant="bordered"
+                  radius="lg"
+                  autoFocus
+                />
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="light" radius="lg" onPress={() => setCreandoListaModal(false)}>
+                  Cancelar
+                </Button>
+                <Button color="primary" radius="lg" onPress={crearListaYAgregar}>
+                  Crear y agregar
+                </Button>
+              </ModalFooter>
+            </>
+          ) : listaAgregada ? (
+            <>
+              <ModalHeader className="text-default-900">Repuesto agregado</ModalHeader>
+              <ModalBody>
+                <div className="flex items-center gap-3 py-2">
+                  <div className="rounded-full bg-success-50 p-2 text-success-600">
+                    <Check size={20} />
+                  </div>
+                  <p className="text-sm text-default-600">
+                    Repuesto agregado a la lista correctamente.
+                  </p>
+                </div>
+              </ModalBody>
+            </>
+          ) : (
+            <>
+              <ModalHeader className="text-default-900">Agregar a lista</ModalHeader>
+              <ModalBody>
+                {cargandoListasModal ? (
+                  <p className="text-sm text-default-400">Cargando listas...</p>
+                ) : listasDisponibles.length === 0 ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-default-500">
+                      No tienes listas creadas. Crea una para agregar este repuesto.
+                    </p>
+                    <Input
+                      label="Nombre de la lista"
+                      placeholder="Ej. ATM Plaza Norte"
+                      value={nombreNuevaLista}
+                      onValueChange={v => {
+                        setNombreNuevaLista(v)
+                        if (errorNuevaLista) setErrorNuevaLista(null)
+                      }}
+                      isInvalid={Boolean(errorNuevaLista)}
+                      errorMessage={errorNuevaLista}
+                      variant="bordered"
+                      radius="lg"
+                      autoFocus
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {listasDisponibles.map(lista => (
+                      <Button
+                        key={lista.id}
+                        variant="light"
+                        radius="lg"
+                        className="w-full justify-start gap-3 px-3 py-2.5 h-auto hover:bg-default-100"
+                        onPress={() => agregarALista(lista.id)}
+                      >
+                        <List size={16} className="shrink-0 text-default-400" />
+                        <div className="min-w-0 text-left">
+                          <p className="text-sm font-medium text-default-900 truncate">
+                            {lista.name}
+                          </p>
+                        </div>
+                      </Button>
+                    ))}
+                    <div className="border-b border-default-100 my-2" />
+                    <Button
+                      variant="flat"
+                      radius="lg"
+                      className="w-full"
+                      startContent={<Plus size={16} />}
+                      onPress={() => {
+                        setNombreNuevaLista('')
+                        setErrorNuevaLista(null)
+                        setCreandoListaModal(true)
+                      }}
+                    >
+                      Crear nueva lista
+                    </Button>
+                  </div>
+                )}
+              </ModalBody>
+              <ModalFooter>
+                {listasDisponibles.length === 0 ? (
+                  <>
+                    <Button variant="light" radius="lg" onPress={cerrarSelectorLista}>
+                      Cancelar
+                    </Button>
+                    <Button color="primary" radius="lg" onPress={crearListaYAgregar}>
+                      Crear y agregar
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="light" radius="lg" onPress={cerrarSelectorLista} className="w-full">
+                    Cancelar
+                  </Button>
+                )}
+              </ModalFooter>
+            </>
+          )}
         </ModalContent>
       </Modal>
     </div>

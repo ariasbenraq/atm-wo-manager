@@ -27,12 +27,13 @@ import {
 } from '@heroui/react'
 import MuiAlert from '@mui/material/Alert'
 import Fade from '@mui/material/Fade'
-import { ClipboardList, LogOut, Menu, Package, Wrench } from 'lucide-react'
+import { ClipboardList, List, LogOut, Menu, Package, Wrench } from 'lucide-react'
 
 const vistas = [
   { key: 'tareas', label: 'Tareas', icon: ClipboardList, path: '/tareas' },
   { key: 'mis-tareas', label: 'Mis tareas', icon: Wrench, path: '/mis-tareas' },
   { key: 'repuestos', label: 'Repuestos', icon: Package, path: '/repuestos' },
+  { key: 'mis-listas', label: 'Mis listas', icon: List, path: '/mis-listas' },
 ]
 
 function obtenerMarcaTiempoProgramada(tarea) {
