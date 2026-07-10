@@ -13,6 +13,7 @@ export function AppProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(true)
   const [creandoTarea, setCreandoTarea] = useState(false)
   const [sesionExpirada, setSesionExpirada] = useState(false)
+  const [profile, setProfile] = useState(null)
   const cierreManualRef = useRef(false)
 
   const cargarTareas = useCallback(async () => {
@@ -278,9 +279,31 @@ export function AppProvider({ children }) {
     }
   }, [])
 
+  const cargarProfile = useCallback(async (userId) => {
+    if (!userId) {
+      setProfile(null)
+      return
+    }
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
+      if (!error && data) {
+        setProfile(data)
+      } else {
+        setProfile({ id: userId, role: 'user' })
+      }
+    } catch {
+      setProfile({ id: userId, role: 'user' })
+    }
+  }, [])
+
   useEffect(() => {
     async function init() {
       setSyncing(true)
+      await cargarProfile(session.user.id)
       await cargarTareas()
       await cargarMisTareas()
       await syncFromSupabase(session.user.id)
@@ -294,9 +317,10 @@ export function AppProvider({ children }) {
     if (session) {
       init()
     } else {
+      setProfile(null)
       setSyncing(false)
     }
-  }, [session, sincronizarTiemposPendientes, cargarTareas, cargarMisTareas])
+  }, [session, sincronizarTiemposPendientes, cargarTareas, cargarMisTareas, cargarProfile])
 
   const value = useMemo(() => ({
     tareas,
@@ -306,6 +330,7 @@ export function AppProvider({ children }) {
     authLoading,
     creandoTarea,
     sesionExpirada,
+    profile,
     setTareas,
     setMisTareas,
     setSession,
@@ -319,7 +344,7 @@ export function AppProvider({ children }) {
     crearTareaManual,
     cerrarSesion,
   }), [
-    tareas, misTareas, syncing, session, authLoading, creandoTarea, sesionExpirada,
+    tareas, misTareas, syncing, session, authLoading, creandoTarea, sesionExpirada, profile,
     cargarTareas, cargarMisTareas, agregarAMisTareas, marcarTareaCompletada,
     eliminarDeMisTareas, guardarTiemposMisTarea, crearTareaManual, cerrarSesion,
   ])

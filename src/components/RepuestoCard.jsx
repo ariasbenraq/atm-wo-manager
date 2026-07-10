@@ -38,15 +38,17 @@ export default function RepuestoCard({ repuesto, session, onCopy, onAddToList, o
             aria-label="Opciones del repuesto"
             onAction={actionKey => {
               if (actionKey === 'view') onViewDetail(repuesto)
-              if (actionKey === 'edit') onEdit(repuesto)
+              if (actionKey === 'edit' && onEdit) onEdit(repuesto)
             }}
           >
             <DropdownItem key="view" startContent={<Eye size={14} />}>
               Ver detalle
             </DropdownItem>
-            <DropdownItem key="edit" startContent={<Pencil size={14} />}>
-              Editar
-            </DropdownItem>
+            {onEdit && (
+              <DropdownItem key="edit" startContent={<Pencil size={14} />}>
+                Editar
+              </DropdownItem>
+            )}
           </DropdownMenu>
         </Dropdown>
       </div>

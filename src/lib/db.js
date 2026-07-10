@@ -155,3 +155,19 @@ db.version(12).stores({
   motivos_aqr:       '++localId, descripcion',
   cierres:           '++localId, wo',
 })
+
+db.version(13).stores({
+  tareas:            '++localId, wo, id_atm, fecha, ce',
+  mis_tareas:        '++localId, &wo, id_atm, fecha, ce, estado, completadaEn, ds, arribo, inicio, fin, retorno, tiemposUpdatedAt, tiemposSyncPendiente',
+  repuestos:         '++localId, nombre, partNumber, descripcion, tieneStock, compatibilidad, creadoEn',
+  sparePartLists:    '++localId, userId, name',
+  sparePartListItems: '++localId, listId, sparePartId',
+  personal_cmca:     '++localId, nombre',
+  personal_cmpd:     '++localId, nombre',
+  motivos_aqr:       '++localId, descripcion',
+  cierres:           '++localId, wo',
+}).upgrade(async tx => {
+  await tx.table('sparePartListItems').toCollection().modify(item => {
+    item.quantity = item.quantity || 1
+  })
+})

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
+import { useIsAdmin } from '../hooks/usePermissions'
 import {
   Navbar,
   NavbarBrand,
@@ -27,13 +28,17 @@ import {
 } from '@heroui/react'
 import MuiAlert from '@mui/material/Alert'
 import Fade from '@mui/material/Fade'
-import { ClipboardList, List, LogOut, Menu, Package, Wrench } from 'lucide-react'
+import { ClipboardList, List, LogOut, Menu, Package, Shield, Wrench } from 'lucide-react'
 
 const vistas = [
   { key: 'tareas', label: 'Tareas', icon: ClipboardList, path: '/tareas' },
   { key: 'mis-tareas', label: 'Mis tareas', icon: Wrench, path: '/mis-tareas' },
   { key: 'repuestos', label: 'Repuestos', icon: Package, path: '/repuestos' },
   { key: 'mis-listas', label: 'Mis listas', icon: List, path: '/mis-listas' },
+]
+
+const vistasAdmin = [
+  { key: 'admin/usuarios', label: 'Usuarios', icon: Shield, path: '/admin/usuarios' },
 ]
 
 function obtenerMarcaTiempoProgramada(tarea) {
@@ -69,6 +74,7 @@ function formatearTiempoRestanteCorto(ms) {
 
 export default function Layout() {
   const { session, authLoading, misTareas, syncing, tareas, cerrarSesion, sesionExpirada } = useApp()
+  const esAdmin = useIsAdmin()
   const navigate = useNavigate()
   const location = useLocation()
   const [ahoraMs, setAhoraMs] = useState(() => Date.now())
@@ -271,6 +277,18 @@ export default function Layout() {
                       key={item.key}
                       startContent={<Icon size={16} />}
                       description={item.key === vistaActiva.key ? 'Vista actual' : undefined}
+                    >
+                      {item.label}
+                    </DropdownItem>
+                  )
+                })}
+                {esAdmin && vistasAdmin.map(item => {
+                  const Icon = item.icon
+                  return (
+                    <DropdownItem
+                      key={item.key}
+                      startContent={<Icon size={16} />}
+                      description={item.key === vistaActiva.key ? 'Vista actual' : 'Solo administradores'}
                     >
                       {item.label}
                     </DropdownItem>

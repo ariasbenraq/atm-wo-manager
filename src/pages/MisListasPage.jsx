@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
+import { useIsAdmin } from '../hooks/usePermissions'
 import {
   Input, Button, Chip,
   ScrollShadow, Alert as HeroAlert,
@@ -27,6 +28,7 @@ function tiempoRelativo(iso) {
 export default function MisListasPage() {
   const { session } = useApp()
   const userId = session?.user?.id
+  const esAdmin = useIsAdmin()
 
   const [listas, setListas] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -35,6 +37,7 @@ export default function MisListasPage() {
   const [creando, setCreando] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState('')
   const [errorNombre, setErrorNombre] = useState(null)
+  const [guardandoLista, setGuardandoLista] = useState(false)
 
   const [listaActiva, setListaActiva] = useState(null)
   const [items, setItems] = useState([])
@@ -48,23 +51,35 @@ export default function MisListasPage() {
   const [copiando, setCopiando] = useState(false)
 
   const cargarListas = useCallback(async () => {
-    if (!userId) return
+    if (!esAdmin && !userId) return
     setCargando(true)
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('spare_part_lists')
         .select('*')
-        .eq('user_id', userId)
-        .order('updated_at', { ascending: false })
+      if (!esAdmin && userId) {
+        query = query.eq('user_id', userId)
+      }
+      const { data, error } = await query.order('updated_at', { ascending: false })
 
       if (error) throw error
+
+      let usuariosMap = {}
+      if (esAdmin) {
+        const { data: perfiles } = await supabase
+          .from('profiles')
+          .select('id, email, full_name')
+        if (perfiles) {
+          usuariosMap = Object.fromEntries(perfiles.map(p => [p.id, p]))
+        }
+      }
 
       const listasConConteo = await Promise.all((data || []).map(async lista => {
         const { count } = await supabase
           .from('spare_part_list_items')
           .select('*', { count: 'exact', head: true })
           .eq('list_id', lista.id)
-        return { ...lista, itemCount: count || 0 }
+        return { ...lista, itemCount: count || 0, usuario: usuariosMap[lista.user_id] || null }
       }))
 
       setListas(listasConConteo)
@@ -90,7 +105,7 @@ export default function MisListasPage() {
     } finally {
       setCargando(false)
     }
-  }, [userId])
+  }, [userId, esAdmin])
 
   useEffect(() => {
     cargarListas()
@@ -114,7 +129,7 @@ export default function MisListasPage() {
         : { data: [] }
 
       const repuestoMap = new Map((repuestos || []).map(r => [r.id, r]))
-      setItems((data || []).map(i => ({ ...i, repuesto: repuestoMap.get(i.spare_part_id) || null })))
+      setItems((data || []).map(i => ({ ...i, quantity: i.quantity ?? 1, repuesto: repuestoMap.get(i.spare_part_id) || null })))
 
       await db.sparePartListItems.clear()
       if (data?.length) {
@@ -122,6 +137,7 @@ export default function MisListasPage() {
           idRemoto: i.id,
           listId: i.list_id,
           sparePartId: i.spare_part_id,
+          quantity: i.quantity ?? 1,
           createdAt: i.created_at,
         })))
       }
@@ -146,36 +162,42 @@ export default function MisListasPage() {
   }
 
   async function crearLista() {
+    if (guardandoLista) return
+    setGuardandoLista(true)
     setErrorNombre(null)
-    const name = nuevoNombre.trim()
-    if (!name) {
-      setErrorNombre('El nombre es obligatorio.')
-      return
+    try {
+      const name = nuevoNombre.trim()
+      if (!name) {
+        setErrorNombre('El nombre es obligatorio.')
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('spare_part_lists')
+        .insert({ user_id: userId, name })
+        .select('*')
+        .single()
+
+      if (error) {
+        setErrorNombre(error.message)
+        return
+      }
+
+      await db.sparePartLists.add({
+        idRemoto: data.id,
+        userId: data.user_id,
+        name: data.name,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      })
+
+      setListas(prev => [{ ...data, itemCount: 0 }, ...prev])
+      setCreando(false)
+      setNuevoNombre('')
+      setMensaje({ color: 'success', texto: `Lista "${data.name}" creada.` })
+    } finally {
+      setGuardandoLista(false)
     }
-
-    const { data, error } = await supabase
-      .from('spare_part_lists')
-      .insert({ user_id: userId, name })
-      .select('*')
-      .single()
-
-    if (error) {
-      setErrorNombre(error.message)
-      return
-    }
-
-    await db.sparePartLists.add({
-      idRemoto: data.id,
-      userId: data.user_id,
-      name: data.name,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-    })
-
-    setListas(prev => [{ ...data, itemCount: 0 }, ...prev])
-    setCreando(false)
-    setNuevoNombre('')
-    setMensaje({ color: 'success', texto: `Lista "${data.name}" creada.` })
   }
 
   async function actualizarNombre() {
@@ -231,6 +253,26 @@ export default function MisListasPage() {
     setMensaje({ color: 'success', texto: `Lista "${eliminando.name}" eliminada.` })
   }
 
+  async function actualizarCantidad(item, nuevaCantidad) {
+    const qty = Math.max(1, Math.floor(Number(nuevaCantidad)) || 1)
+    if (qty === (item.quantity ?? 1)) return
+
+    setItems(prev => prev.map(i => (i.id === item.id ? { ...i, quantity: qty } : i)))
+
+    const { error } = await supabase
+      .from('spare_part_list_items')
+      .update({ quantity: qty })
+      .eq('id', item.id)
+
+    if (error) {
+      setItems(prev => prev.map(i => (i.id === item.id ? { ...i, quantity: item.quantity } : i)))
+      setMensaje({ color: 'danger', texto: error.message })
+      return
+    }
+
+    await db.sparePartListItems.where('idRemoto').equals(item.id).modify({ quantity: qty })
+  }
+
   async function eliminarItem(itemId) {
     const { error } = await supabase
       .from('spare_part_list_items')
@@ -254,7 +296,7 @@ export default function MisListasPage() {
     if (!listaActiva || !items.length) return
 
     const lineas = items.map((item, idx) =>
-      `${idx + 1}. ${item.repuesto?.nombre || '?'}\n   Part Number: ${item.repuesto?.part_number || '?'}`
+      `${idx + 1}. ${item.repuesto?.nombre || '?'}\n   Part Number: ${item.repuesto?.part_number || '?'}\n   Unidades: ${item.quantity ?? 1}`
     )
     const texto = `${listaActiva.name}\n\n${lineas.join('\n\n')}`
 
@@ -282,7 +324,7 @@ export default function MisListasPage() {
     if (!listaActiva || !items.length) return
 
     const lineas = items.map((item, idx) =>
-      `${idx + 1}. ${item.repuesto?.nombre || '?'}\n   Part Number: ${item.repuesto?.part_number || '?'}`
+      `${idx + 1}. ${item.repuesto?.nombre || '?'}\n   Part Number: ${item.repuesto?.part_number || '?'}\n   Unidades: ${item.quantity ?? 1}`
     )
     const texto = `${listaActiva.name}\n\n${lineas.join('\n\n')}`
 
@@ -365,6 +407,7 @@ export default function MisListasPage() {
                       <p className="text-[13px] text-default-500">
                         {lista.itemCount} repuesto{lista.itemCount === 1 ? '' : 's'}
                         {lista.updated_at ? ` · ${tiempoRelativo(lista.updated_at)}` : ''}
+                        {esAdmin && lista.usuario ? ` · ${lista.usuario.email || lista.usuario.full_name || lista.user_id?.slice(0, 8)}` : ''}
                       </p>
                     </div>
                     <Button
@@ -463,8 +506,9 @@ export default function MisListasPage() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-default-200 bg-white">
-              <div className="grid grid-cols-[1fr_auto] gap-2 border-b border-default-100 bg-default-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+              <div className="grid grid-cols-[1fr_auto_auto] gap-2 border-b border-default-100 bg-default-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
                 <span>Nombre</span>
+                <span className="text-right">Unidades</span>
                 <span className="text-right">Part Number</span>
               </div>
               <ScrollShadow className="max-h-[55vh]">
@@ -472,13 +516,28 @@ export default function MisListasPage() {
                   {items.map(item => (
                     <div
                       key={item.id}
-                      className="grid grid-cols-[1fr_auto] gap-2 px-4 py-3 items-center transition-colors hover:bg-default-50"
+                      className="grid grid-cols-[1fr_auto_auto] gap-2 px-4 py-3 items-center transition-colors hover:bg-default-50"
                     >
                       <div className="min-w-0">
                         <p className="truncate text-[14px] font-medium text-default-900">
                           {item.repuesto?.nombre || '—'}
                         </p>
                       </div>
+                      <Input
+                        type="number"
+                        min={1}
+                        size="sm"
+                        variant="bordered"
+                        radius="lg"
+                        aria-label="Unidades"
+                        value={String(item.quantity ?? 1)}
+                        onValueChange={v => actualizarCantidad(item, v)}
+                        classNames={{
+                          input: 'text-right text-[13px] font-mono tabular-nums',
+                          inputWrapper: 'min-h-0 h-7 px-2',
+                        }}
+                        className="w-16"
+                      />
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="font-mono text-[13px] text-default-500 tabular-nums">
                           {item.repuesto?.part_number || '—'}
@@ -551,7 +610,7 @@ export default function MisListasPage() {
               <Button variant="light" onPress={() => setCreando(false)}>
                 Cancelar
               </Button>
-              <Button color="primary" onPress={crearLista}>
+              <Button color="primary" onPress={crearLista} isDisabled={guardandoLista} isLoading={guardandoLista}>
                 Crear lista
               </Button>
             </ModalFooter>

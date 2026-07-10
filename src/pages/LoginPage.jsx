@@ -13,7 +13,7 @@ import {
 export default function LoginPage() {
   const { setSession } = useApp()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [errores, setErrores] = useState({})
   const [cargando, setCargando] = useState(false)
@@ -22,7 +22,7 @@ export default function LoginPage() {
   function validarFormulario() {
     const nuevosErrores = {}
 
-    if (!email.trim()) nuevosErrores.email = 'El correo es obligatorio.'
+    if (!username.trim()) nuevosErrores.usuario = 'El usuario es obligatorio.'
     if (!password.trim()) nuevosErrores.password = 'La contraseña es obligatoria.'
 
     setErrores(nuevosErrores)
@@ -35,19 +35,43 @@ export default function LoginPage() {
     if (!validarFormulario()) return
 
     setCargando(true)
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    })
-    setCargando(false)
 
-    if (error) {
-      setMensaje({ color: 'danger', texto: error.message })
-      return
+    try {
+      let email = username.trim()
+
+      // Si no parece email, buscar username en profiles
+      if (!email.includes('@')) {
+        const { data: perfil } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('username', email.trim())
+          .maybeSingle()
+
+        if (!perfil?.email) {
+          setMensaje({ color: 'danger', texto: 'Usuario no encontrado.' })
+          setCargando(false)
+          return
+        }
+        email = perfil.email
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (error) {
+        setMensaje({ color: 'danger', texto: error.message })
+        return
+      }
+
+      setSession(data.session ?? null)
+      navigate('/tareas', { replace: true })
+    } catch {
+      setMensaje({ color: 'danger', texto: 'Error al conectar con el servidor.' })
+    } finally {
+      setCargando(false)
     }
-
-    setSession(data.session ?? null)
-    navigate('/tareas', { replace: true })
   }
 
   return (
@@ -59,21 +83,20 @@ export default function LoginPage() {
               <p className="text-xs uppercase tracking-[0.2em] text-default-400">ATM·WO</p>
               <h1 className="text-xl font-semibold text-default-800">Acceso técnico</h1>
               <p className="text-sm text-default-500">
-                Inicia sesión con tu cuenta para registrar y consultar repuestos en Supabase.
+                Ingresa con tu usuario o correo electrónico.
               </p>
             </div>
 
             <Input
-              label="Correo"
-              type="email"
-              placeholder="tecnico@ncr.com"
-              value={email}
+              label="Usuario o correo"
+              placeholder="ej. jperez"
+              value={username}
               onValueChange={value => {
-                setEmail(value)
-                if (errores.email) setErrores(prev => ({ ...prev, email: undefined }))
+                setUsername(value)
+                if (errores.usuario) setErrores(prev => ({ ...prev, usuario: undefined }))
               }}
-              isInvalid={Boolean(errores.email)}
-              errorMessage={errores.email}
+              isInvalid={Boolean(errores.usuario)}
+              errorMessage={errores.usuario}
               variant="bordered"
               radius="lg"
             />

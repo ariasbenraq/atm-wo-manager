@@ -6,6 +6,7 @@ import TareasPage from './pages/TareasPage'
 import MisTareasPage from './pages/MisTareasPage'
 import RepuestosPage from './pages/RepuestosPage'
 import MisListasPage from './pages/MisListasPage'
+import AdminUsuariosPage from './pages/AdminUsuariosPage'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="/mis-tareas" element={<MisTareasPage />} />
           <Route path="/repuestos" element={<RepuestosPage />} />
           <Route path="/mis-listas" element={<MisListasPage />} />
+          <Route path="/admin/usuarios" element={<AdminUsuariosPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/tareas" replace />} />
       </Routes>

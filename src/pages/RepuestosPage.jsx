@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
+import { useCan } from '../hooks/usePermissions'
 import {
   Input, Button, Chip,
   ScrollShadow, Alert as HeroAlert,
@@ -13,6 +14,8 @@ import RepuestoCard from '../components/RepuestoCard'
 export default function RepuestosPage() {
   const { session } = useApp()
   const userId = session?.user?.id
+  const puedeCrear = useCan('crear', 'repuestos')
+  const puedeEditar = useCan('editar', 'repuestos')
 
   const [repuestos, setRepuestos] = useState([])
   const [nombre, setNombre] = useState('')
@@ -41,6 +44,8 @@ export default function RepuestosPage() {
   const [nombreNuevaLista, setNombreNuevaLista] = useState('')
   const [errorNuevaLista, setErrorNuevaLista] = useState(null)
   const [listaAgregada, setListaAgregada] = useState(null)
+  const [guardandoNuevaLista, setGuardandoNuevaLista] = useState(false)
+  const [cantidad, setCantidad] = useState(1)
 
   async function cargarRepuestos() {
     setCargandoLista(true)
@@ -297,6 +302,7 @@ export default function RepuestosPage() {
     setCreandoListaModal(false)
     setNombreNuevaLista('')
     setErrorNuevaLista(null)
+    setCantidad(1)
 
     if (!userId) return
 
@@ -323,14 +329,15 @@ export default function RepuestosPage() {
     setNombreNuevaLista('')
     setErrorNuevaLista(null)
     setListaAgregada(null)
+    setCantidad(1)
   }
 
-  async function agregarALista(listaId) {
+  async function agregarALista(listaId, qty = 1) {
     if (!userId || !repuestoSeleccionado) return
 
     const { error } = await supabase
       .from('spare_part_list_items')
-      .insert({ list_id: listaId, spare_part_id: repuestoSeleccionado.id })
+      .insert({ list_id: listaId, spare_part_id: repuestoSeleccionado.id, quantity: qty })
 
     if (error && error.code !== '23505') {
       setMensaje({ color: 'danger', texto: 'No se pudo agregar el repuesto a la lista.' })
@@ -340,6 +347,7 @@ export default function RepuestosPage() {
     await db.sparePartListItems.add({
       listId: listaId,
       sparePartId: repuestoSeleccionado.id,
+      quantity: qty,
       createdAt: new Date().toISOString(),
     })
 
@@ -348,33 +356,39 @@ export default function RepuestosPage() {
   }
 
   async function crearListaYAgregar() {
+    if (guardandoNuevaLista) return
+    setGuardandoNuevaLista(true)
     setErrorNuevaLista(null)
-    const name = nombreNuevaLista.trim()
-    if (!name) {
-      setErrorNuevaLista('El nombre es obligatorio.')
-      return
+    try {
+      const name = nombreNuevaLista.trim()
+      if (!name) {
+        setErrorNuevaLista('El nombre es obligatorio.')
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('spare_part_lists')
+        .insert({ user_id: userId, name })
+        .select('*')
+        .single()
+
+      if (error) {
+        setErrorNuevaLista(error.message)
+        return
+      }
+
+      await db.sparePartLists.add({
+        idRemoto: data.id,
+        userId: data.user_id,
+        name: data.name,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      })
+
+      await agregarALista(data.id, cantidad)
+    } finally {
+      setGuardandoNuevaLista(false)
     }
-
-    const { data, error } = await supabase
-      .from('spare_part_lists')
-      .insert({ user_id: userId, name })
-      .select('*')
-      .single()
-
-    if (error) {
-      setErrorNuevaLista(error.message)
-      return
-    }
-
-    await db.sparePartLists.add({
-      idRemoto: data.id,
-      userId: data.user_id,
-      name: data.name,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-    })
-
-    await agregarALista(data.id)
   }
 
   const filtroNormalizado = filtroNombre.trim().toLowerCase()
@@ -404,15 +418,17 @@ export default function RepuestosPage() {
             </p>
           </div>
         </div>
-        <Button
-          color="primary"
-          radius="lg"
-          startContent={<Plus size={16} />}
-          onPress={abrirCrear}
-          className="shrink-0 shadow-sm"
-        >
-          Crear repuesto
-        </Button>
+        {puedeCrear && (
+          <Button
+            color="primary"
+            radius="lg"
+            startContent={<Plus size={16} />}
+            onPress={abrirCrear}
+            className="shrink-0 shadow-sm"
+          >
+            Crear repuesto
+          </Button>
+        )}
       </div>
 
       <div className="rounded-xl border border-default-200 bg-white overflow-hidden">
@@ -463,7 +479,7 @@ export default function RepuestosPage() {
                   onCopy={copiarPartNumber}
                   onAddToList={abrirSelectorLista}
                   onViewDetail={abrirDetalle}
-                  onEdit={abrirEdicion}
+                  onEdit={puedeEditar ? abrirEdicion : null}
                 />
               ))}
             </div>
@@ -477,7 +493,7 @@ export default function RepuestosPage() {
                   onCopy={copiarPartNumber}
                   onAddToList={abrirSelectorLista}
                   onViewDetail={abrirDetalle}
-                  onEdit={abrirEdicion}
+                  onEdit={puedeEditar ? abrirEdicion : null}
                 />
               ))}
             </div>
@@ -679,12 +695,22 @@ export default function RepuestosPage() {
                   radius="lg"
                   autoFocus
                 />
+                <Input
+                  label="Cantidad"
+                  type="number"
+                  min={1}
+                  value={String(cantidad)}
+                  onValueChange={v => setCantidad(Math.max(1, parseInt(v, 10) || 1))}
+                  variant="bordered"
+                  radius="lg"
+                  className="mt-3"
+                />
               </ModalBody>
               <ModalFooter>
                 <Button variant="light" radius="lg" onPress={() => setCreandoListaModal(false)}>
                   Cancelar
                 </Button>
-                <Button color="primary" radius="lg" onPress={crearListaYAgregar}>
+                <Button color="primary" radius="lg" onPress={crearListaYAgregar} isDisabled={guardandoNuevaLista} isLoading={guardandoNuevaLista}>
                   Crear y agregar
                 </Button>
               </ModalFooter>
@@ -707,6 +733,16 @@ export default function RepuestosPage() {
             <>
               <ModalHeader className="text-default-900">Agregar a lista</ModalHeader>
               <ModalBody>
+                <Input
+                  label="Cantidad"
+                  type="number"
+                  min={1}
+                  value={String(cantidad)}
+                  onValueChange={v => setCantidad(Math.max(1, parseInt(v, 10) || 1))}
+                  variant="bordered"
+                  radius="lg"
+                  className="mb-3"
+                />
                 {cargandoListasModal ? (
                   <p className="text-sm text-default-400">Cargando listas...</p>
                 ) : listasDisponibles.length === 0 ? (
@@ -737,7 +773,7 @@ export default function RepuestosPage() {
                         variant="light"
                         radius="lg"
                         className="w-full justify-start gap-3 px-3 py-2.5 h-auto hover:bg-default-100"
-                        onPress={() => agregarALista(lista.id)}
+                        onPress={() => agregarALista(lista.id, cantidad)}
                       >
                         <List size={16} className="shrink-0 text-default-400" />
                         <div className="min-w-0 text-left">
@@ -770,7 +806,7 @@ export default function RepuestosPage() {
                     <Button variant="light" radius="lg" onPress={cerrarSelectorLista}>
                       Cancelar
                     </Button>
-                    <Button color="primary" radius="lg" onPress={crearListaYAgregar}>
+                    <Button color="primary" radius="lg" onPress={crearListaYAgregar} isDisabled={guardandoNuevaLista} isLoading={guardandoNuevaLista}>
                       Crear y agregar
                     </Button>
                   </>
