@@ -7,6 +7,7 @@ import {
   Input, Button, Chip,
   ScrollShadow, Alert as HeroAlert,
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
+  Autocomplete, AutocompleteItem,
 } from '@heroui/react'
 import {
   List, Plus, ArrowLeft, Pencil, Trash2, Copy, Share2, X, Check,
@@ -49,6 +50,14 @@ export default function MisListasPage() {
 
   const [eliminando, setEliminando] = useState(null)
   const [copiando, setCopiando] = useState(false)
+  const [copiandoItemId, setCopiandoItemId] = useState(null)
+
+  const [editandoItem, setEditandoItem] = useState(null)
+  const [editItemCantidad, setEditItemCantidad] = useState(1)
+  const [editItemRepuestoId, setEditItemRepuestoId] = useState(null)
+  const [editItemRepuestos, setEditItemRepuestos] = useState([])
+  const [editItemCargando, setEditItemCargando] = useState(false)
+  const [guardandoItem, setGuardandoItem] = useState(false)
 
   const cargarListas = useCallback(async () => {
     if (!esAdmin && !userId) return
@@ -159,6 +168,7 @@ export default function MisListasPage() {
     setItems([])
     setEditandoNombre(false)
     setEliminando(null)
+    if (editandoItem) cerrarEditarItem()
   }
 
   async function crearLista() {
@@ -222,7 +232,7 @@ export default function MisListasPage() {
       return
     }
 
-    await db.sparePartLists.where('idRemoto').equals(listaActiva.id).modify({ name })
+    await db.sparePartLists.filter(l => l.idRemoto === listaActiva.id).modify({ name })
 
     setListas(prev => prev.map(l => (l.id === data.id ? { ...l, name: data.name, updated_at: now } : l)))
     setListaActiva(prev => ({ ...prev, name: data.name, updated_at: now }))
@@ -243,7 +253,7 @@ export default function MisListasPage() {
       return
     }
 
-    await db.sparePartLists.where('idRemoto').equals(eliminando.id).delete()
+    await db.sparePartLists.filter(l => l.idRemoto === eliminando.id).delete()
     await db.sparePartListItems.where('listId').equals(eliminando.id).delete()
 
     const esActiva = listaActiva?.id === eliminando.id
@@ -251,6 +261,69 @@ export default function MisListasPage() {
     setEliminando(null)
     if (esActiva) cerrarLista()
     setMensaje({ color: 'success', texto: `Lista "${eliminando.name}" eliminada.` })
+  }
+
+  async function abrirEditarItem(item) {
+    setEditandoItem(item)
+    setEditItemCantidad(item.quantity ?? 1)
+    setEditItemRepuestoId(item.spare_part_id)
+    setEditItemCargando(true)
+    try {
+      const { data } = await supabase
+        .from('repuestos')
+        .select('id, nombre, part_number')
+        .order('nombre')
+      setEditItemRepuestos(data || [])
+    } catch {
+      setEditItemRepuestos([])
+    } finally {
+      setEditItemCargando(false)
+    }
+  }
+
+  function cerrarEditarItem() {
+    setEditandoItem(null)
+    setEditItemCantidad(1)
+    setEditItemRepuestoId(null)
+    setEditItemRepuestos([])
+    setEditItemCargando(false)
+  }
+
+  async function guardarEditarItem() {
+    if (!editandoItem || !editItemRepuestoId) return
+    setGuardandoItem(true)
+    try {
+      const { error } = await supabase
+        .from('spare_part_list_items')
+        .update({ spare_part_id: editItemRepuestoId, quantity: editItemCantidad })
+        .eq('id', editandoItem.id)
+
+      if (error) {
+        setMensaje({ color: 'danger', texto: error.message })
+        return
+      }
+
+      const repuesto = editItemRepuestos.find(r => r.id === editItemRepuestoId)
+        || (editandoItem.repuesto?.id === editItemRepuestoId ? editandoItem.repuesto : null)
+
+      setItems(prev => prev.map(i =>
+        i.id === editandoItem.id
+          ? { ...i, spare_part_id: editItemRepuestoId, quantity: editItemCantidad, repuesto }
+          : i
+      ))
+
+      await db.sparePartListItems.filter(i => i.idRemoto === editandoItem.id).modify({
+        sparePartId: editItemRepuestoId,
+        quantity: editItemCantidad,
+      })
+
+      cerrarEditarItem()
+      setMensaje({ color: 'success', texto: 'Item actualizado.' })
+    } catch (e) {
+      setMensaje({ color: 'danger', texto: e.message || 'Error al guardar.' })
+    } finally {
+      setGuardandoItem(false)
+    }
   }
 
   async function actualizarCantidad(item, nuevaCantidad) {
@@ -270,7 +343,29 @@ export default function MisListasPage() {
       return
     }
 
-    await db.sparePartListItems.where('idRemoto').equals(item.id).modify({ quantity: qty })
+    await db.sparePartListItems.filter(i => i.idRemoto === item.id).modify({ quantity: qty })
+  }
+
+  async function copiarPartNumberYUnidades(item) {
+    const texto = `${item.repuesto?.part_number || ''}\t${item.quantity ?? 1}`
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(texto)
+      } else {
+        const ta = document.createElement('textarea')
+        ta.value = texto
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+      }
+      setCopiandoItemId(item.id)
+      setTimeout(() => setCopiandoItemId(null), 2000)
+    } catch {
+      setMensaje({ color: 'danger', texto: 'No se pudo copiar.' })
+    }
   }
 
   async function eliminarItem(itemId) {
@@ -506,48 +601,84 @@ export default function MisListasPage() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-default-200 bg-white">
-              <div className="grid grid-cols-[1fr_auto_auto] gap-2 border-b border-default-100 bg-default-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+              <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-2 border-b border-default-100 bg-default-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400 items-center">
                 <span>Nombre</span>
+                <span>Part Number</span>
                 <span className="text-right">Unidades</span>
-                <span className="text-right">Part Number</span>
+                <span className="text-center">Copiar a GCEW</span>
+                <span className="text-center">Editar</span>
+                <span className="text-center">Eliminar</span>
               </div>
               <ScrollShadow className="max-h-[55vh]">
                 <div className="divide-y divide-default-100">
                   {items.map(item => (
                     <div
                       key={item.id}
-                      className="grid grid-cols-[1fr_auto_auto] gap-2 px-4 py-3 items-center transition-colors hover:bg-default-50"
+                      className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-2 px-4 py-1 items-center transition-colors hover:bg-default-50"
                     >
-                      <div className="min-w-0">
+                      <div className="flex items-center min-w-0 h-7">
                         <p className="truncate text-[14px] font-medium text-default-900">
                           {item.repuesto?.nombre || '—'}
                         </p>
                       </div>
-                      <Input
-                        type="number"
-                        min={1}
-                        size="sm"
-                        variant="bordered"
-                        radius="lg"
-                        aria-label="Unidades"
-                        value={String(item.quantity ?? 1)}
-                        onValueChange={v => actualizarCantidad(item, v)}
-                        classNames={{
-                          input: 'text-right text-[13px] font-mono tabular-nums',
-                          inputWrapper: 'min-h-0 h-7 px-2',
-                        }}
-                        className="w-16"
-                      />
-                      <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex items-center h-7">
                         <span className="font-mono text-[13px] text-default-500 tabular-nums">
                           {item.repuesto?.part_number || '—'}
                         </span>
+                      </div>
+                      <div className="flex items-center justify-end h-7">
+                        <Input
+                          type="number"
+                          min={1}
+                          size="sm"
+                          variant="bordered"
+                          radius="lg"
+                          aria-label="Unidades"
+                          value={String(item.quantity ?? 1)}
+                          onValueChange={v => actualizarCantidad(item, v)}
+                          classNames={{
+                            input: 'text-right text-[13px] font-mono tabular-nums',
+                            inputWrapper: 'min-h-0 h-7 px-2',
+                          }}
+                          className="w-16"
+                        />
+                      </div>
+                      <div className="flex items-center justify-center h-7">
+                        <Button
+                          size="sm"
+                          variant="light"
+                          radius="lg"
+                          className="font-semibold text-[11px] text-default-500 hover:text-default-700 transition-colors duration-150 h-7 px-2 min-w-0"
+                          aria-label="Copiar a GCEW"
+                          onPress={() => copiarPartNumberYUnidades(item)}
+                        >
+                          {copiandoItemId === item.id ? (
+                            <Check size={13} className="text-success" />
+                          ) : (
+                            'Copiar'
+                          )}
+                        </Button>
+                      </div>
+                      <div className="flex items-center justify-center h-7">
                         <Button
                           isIconOnly
                           size="sm"
                           variant="light"
                           radius="lg"
-                          className="text-default-300 hover:text-danger transition-colors duration-150 shrink-0 min-w-7 h-7"
+                          className="text-default-300 hover:text-default-600 transition-colors duration-150 min-w-7 h-7"
+                          aria-label="Editar item"
+                          onPress={() => abrirEditarItem(item)}
+                        >
+                          <Pencil size={13} />
+                        </Button>
+                      </div>
+                      <div className="flex items-center justify-center h-7">
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="light"
+                          radius="lg"
+                          className="text-default-300 hover:text-danger transition-colors duration-150 min-w-7 h-7"
                           aria-label="Eliminar de la lista"
                           onPress={() => eliminarItem(item.id)}
                         >
@@ -642,6 +773,54 @@ export default function MisListasPage() {
                 Cancelar
               </Button>
               <Button color="primary" onPress={actualizarNombre}>
+                Guardar
+              </Button>
+            </ModalFooter>
+          </>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={Boolean(editandoItem)} onOpenChange={abierto => !abierto && cerrarEditarItem()}>
+        <ModalContent>
+          <>
+            <ModalHeader className="text-default-900">Editar item</ModalHeader>
+              <ModalBody>
+                <div className="space-y-4">
+                  <Autocomplete
+                    label="Repuesto"
+                    placeholder="Buscar por nombre o part number..."
+                    defaultItems={editItemRepuestos}
+                    selectedKey={editItemRepuestoId}
+                    onSelectionChange={key => setEditItemRepuestoId(key)}
+                    variant="bordered"
+                    radius="lg"
+                    isLoading={editItemCargando}
+                    isDisabled={editItemCargando}
+                    autoFocus
+                  >
+                    {r => (
+                      <AutocompleteItem key={r.id} textValue={`${r.nombre} ${r.part_number}`}>
+                        <span>{r.nombre}</span>
+                        <span className="text-default-400 ml-2 font-mono text-xs">{r.part_number}</span>
+                      </AutocompleteItem>
+                    )}
+                  </Autocomplete>
+                  <Input
+                    label="Unidades"
+                    type="number"
+                    min={1}
+                    value={String(editItemCantidad)}
+                    onValueChange={v => setEditItemCantidad(Math.max(1, parseInt(v, 10) || 1))}
+                    variant="bordered"
+                    radius="lg"
+                  />
+                </div>
+              </ModalBody>
+            <ModalFooter>
+              <Button variant="light" onPress={cerrarEditarItem}>
+                Cancelar
+              </Button>
+              <Button color="primary" onPress={guardarEditarItem} isDisabled={guardandoItem || !editItemRepuestoId} isLoading={guardandoItem}>
                 Guardar
               </Button>
             </ModalFooter>

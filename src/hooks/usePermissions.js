@@ -9,9 +9,9 @@ export const ROLES = {
 export const PERMISSIONS = {
   repuestos: {
     ver: ['admin', 'user'],
-    crear: ['admin'],
-    editar: ['admin'],
-    eliminar: ['admin'],
+    crear: ['admin', 'user'],
+    editar: ['admin', 'user'],
+    eliminar: ['admin', 'user'],
   },
   listas: {
     verTodas: ['admin'],

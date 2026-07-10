@@ -516,6 +516,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .ml-1 {
   margin-left: calc(var(--spacing) * 1);
 }
+.ml-2 {
+  margin-left: calc(var(--spacing) * 2);
+}
 .ml-auto {
   margin-left: auto;
 }
@@ -1116,8 +1119,8 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .grid-cols-\[1fr_auto\] {
   grid-template-columns: 1fr auto;
 }
-.grid-cols-\[1fr_auto_auto\] {
-  grid-template-columns: 1fr auto auto;
+.grid-cols-\[1fr_auto_auto_auto_auto_auto\] {
+  grid-template-columns: 1fr auto auto auto auto auto;
 }
 .flex-col {
   flex-direction: column;
