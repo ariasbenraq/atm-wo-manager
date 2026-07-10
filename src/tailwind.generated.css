@@ -918,6 +918,9 @@ button, input:where([type='button'], [type='reset'], [type='submit']), ::file-se
 .min-w-\[200px\] {
   min-width: 200px;
 }
+.min-w-\[550px\] {
+  min-width: 550px;
+}
 .min-w-full {
   min-width: 100%;
 }
