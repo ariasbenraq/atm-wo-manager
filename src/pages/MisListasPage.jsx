@@ -10,7 +10,7 @@ import {
   Autocomplete, AutocompleteItem,
 } from '@heroui/react'
 import {
-  List, Plus, Minus, ArrowLeft, Pencil, Trash2, Copy, Share2, X, Check,
+  List, Plus, Minus, ArrowLeft, Pencil, Trash2, Copy, Share2, X, Check, Warehouse, ChevronRight,
 } from 'lucide-react'
 
 function tiempoRelativo(iso) {
@@ -70,6 +70,10 @@ export default function MisListasPage() {
   const [agregarItemCargando, setAgregarItemCargando] = useState(false)
   const [guardandoAgregarItem, setGuardandoAgregarItem] = useState(false)
 
+  const [sincronizando, setSincronizando] = useState(false)
+  const [confirmarSync, setConfirmarSync] = useState(false)
+  const [erroresSync, setErroresSync] = useState([])
+
   const cargarListas = useCallback(async () => {
     if (!esAdmin && !userId) return
     setCargando(true)
@@ -112,6 +116,8 @@ export default function MisListasPage() {
           name: l.name,
           site: l.site || '',
           workOrder: l.work_order || '',
+          inventorySynced: l.inventory_synced || false,
+          inventorySyncedAt: l.inventory_synced_at || null,
           createdAt: l.created_at,
           updatedAt: l.updated_at,
         })))
@@ -123,6 +129,8 @@ export default function MisListasPage() {
         name: l.name,
         site: l.site || '',
         workOrder: l.workOrder || '',
+        inventory_synced: l.inventorySynced || false,
+        inventory_synced_at: l.inventorySyncedAt || null,
         itemCount: 0,
         updated_at: l.updatedAt,
       })))
@@ -216,6 +224,8 @@ export default function MisListasPage() {
         name: data.name,
         site: data.site || '',
         workOrder: data.work_order || '',
+        inventorySynced: false,
+        inventorySyncedAt: null,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       })
@@ -257,8 +267,8 @@ export default function MisListasPage() {
 
     await db.sparePartLists.filter(l => l.idRemoto === listaActiva.id).modify({ name, site, workOrder })
 
-    setListas(prev => prev.map(l => (l.id === data.id ? { ...l, name: data.name, site: data.site || '', work_order: data.work_order || '', updated_at: now } : l)))
-    setListaActiva(prev => ({ ...prev, name: data.name, site: data.site || '', work_order: data.work_order || '', updated_at: now }))
+    setListas(prev => prev.map(l => (l.id === data.id ? { ...l, name: data.name, site: data.site || '', work_order: data.work_order || '', inventory_synced: data.inventory_synced || false, inventory_synced_at: data.inventory_synced_at || null, updated_at: now } : l)))
+    setListaActiva(prev => ({ ...prev, name: data.name, site: data.site || '', work_order: data.work_order || '', inventory_synced: data.inventory_synced || false, inventory_synced_at: data.inventory_synced_at || null, updated_at: now }))
     setEditandoNombre(false)
     setMensaje({ color: 'success', texto: 'Lista actualizada.' })
   }
@@ -513,6 +523,90 @@ export default function MisListasPage() {
     await copiarLista()
   }
 
+  async function sincronizarConAlmacen() {
+    if (!listaActiva || !items.length || !userId) return
+    setSincronizando(true)
+    try {
+      const partNumbers = items.map(i => i.repuesto?.part_number).filter(Boolean)
+      const { data: warehouseItems } = await supabase
+        .from('warehouse_items')
+        .select('*')
+        .eq('user_id', userId)
+        .in('part_number', partNumbers)
+
+      const whMap = new Map((warehouseItems || []).map(w => [w.part_number, w]))
+      const errores = []
+
+      for (const item of items) {
+        const pn = item.repuesto?.part_number
+        if (!pn) continue
+        const qty = item.quantity ?? 1
+        const wh = whMap.get(pn)
+        if (!wh) {
+          errores.push({ partNumber: pn, required: qty, available: 0 })
+        } else if (wh.quantity < qty) {
+          errores.push({ partNumber: pn, required: qty, available: wh.quantity })
+        }
+      }
+
+      if (errores.length) {
+        setErroresSync(errores)
+        setConfirmarSync(false)
+        setSincronizando(false)
+        return
+      }
+
+      for (const item of items) {
+        const pn = item.repuesto?.part_number
+        if (!pn) continue
+        const qty = item.quantity ?? 1
+        const wh = whMap.get(pn)
+        if (!wh) continue
+
+        const nuevaCantidad = wh.quantity - qty
+        await supabase
+          .from('warehouse_items')
+          .update({ quantity: nuevaCantidad, updated_at: new Date().toISOString() })
+          .eq('id', wh.id)
+
+        await db.warehouseItems.filter(i => i.idRemoto === wh.id).modify({ quantity: nuevaCantidad })
+
+        await supabase.from('warehouse_transactions').insert({
+          user_id: userId,
+          part_number: pn,
+          quantity: qty,
+          type: 'OUT',
+          source_type: 'LIST',
+          source_id: listaActiva.id,
+          site: listaActiva.site || '',
+          work_order: listaActiva.work_order || listaActiva.workOrder || '',
+        })
+      }
+
+      const now = new Date().toISOString()
+      await supabase
+        .from('spare_part_lists')
+        .update({ inventory_synced: true, inventory_synced_at: now })
+        .eq('id', listaActiva.id)
+
+      await db.sparePartLists.filter(l => l.idRemoto === listaActiva.id).modify({
+        inventorySynced: true,
+        inventorySyncedAt: now,
+      })
+
+      setListas(prev => prev.map(l =>
+        l.id === listaActiva.id ? { ...l, inventory_synced: true, inventory_synced_at: now } : l
+      ))
+      setListaActiva(prev => ({ ...prev, inventory_synced: true, inventory_synced_at: now }))
+      setConfirmarSync(false)
+      setMensaje({ color: 'success', texto: 'Inventario sincronizado correctamente.' })
+    } catch (e) {
+      setMensaje({ color: 'danger', texto: e.message || 'Error al sincronizar inventario.' })
+    } finally {
+      setSincronizando(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       {mensaje && (
@@ -563,38 +657,42 @@ export default function MisListasPage() {
               Aún no tienes listas. Crea una para empezar a agrupar repuestos.
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {listas.map(lista => (
                 <div
                   key={lista.id}
-                  className="group rounded-xl border border-default-200 bg-white px-4 py-3.5 shadow-sm transition-all duration-150 hover:shadow-[0_4px_12px_0_rgb(0_0_0/0.06)] hover:border-default-300 cursor-pointer"
+                  className="group rounded-xl border border-default-200 bg-white px-4 py-3.5 shadow-sm transition-all duration-200 hover:shadow-[0_4px_16px_0_rgb(0_0_0/0.08)] hover:border-primary-200/60 hover:-translate-y-0.5 cursor-pointer active:scale-[0.99]"
                   onClick={() => cargarItems(lista)}
                   role="button"
                   tabIndex={0}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') cargarItems(lista) }}
                 >
-                    <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 space-y-1">
-                      <p className="text-[15px] font-semibold text-default-900 leading-tight truncate">
+                      <p className="text-[15px] font-semibold text-default-900 leading-tight truncate group-hover:text-primary-700 transition-colors">
                         {lista.name}
                       </p>
-                      <p className="text-[13px] text-default-500 flex flex-wrap gap-x-2">
-                        <span>{lista.itemCount} repuesto{lista.itemCount === 1 ? '' : 's'}</span>
+                      <div className="text-[13px] text-default-500 flex flex-wrap gap-x-2 items-center">
+                        <span className="font-medium text-default-600">{lista.itemCount} repuesto{lista.itemCount === 1 ? '' : 's'}</span>
                         {lista.site ? <span className="text-default-400">· {lista.site}</span> : null}
                         {lista.work_order || lista.workOrder ? <span className="text-default-400">· {lista.work_order || lista.workOrder}</span> : null}
-                        {lista.updated_at ? <span>· {tiempoRelativo(lista.updated_at)}</span> : null}
-                        {esAdmin && lista.usuario ? <span>· {lista.usuario.email || lista.usuario.full_name || lista.user_id?.slice(0, 8)}</span> : null}
-                      </p>
+                        {lista.updated_at ? <span className="text-default-400">· {tiempoRelativo(lista.updated_at)}</span> : null}
+                        {lista.inventory_synced ? <Chip color="success" variant="flat" size="sm" radius="lg" className="text-[10px] h-5">Sinc.</Chip> : null}
+                        {esAdmin && lista.usuario ? <span className="text-default-400">· {lista.usuario.email || lista.usuario.full_name || lista.user_id?.slice(0, 8)}</span> : null}
+                      </div>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="light"
-                      radius="lg"
-                      className="text-[13px] font-medium text-default-600 hover:bg-default-100 h-8 px-3"
-                      onPress={() => cargarItems(lista)}
-                    >
-                      Ver
-                    </Button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="light"
+                        radius="lg"
+                        className="text-[12px] font-medium text-default-500 hover:text-default-700 hover:bg-default-100 h-8 px-2.5 min-w-0 md:hidden"
+                        onPress={e => { e.stopPropagation(); cargarItems(lista) }}
+                      >
+                        Ver
+                      </Button>
+                      <ChevronRight size={16} className="text-default-300 group-hover:text-default-500 transition-colors hidden md:block" />
+                    </div>
                   </div>
                 </div>
               ))}
@@ -618,13 +716,14 @@ export default function MisListasPage() {
               <h2 className="text-sm font-semibold text-default-900 truncate">
                 {listaActiva.name}
               </h2>
-              <p className="text-xs text-default-500">
+              <div className="text-xs text-default-500">
                 {items.length} repuesto{items.length === 1 ? '' : 's'}
                 {listaActiva.site ? <span className="ml-2">· {listaActiva.site}</span> : null}
                 {listaActiva.work_order || listaActiva.workOrder ? <span className="ml-2">· {listaActiva.work_order || listaActiva.workOrder}</span> : null}
-              </p>
+                {listaActiva.inventory_synced ? <Chip color="success" variant="flat" size="sm" radius="lg" className="ml-2 text-[10px] h-5">Sinc. {listaActiva.inventory_synced_at ? new Date(listaActiva.inventory_synced_at).toLocaleDateString('es-ES') : ''}</Chip> : null}
+              </div>
             </div>
-            <div className="flex gap-1 shrink-0">
+            <div className="flex flex-wrap gap-1 shrink-0 justify-end">
               <Button
                 size="sm"
                 variant="light"
@@ -645,6 +744,19 @@ export default function MisListasPage() {
                 }}
               >
                 Agregar
+              </Button>
+              <Button
+                size="sm"
+                variant="light"
+                radius="lg"
+                startContent={<Warehouse size={14} />}
+                className={`text-[13px] font-medium h-8 px-2.5 ${listaActiva.inventory_synced ? 'text-success' : ''}`}
+                aria-label="Sincronizar con almacén"
+                isDisabled={sincronizando}
+                isLoading={sincronizando}
+                onPress={() => setConfirmarSync(true)}
+              >
+                {listaActiva.inventory_synced ? 'Sincronizado' : 'Sinc. Inventario'}
               </Button>
               <Button
                 isIconOnly
@@ -726,46 +838,36 @@ export default function MisListasPage() {
               </Button>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-default-200 bg-white">
-              <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-2 border-b border-default-100 bg-default-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400 items-center min-w-[550px]">
-                <span>Nombre</span>
-                <span>Part Number</span>
-                <span className="text-center">Unidades</span>
-                <span className="text-center">Copiar a GCEW</span>
-                <span className="text-center">Editar</span>
-                <span className="text-center">Eliminar</span>
-              </div>
-              <ScrollShadow className="max-h-[55vh]">
-                <div className="divide-y divide-default-100">
-                  {items.map(item => (
-                    <div
-                      key={item.id}
-                      className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-2 px-4 py-1 items-center transition-colors hover:bg-default-50 min-w-[550px]"
-                    >
-                      <div className="flex items-center min-w-0 h-7">
-                        <p className="truncate text-[14px] font-medium text-default-900">
+            <>
+              {/* Mobile: card layout */}
+              <div className="block md:hidden space-y-2">
+                {items.map(item => (
+                  <div
+                    key={item.id}
+                    className="rounded-xl border border-default-200 bg-white px-4 py-3 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[14px] font-semibold text-default-900 truncate">
                           {item.repuesto?.nombre || '—'}
                         </p>
-                      </div>
-                      <div className="flex items-center h-7">
-                        <span className="font-mono text-[13px] text-default-500 tabular-nums">
+                        <p className="text-[12px] font-mono text-default-400 truncate mt-0.5">
                           {item.repuesto?.part_number || '—'}
-                        </span>
+                        </p>
                       </div>
-                      <div className="flex items-center justify-center h-7 gap-0.5">
+                      <div className="flex items-center gap-1 shrink-0">
                         <Button
                           isIconOnly
                           size="sm"
                           variant="light"
                           radius="lg"
-                          className="min-w-6 h-6 text-default-400 hover:text-default-700 data-[disabled=true]:opacity-30"
-                          aria-label="Reducir cantidad"
+                          className="min-w-7 h-7 text-default-400 hover:text-default-700 data-[disabled=true]:opacity-30"
                           isDisabled={(item.quantity ?? 1) <= 1}
                           onPress={() => actualizarCantidad(item, (item.quantity ?? 1) - 1)}
                         >
-                          <Minus size={12} />
+                          <Minus size={13} />
                         </Button>
-                        <span className="font-mono text-[13px] text-default-500 tabular-nums w-6 text-center">
+                        <span className="font-mono text-[15px] font-semibold text-default-700 tabular-nums w-7 text-center">
                           {item.quantity ?? 1}
                         </span>
                         <Button
@@ -773,60 +875,143 @@ export default function MisListasPage() {
                           size="sm"
                           variant="light"
                           radius="lg"
-                          className="min-w-6 h-6 text-default-400 hover:text-default-700"
-                          aria-label="Aumentar cantidad"
+                          className="min-w-7 h-7 text-default-400 hover:text-default-700"
                           onPress={() => actualizarCantidad(item, (item.quantity ?? 1) + 1)}
                         >
-                          <Plus size={12} />
-                        </Button>
-                      </div>
-                      <div className="flex items-center justify-center h-7">
-                        <Button
-                          size="sm"
-                          variant="light"
-                          radius="lg"
-                          className="font-semibold text-[11px] text-default-500 hover:text-default-700 transition-colors duration-150 h-7 px-2 min-w-0"
-                          aria-label="Copiar a GCEW"
-                          onPress={() => copiarPartNumberYUnidades(item)}
-                        >
-                          {copiandoItemId === item.id ? (
-                            <Check size={13} className="text-success" />
-                          ) : (
-                            'Copiar'
-                          )}
-                        </Button>
-                      </div>
-                      <div className="flex items-center justify-center h-7">
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="light"
-                          radius="lg"
-                          className="text-default-300 hover:text-default-600 transition-colors duration-150 min-w-7 h-7"
-                          aria-label="Editar item"
-                          onPress={() => abrirEditarItem(item)}
-                        >
-                          <Pencil size={13} />
-                        </Button>
-                      </div>
-                      <div className="flex items-center justify-center h-7">
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="light"
-                          radius="lg"
-                          className="text-default-300 hover:text-danger transition-colors duration-150 min-w-7 h-7"
-                          aria-label="Eliminar de la lista"
-                          onPress={() => eliminarItem(item.id)}
-                        >
-                          <X size={13} />
+                          <Plus size={13} />
                         </Button>
                       </div>
                     </div>
-                  ))}
+                    <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-default-100">
+                      <Button
+                        size="sm"
+                        variant="light"
+                        radius="lg"
+                        className="flex-1 text-[12px] font-medium text-default-500 hover:bg-default-100 h-8 min-w-0"
+                        startContent={copiandoItemId === item.id ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+                        onPress={() => copiarPartNumberYUnidades(item)}
+                      >
+                        {copiandoItemId === item.id ? 'Copiado' : 'Copiar'}
+                      </Button>
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="light"
+                        radius="lg"
+                        className="min-w-8 h-8 text-default-400 hover:text-default-600"
+                        onPress={() => abrirEditarItem(item)}
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="light"
+                        radius="lg"
+                        className="min-w-8 h-8 text-default-400 hover:text-danger"
+                        onPress={() => eliminarItem(item.id)}
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop: table layout */}
+              <div className="hidden md:block overflow-x-auto rounded-xl border border-default-200 bg-white shadow-sm">
+                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 border-b border-default-100 bg-default-50/80 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400 items-center">
+                  <span>Nombre</span>
+                  <span className="text-center">Unidades</span>
+                  <span className="text-center">Copiar a GCEW</span>
+                  <span className="text-center">Editar</span>
+                  <span className="text-center">Eliminar</span>
                 </div>
-              </ScrollShadow>
-            </div>
+                <ScrollShadow className="max-h-[55vh]">
+                  <div className="divide-y divide-default-100/80">
+                    {items.map(item => (
+                      <div
+                        key={item.id}
+                        className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 px-4 py-1.5 items-center transition-colors hover:bg-default-50/60"
+                      >
+                        <div className="flex flex-col min-w-0">
+                          <p className="truncate text-[14px] font-medium text-default-900">
+                            {item.repuesto?.nombre || '—'}
+                          </p>
+                          <p className="text-[12px] font-mono text-default-400 truncate">
+                            {item.repuesto?.part_number || '—'}
+                          </p>
+                        </div>
+                        <div className="flex items-center justify-center gap-0.5">
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            variant="light"
+                            radius="lg"
+                            className="min-w-6 h-6 text-default-400 hover:text-default-700 data-[disabled=true]:opacity-30"
+                            isDisabled={(item.quantity ?? 1) <= 1}
+                            onPress={() => actualizarCantidad(item, (item.quantity ?? 1) - 1)}
+                          >
+                            <Minus size={12} />
+                          </Button>
+                          <span className="font-mono text-[14px] font-semibold text-default-700 tabular-nums w-7 text-center">
+                            {item.quantity ?? 1}
+                          </span>
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            variant="light"
+                            radius="lg"
+                            className="min-w-6 h-6 text-default-400 hover:text-default-700"
+                            onPress={() => actualizarCantidad(item, (item.quantity ?? 1) + 1)}
+                          >
+                            <Plus size={12} />
+                          </Button>
+                        </div>
+                        <div className="flex items-center justify-center">
+                          <Button
+                            size="sm"
+                            variant="light"
+                            radius="lg"
+                            className="font-semibold text-[11px] text-default-500 hover:text-default-700 h-7 px-2 min-w-0"
+                            onPress={() => copiarPartNumberYUnidades(item)}
+                          >
+                            {copiandoItemId === item.id ? (
+                              <Check size={13} className="text-success" />
+                            ) : (
+                              'Copiar'
+                            )}
+                          </Button>
+                        </div>
+                        <div className="flex items-center justify-center">
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            variant="light"
+                            radius="lg"
+                            className="text-default-300 hover:text-default-600 min-w-7 h-7"
+                            onPress={() => abrirEditarItem(item)}
+                          >
+                            <Pencil size={13} />
+                          </Button>
+                        </div>
+                        <div className="flex items-center justify-center">
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            variant="light"
+                            radius="lg"
+                            className="text-default-300 hover:text-danger min-w-7 h-7"
+                            onPress={() => eliminarItem(item.id)}
+                          >
+                            <X size={13} />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollShadow>
+              </div>
+            </>
           )}
 
           <div className="flex gap-2">
@@ -1051,6 +1236,60 @@ export default function MisListasPage() {
               </Button>
             </ModalFooter>
           </>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={confirmarSync} onOpenChange={abierto => !abierto && setConfirmarSync(false)}>
+        <ModalContent>
+          <ModalHeader className="text-default-900">Sincronizar con almacén</ModalHeader>
+          <ModalBody>
+            <p className="text-sm text-default-600">
+              Esta acción descontará las cantidades de esta lista de tu inventario en el almacén.
+            </p>
+            <p className="text-sm text-default-600 mt-2">
+              Verifica que todas las cantidades sean correctas antes de continuar.
+            </p>
+            <p className="text-xs text-warning font-medium mt-2">
+              Esta acción afectará tu stock disponible.
+            </p>
+            <div className="rounded-xl border border-default-200 bg-default-50 p-3 mt-3 space-y-1.5">
+              {items.map(item => (
+                <div key={item.id} className="flex justify-between text-sm">
+                  <span className="text-default-700 truncate mr-2">{item.repuesto?.part_number || '—'}</span>
+                  <span className="font-mono text-default-500 tabular-nums shrink-0">-{item.quantity ?? 1}</span>
+                </div>
+              ))}
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="light" onPress={() => setConfirmarSync(false)}>Cancelar</Button>
+            <Button color="primary" onPress={sincronizarConAlmacen} isLoading={sincronizando} isDisabled={sincronizando}>
+              Confirmar sincronización
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={erroresSync.length > 0} onOpenChange={abierto => !abierto && setErroresSync([])}>
+        <ModalContent>
+          <ModalHeader className="text-default-900">Stock insuficiente</ModalHeader>
+          <ModalBody>
+            <p className="text-sm text-danger mb-3">
+              Los siguientes repuestos no tienen suficiente inventario:
+            </p>
+            {erroresSync.map((err, idx) => (
+              <div key={idx} className="rounded-xl border border-danger-200 bg-danger-50 p-3 mb-2">
+                <p className="font-mono text-sm font-semibold text-danger-700">{err.partNumber}</p>
+                <div className="flex gap-4 mt-1 text-xs text-danger-600">
+                  <span>Requerido: {err.required}</span>
+                  <span>Disponible: {err.available}</span>
+                </div>
+              </div>
+            ))}
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="light" onPress={() => setErroresSync([])}>Cerrar</Button>
+          </ModalFooter>
         </ModalContent>
       </Modal>
 

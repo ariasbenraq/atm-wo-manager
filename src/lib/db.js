@@ -188,3 +188,36 @@ db.version(14).stores({
     list.workOrder = list.workOrder || ''
   })
 })
+
+db.version(15).stores({
+  tareas:              '++localId, wo, id_atm, fecha, ce',
+  mis_tareas:          '++localId, &wo, id_atm, fecha, ce, estado, completadaEn, ds, arribo, inicio, fin, retorno, tiemposUpdatedAt, tiemposSyncPendiente',
+  repuestos:           '++localId, nombre, partNumber, descripcion, tieneStock, compatibilidad, creadoEn',
+  sparePartLists:      '++localId, userId, name',
+  sparePartListItems:  '++localId, listId, sparePartId',
+  personal_cmca:       '++localId, nombre',
+  personal_cmpd:       '++localId, nombre',
+  motivos_aqr:         '++localId, descripcion',
+  cierres:             '++localId, wo',
+  warehouseItems:      '++localId, userId, partNumber',
+  warehouseTransactions: '++localId, userId, partNumber, createdAt',
+})
+
+db.version(16).stores({
+  tareas:              '++localId, wo, id_atm, fecha, ce',
+  mis_tareas:          '++localId, &wo, id_atm, fecha, ce, estado, completadaEn, ds, arribo, inicio, fin, retorno, tiemposUpdatedAt, tiemposSyncPendiente',
+  repuestos:           '++localId, nombre, partNumber, descripcion, tieneStock, compatibilidad, creadoEn',
+  sparePartLists:      '++localId, userId, name',
+  sparePartListItems:  '++localId, listId, sparePartId',
+  personal_cmca:       '++localId, nombre',
+  personal_cmpd:       '++localId, nombre',
+  motivos_aqr:         '++localId, descripcion',
+  cierres:             '++localId, wo',
+  warehouseItems:      '++localId, userId, partNumber',
+  warehouseTransactions: '++localId, userId, partNumber, createdAt',
+}).upgrade(async tx => {
+  await tx.table('sparePartLists').toCollection().modify(list => {
+    list.inventorySynced = list.inventorySynced || false
+    list.inventorySyncedAt = list.inventorySyncedAt || null
+  })
+})

@@ -9,14 +9,11 @@ import {
   NavbarContent,
   NavbarItem,
   Chip,
-  Card,
-  CardBody,
   Button,
   Dropdown,
   DropdownItem,
   DropdownMenu,
   DropdownTrigger,
-  Divider,
   Spinner,
   Input,
   Modal,
@@ -28,13 +25,14 @@ import {
 } from '@heroui/react'
 import MuiAlert from '@mui/material/Alert'
 import Fade from '@mui/material/Fade'
-import { ClipboardList, List, LogOut, Menu, Package, Shield, Wrench } from 'lucide-react'
+import { ClipboardList, List, LogOut, Menu, Package, Shield, Warehouse, Wrench } from 'lucide-react'
 
 const vistas = [
   { key: 'tareas', label: 'Tareas', icon: ClipboardList, path: '/tareas' },
   { key: 'mis-tareas', label: 'Mis tareas', icon: Wrench, path: '/mis-tareas' },
   { key: 'repuestos', label: 'Repuestos', icon: Package, path: '/repuestos' },
   { key: 'mis-listas', label: 'Mis listas', icon: List, path: '/mis-listas' },
+  { key: 'almacen', label: 'Almacén', icon: Warehouse, path: '/almacen' },
 ]
 
 const vistasAdmin = [
@@ -329,29 +327,6 @@ export default function Layout() {
       )}
 
       <main className="max-w-3xl mx-auto p-4 md:p-6 space-y-4 md:space-y-5 pb-10">
-        <Card shadow="none" className="border border-default-200/70 rounded-2xl bg-white/80 backdrop-blur-sm">
-          <CardBody className="p-4 md:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-primary-100 p-2.5 text-primary">
-                  <VistaIcono size={18} />
-                </div>
-                <div>
-                  <p className="text-sm text-default-500">Navegación</p>
-                  <h1 className="text-lg font-semibold text-default-800">{vistaActiva.label}</h1>
-                </div>
-              </div>
-              <Chip size="sm" variant="flat" color="primary">
-                Menú
-              </Chip>
-            </div>
-            <Divider className="my-4" />
-            <p className="text-sm text-default-500">
-              Usa el botón hamburguesa para moverte entre páginas sin recargar la aplicación.
-            </p>
-          </CardBody>
-        </Card>
-
         <Outlet />
       </main>
 
