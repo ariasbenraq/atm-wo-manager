@@ -42,6 +42,8 @@ export default function RepuestosPage() {
   const [cargandoListasModal, setCargandoListasModal] = useState(false)
   const [creandoListaModal, setCreandoListaModal] = useState(false)
   const [nombreNuevaLista, setNombreNuevaLista] = useState('')
+  const [nuevoSiteLista, setNuevoSiteLista] = useState('')
+  const [nuevoWorkOrderLista, setNuevoWorkOrderLista] = useState('')
   const [errorNuevaLista, setErrorNuevaLista] = useState(null)
   const [listaAgregada, setListaAgregada] = useState(null)
   const [guardandoNuevaLista, setGuardandoNuevaLista] = useState(false)
@@ -301,6 +303,8 @@ export default function RepuestosPage() {
     setListaAgregada(null)
     setCreandoListaModal(false)
     setNombreNuevaLista('')
+    setNuevoSiteLista('')
+    setNuevoWorkOrderLista('')
     setErrorNuevaLista(null)
     setCantidad(1)
 
@@ -361,6 +365,8 @@ export default function RepuestosPage() {
     setErrorNuevaLista(null)
     try {
       const name = nombreNuevaLista.trim()
+      const site = nuevoSiteLista.trim()
+      const workOrder = nuevoWorkOrderLista.trim()
       if (!name) {
         setErrorNuevaLista('El nombre es obligatorio.')
         return
@@ -368,7 +374,7 @@ export default function RepuestosPage() {
 
       const { data, error } = await supabase
         .from('spare_part_lists')
-        .insert({ user_id: userId, name })
+        .insert({ user_id: userId, name, site, work_order: workOrder })
         .select('*')
         .single()
 
@@ -381,6 +387,8 @@ export default function RepuestosPage() {
         idRemoto: data.id,
         userId: data.user_id,
         name: data.name,
+        site: data.site || '',
+        workOrder: data.work_order || '',
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       })
@@ -683,7 +691,7 @@ export default function RepuestosPage() {
               <ModalBody>
                 <Input
                   label="Nombre de la lista"
-                  placeholder="Ej. ATM Plaza Norte"
+                  placeholder="Ej. Repuestos preventivo"
                   value={nombreNuevaLista}
                   onValueChange={v => {
                     setNombreNuevaLista(v)
@@ -694,6 +702,24 @@ export default function RepuestosPage() {
                   variant="bordered"
                   radius="lg"
                   autoFocus
+                />
+                <Input
+                  label="Site"
+                  placeholder="Ej. SITIO001"
+                  value={nuevoSiteLista}
+                  onValueChange={v => setNuevoSiteLista(v)}
+                  variant="bordered"
+                  radius="lg"
+                  className="mt-3"
+                />
+                <Input
+                  label="Work Order"
+                  placeholder="Ej. WO-2025-00123"
+                  value={nuevoWorkOrderLista}
+                  onValueChange={v => setNuevoWorkOrderLista(v)}
+                  variant="bordered"
+                  radius="lg"
+                  className="mt-3"
                 />
                 <Input
                   label="Cantidad"
@@ -799,6 +825,8 @@ export default function RepuestosPage() {
                       startContent={<Plus size={16} />}
                       onPress={() => {
                         setNombreNuevaLista('')
+                        setNuevoSiteLista('')
+                        setNuevoWorkOrderLista('')
                         setErrorNuevaLista(null)
                         setCreandoListaModal(true)
                       }}

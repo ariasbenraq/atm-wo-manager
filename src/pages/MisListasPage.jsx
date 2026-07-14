@@ -10,7 +10,7 @@ import {
   Autocomplete, AutocompleteItem,
 } from '@heroui/react'
 import {
-  List, Plus, ArrowLeft, Pencil, Trash2, Copy, Share2, X, Check,
+  List, Plus, Minus, ArrowLeft, Pencil, Trash2, Copy, Share2, X, Check,
 } from 'lucide-react'
 
 function tiempoRelativo(iso) {
@@ -37,6 +37,8 @@ export default function MisListasPage() {
 
   const [creando, setCreando] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState('')
+  const [nuevoSite, setNuevoSite] = useState('')
+  const [nuevoWorkOrder, setNuevoWorkOrder] = useState('')
   const [errorNombre, setErrorNombre] = useState(null)
   const [guardandoLista, setGuardandoLista] = useState(false)
 
@@ -46,6 +48,8 @@ export default function MisListasPage() {
 
   const [editandoNombre, setEditandoNombre] = useState(false)
   const [editNombre, setEditNombre] = useState('')
+  const [editSite, setEditSite] = useState('')
+  const [editWorkOrder, setEditWorkOrder] = useState('')
   const [errorEdit, setErrorEdit] = useState(null)
 
   const [eliminando, setEliminando] = useState(null)
@@ -53,11 +57,18 @@ export default function MisListasPage() {
   const [copiandoItemId, setCopiandoItemId] = useState(null)
 
   const [editandoItem, setEditandoItem] = useState(null)
-  const [editItemCantidad, setEditItemCantidad] = useState(1)
+  const [editItemCantidadStr, setEditItemCantidadStr] = useState('1')
   const [editItemRepuestoId, setEditItemRepuestoId] = useState(null)
   const [editItemRepuestos, setEditItemRepuestos] = useState([])
   const [editItemCargando, setEditItemCargando] = useState(false)
   const [guardandoItem, setGuardandoItem] = useState(false)
+
+  const [agregandoItem, setAgregandoItem] = useState(false)
+  const [agregarItemRepuestoId, setAgregarItemRepuestoId] = useState(null)
+  const [agregarItemCantidadStr, setAgregarItemCantidadStr] = useState('1')
+  const [agregarItemRepuestos, setAgregarItemRepuestos] = useState([])
+  const [agregarItemCargando, setAgregarItemCargando] = useState(false)
+  const [guardandoAgregarItem, setGuardandoAgregarItem] = useState(false)
 
   const cargarListas = useCallback(async () => {
     if (!esAdmin && !userId) return
@@ -99,6 +110,8 @@ export default function MisListasPage() {
           idRemoto: l.id,
           userId: l.user_id,
           name: l.name,
+          site: l.site || '',
+          workOrder: l.work_order || '',
           createdAt: l.created_at,
           updatedAt: l.updated_at,
         })))
@@ -108,6 +121,8 @@ export default function MisListasPage() {
       setListas(local.map(l => ({
         id: l.idRemoto,
         name: l.name,
+        site: l.site || '',
+        workOrder: l.workOrder || '',
         itemCount: 0,
         updated_at: l.updatedAt,
       })))
@@ -177,6 +192,8 @@ export default function MisListasPage() {
     setErrorNombre(null)
     try {
       const name = nuevoNombre.trim()
+      const site = nuevoSite.trim()
+      const workOrder = nuevoWorkOrder.trim()
       if (!name) {
         setErrorNombre('El nombre es obligatorio.')
         return
@@ -184,7 +201,7 @@ export default function MisListasPage() {
 
       const { data, error } = await supabase
         .from('spare_part_lists')
-        .insert({ user_id: userId, name })
+        .insert({ user_id: userId, name, site, work_order: workOrder })
         .select('*')
         .single()
 
@@ -197,6 +214,8 @@ export default function MisListasPage() {
         idRemoto: data.id,
         userId: data.user_id,
         name: data.name,
+        site: data.site || '',
+        workOrder: data.work_order || '',
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       })
@@ -204,6 +223,8 @@ export default function MisListasPage() {
       setListas(prev => [{ ...data, itemCount: 0 }, ...prev])
       setCreando(false)
       setNuevoNombre('')
+      setNuevoSite('')
+      setNuevoWorkOrder('')
       setMensaje({ color: 'success', texto: `Lista "${data.name}" creada.` })
     } finally {
       setGuardandoLista(false)
@@ -214,6 +235,8 @@ export default function MisListasPage() {
     if (!listaActiva) return
     setErrorEdit(null)
     const name = editNombre.trim()
+    const site = editSite.trim()
+    const workOrder = editWorkOrder.trim()
     if (!name) {
       setErrorEdit('El nombre es obligatorio.')
       return
@@ -222,7 +245,7 @@ export default function MisListasPage() {
     const now = new Date().toISOString()
     const { data, error } = await supabase
       .from('spare_part_lists')
-      .update({ name, updated_at: now })
+      .update({ name, site, work_order: workOrder, updated_at: now })
       .eq('id', listaActiva.id)
       .select('*')
       .single()
@@ -232,12 +255,12 @@ export default function MisListasPage() {
       return
     }
 
-    await db.sparePartLists.filter(l => l.idRemoto === listaActiva.id).modify({ name })
+    await db.sparePartLists.filter(l => l.idRemoto === listaActiva.id).modify({ name, site, workOrder })
 
-    setListas(prev => prev.map(l => (l.id === data.id ? { ...l, name: data.name, updated_at: now } : l)))
-    setListaActiva(prev => ({ ...prev, name: data.name, updated_at: now }))
+    setListas(prev => prev.map(l => (l.id === data.id ? { ...l, name: data.name, site: data.site || '', work_order: data.work_order || '', updated_at: now } : l)))
+    setListaActiva(prev => ({ ...prev, name: data.name, site: data.site || '', work_order: data.work_order || '', updated_at: now }))
     setEditandoNombre(false)
-    setMensaje({ color: 'success', texto: 'Nombre actualizado.' })
+    setMensaje({ color: 'success', texto: 'Lista actualizada.' })
   }
 
   async function eliminarLista() {
@@ -265,7 +288,7 @@ export default function MisListasPage() {
 
   async function abrirEditarItem(item) {
     setEditandoItem(item)
-    setEditItemCantidad(item.quantity ?? 1)
+    setEditItemCantidadStr(String(item.quantity ?? 1))
     setEditItemRepuestoId(item.spare_part_id)
     setEditItemCargando(true)
     try {
@@ -283,7 +306,7 @@ export default function MisListasPage() {
 
   function cerrarEditarItem() {
     setEditandoItem(null)
-    setEditItemCantidad(1)
+    setEditItemCantidadStr('1')
     setEditItemRepuestoId(null)
     setEditItemRepuestos([])
     setEditItemCargando(false)
@@ -292,10 +315,11 @@ export default function MisListasPage() {
   async function guardarEditarItem() {
     if (!editandoItem || !editItemRepuestoId) return
     setGuardandoItem(true)
+    const cantidad = Math.max(1, parseInt(editItemCantidadStr, 10) || 1)
     try {
       const { error } = await supabase
         .from('spare_part_list_items')
-        .update({ spare_part_id: editItemRepuestoId, quantity: editItemCantidad })
+        .update({ spare_part_id: editItemRepuestoId, quantity: cantidad })
         .eq('id', editandoItem.id)
 
       if (error) {
@@ -308,13 +332,13 @@ export default function MisListasPage() {
 
       setItems(prev => prev.map(i =>
         i.id === editandoItem.id
-          ? { ...i, spare_part_id: editItemRepuestoId, quantity: editItemCantidad, repuesto }
+          ? { ...i, spare_part_id: editItemRepuestoId, quantity: cantidad, repuesto }
           : i
       ))
 
       await db.sparePartListItems.filter(i => i.idRemoto === editandoItem.id).modify({
         sparePartId: editItemRepuestoId,
-        quantity: editItemCantidad,
+        quantity: cantidad,
       })
 
       cerrarEditarItem()
@@ -324,6 +348,79 @@ export default function MisListasPage() {
     } finally {
       setGuardandoItem(false)
     }
+  }
+
+  async function agregarItemALista() {
+    if (!listaActiva || !agregarItemRepuestoId) return
+    setGuardandoAgregarItem(true)
+    const cantidad = Math.max(1, parseInt(agregarItemCantidadStr, 10) || 1)
+    try {
+      const { data, error } = await supabase
+        .from('spare_part_list_items')
+        .insert({ list_id: listaActiva.id, spare_part_id: agregarItemRepuestoId, quantity: cantidad })
+        .select('*')
+        .single()
+
+      if (error && error.code !== '23505') {
+        setMensaje({ color: 'danger', texto: error.message })
+        return
+      }
+
+      const repuesto = agregarItemRepuestos.find(r => r.id === agregarItemRepuestoId) || null
+
+      const nuevoItem = {
+        id: data?.id || `temp-${Date.now()}`,
+        list_id: listaActiva.id,
+        spare_part_id: agregarItemRepuestoId,
+        quantity: cantidad,
+        repuesto,
+      }
+
+      setItems(prev => [...prev, nuevoItem])
+
+      await db.sparePartListItems.add({
+        idRemoto: data?.id || nuevoItem.id,
+        listId: listaActiva.id,
+        sparePartId: agregarItemRepuestoId,
+        quantity: cantidad,
+        createdAt: new Date().toISOString(),
+      })
+
+      setListas(prev => prev.map(l =>
+        l.id === listaActiva.id ? { ...l, itemCount: (l.itemCount || 0) + 1 } : l
+      ))
+
+      setAgregandoItem(false)
+      setAgregarItemRepuestoId(null)
+      setAgregarItemCantidadStr('1')
+      setMensaje({ color: 'success', texto: 'Repuesto agregado a la lista.' })
+    } catch (e) {
+      setMensaje({ color: 'danger', texto: e.message || 'Error al agregar.' })
+    } finally {
+      setGuardandoAgregarItem(false)
+    }
+  }
+
+  async function actualizarCantidad(item, cantidad) {
+    if (cantidad < 1) return
+
+    const { error } = await supabase
+      .from('spare_part_list_items')
+      .update({ quantity: cantidad })
+      .eq('id', item.id)
+
+    if (error) {
+      setMensaje({ color: 'danger', texto: error.message })
+      return
+    }
+
+    setItems(prev => prev.map(i =>
+      i.id === item.id ? { ...i, quantity: cantidad } : i
+    ))
+
+    try {
+      await db.sparePartListItems.update(item.id, { quantity: cantidad })
+    } catch { /* silent */ }
   }
 
   async function copiarPartNumberYUnidades(item) {
@@ -446,6 +543,8 @@ export default function MisListasPage() {
               startContent={<Plus size={16} />}
               onPress={() => {
                 setNuevoNombre('')
+                setNuevoSite('')
+                setNuevoWorkOrder('')
                 setErrorNombre(null)
                 setCreando(true)
               }}
@@ -474,15 +573,17 @@ export default function MisListasPage() {
                   tabIndex={0}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') cargarItems(lista) }}
                 >
-                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 space-y-1">
                       <p className="text-[15px] font-semibold text-default-900 leading-tight truncate">
                         {lista.name}
                       </p>
-                      <p className="text-[13px] text-default-500">
-                        {lista.itemCount} repuesto{lista.itemCount === 1 ? '' : 's'}
-                        {lista.updated_at ? ` · ${tiempoRelativo(lista.updated_at)}` : ''}
-                        {esAdmin && lista.usuario ? ` · ${lista.usuario.email || lista.usuario.full_name || lista.user_id?.slice(0, 8)}` : ''}
+                      <p className="text-[13px] text-default-500 flex flex-wrap gap-x-2">
+                        <span>{lista.itemCount} repuesto{lista.itemCount === 1 ? '' : 's'}</span>
+                        {lista.site ? <span className="text-default-400">· {lista.site}</span> : null}
+                        {lista.work_order || lista.workOrder ? <span className="text-default-400">· {lista.work_order || lista.workOrder}</span> : null}
+                        {lista.updated_at ? <span>· {tiempoRelativo(lista.updated_at)}</span> : null}
+                        {esAdmin && lista.usuario ? <span>· {lista.usuario.email || lista.usuario.full_name || lista.user_id?.slice(0, 8)}</span> : null}
                       </p>
                     </div>
                     <Button
@@ -519,17 +620,42 @@ export default function MisListasPage() {
               </h2>
               <p className="text-xs text-default-500">
                 {items.length} repuesto{items.length === 1 ? '' : 's'}
+                {listaActiva.site ? <span className="ml-2">· {listaActiva.site}</span> : null}
+                {listaActiva.work_order || listaActiva.workOrder ? <span className="ml-2">· {listaActiva.work_order || listaActiva.workOrder}</span> : null}
               </p>
             </div>
             <div className="flex gap-1 shrink-0">
+              <Button
+                size="sm"
+                variant="light"
+                radius="lg"
+                aria-label="Agregar repuesto"
+                startContent={<Plus size={14} />}
+                className="text-[13px] font-medium h-8 px-2.5"
+                onPress={() => {
+                  setAgregandoItem(true)
+                  setAgregarItemRepuestoId(null)
+                  setAgregarItemCantidadStr('1')
+                  setAgregarItemRepuestos([])
+                  setAgregarItemCargando(true)
+                  supabase.from('repuestos').select('id, nombre, part_number').order('nombre').then(({ data }) => {
+                    setAgregarItemRepuestos(data || [])
+                    setAgregarItemCargando(false)
+                  })
+                }}
+              >
+                Agregar
+              </Button>
               <Button
                 isIconOnly
                 size="sm"
                 variant="light"
                 radius="lg"
-                aria-label="Editar nombre"
+                aria-label="Editar lista"
                 onPress={() => {
                   setEditNombre(listaActiva.name)
+                  setEditSite(listaActiva.site || '')
+                  setEditWorkOrder(listaActiva.work_order || listaActiva.workOrder || '')
                   setErrorEdit(null)
                   setEditandoNombre(true)
                 }}
@@ -576,15 +702,35 @@ export default function MisListasPage() {
               Cargando repuestos...
             </div>
           ) : items.length === 0 ? (
-            <div className="rounded-xl border border-default-200 bg-white px-5 py-4 text-sm text-default-400">
-              Esta lista no tiene repuestos. Agrega repuestos desde la página de Repuestos.
+            <div className="rounded-xl border border-default-200 bg-white px-5 py-6 text-sm text-default-400 flex flex-col items-center gap-4">
+              <span>Esta lista no tiene repuestos.</span>
+              <Button
+                color="primary"
+                variant="flat"
+                radius="lg"
+                size="sm"
+                startContent={<Plus size={14} />}
+                onPress={() => {
+                  setAgregandoItem(true)
+                  setAgregarItemRepuestoId(null)
+                  setAgregarItemCantidadStr('1')
+                  setAgregarItemRepuestos([])
+                  setAgregarItemCargando(true)
+                  supabase.from('repuestos').select('id, nombre, part_number').order('nombre').then(({ data }) => {
+                    setAgregarItemRepuestos(data || [])
+                    setAgregarItemCargando(false)
+                  })
+                }}
+              >
+                Agregar repuesto
+              </Button>
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-default-200 bg-white">
               <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-2 border-b border-default-100 bg-default-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400 items-center min-w-[550px]">
                 <span>Nombre</span>
                 <span>Part Number</span>
-                <span className="text-right">Unidades</span>
+                <span className="text-center">Unidades</span>
                 <span className="text-center">Copiar a GCEW</span>
                 <span className="text-center">Editar</span>
                 <span className="text-center">Eliminar</span>
@@ -606,10 +752,33 @@ export default function MisListasPage() {
                           {item.repuesto?.part_number || '—'}
                         </span>
                       </div>
-                      <div className="flex items-center justify-end h-7">
-                        <span className="font-mono text-[13px] text-default-500 tabular-nums">
+                      <div className="flex items-center justify-center h-7 gap-0.5">
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="light"
+                          radius="lg"
+                          className="min-w-6 h-6 text-default-400 hover:text-default-700 data-[disabled=true]:opacity-30"
+                          aria-label="Reducir cantidad"
+                          isDisabled={(item.quantity ?? 1) <= 1}
+                          onPress={() => actualizarCantidad(item, (item.quantity ?? 1) - 1)}
+                        >
+                          <Minus size={12} />
+                        </Button>
+                        <span className="font-mono text-[13px] text-default-500 tabular-nums w-6 text-center">
                           {item.quantity ?? 1}
                         </span>
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="light"
+                          radius="lg"
+                          className="min-w-6 h-6 text-default-400 hover:text-default-700"
+                          aria-label="Aumentar cantidad"
+                          onPress={() => actualizarCantidad(item, (item.quantity ?? 1) + 1)}
+                        >
+                          <Plus size={12} />
+                        </Button>
                       </div>
                       <div className="flex items-center justify-center h-7">
                         <Button
@@ -692,7 +861,7 @@ export default function MisListasPage() {
             <ModalBody>
               <Input
                 label="Nombre de la lista"
-                placeholder="Ej. ATM Plaza Norte"
+                placeholder="Ej. Repuestos preventivo"
                 value={nuevoNombre}
                 onValueChange={v => {
                   setNuevoNombre(v)
@@ -703,6 +872,24 @@ export default function MisListasPage() {
                 variant="bordered"
                 radius="lg"
                 autoFocus
+              />
+              <Input
+                label="Site"
+                placeholder="Ej. SITIO001"
+                value={nuevoSite}
+                onValueChange={v => setNuevoSite(v)}
+                variant="bordered"
+                radius="lg"
+                className="mt-3"
+              />
+              <Input
+                label="Work Order"
+                placeholder="Ej. WO-2025-00123"
+                value={nuevoWorkOrder}
+                onValueChange={v => setNuevoWorkOrder(v)}
+                variant="bordered"
+                radius="lg"
+                className="mt-3"
               />
             </ModalBody>
             <ModalFooter>
@@ -720,7 +907,7 @@ export default function MisListasPage() {
       <Modal isOpen={editandoNombre} onOpenChange={abierto => !abierto && setEditandoNombre(false)}>
         <ModalContent>
           <>
-            <ModalHeader className="text-default-900">Editar nombre</ModalHeader>
+            <ModalHeader className="text-default-900">Editar lista</ModalHeader>
             <ModalBody>
               <Input
                 label="Nombre de la lista"
@@ -734,6 +921,24 @@ export default function MisListasPage() {
                 variant="bordered"
                 radius="lg"
                 autoFocus
+              />
+              <Input
+                label="Site"
+                placeholder="Ej. SITIO001"
+                value={editSite}
+                onValueChange={v => setEditSite(v)}
+                variant="bordered"
+                radius="lg"
+                className="mt-3"
+              />
+              <Input
+                label="Work Order"
+                placeholder="Ej. WO-2025-00123"
+                value={editWorkOrder}
+                onValueChange={v => setEditWorkOrder(v)}
+                variant="bordered"
+                radius="lg"
+                className="mt-3"
               />
             </ModalBody>
             <ModalFooter>
@@ -777,12 +982,8 @@ export default function MisListasPage() {
                     label="Unidades"
                     type="text"
                     inputMode="numeric"
-                    value={String(editItemCantidad)}
-                    onValueChange={v => {
-                      if (v === '') return
-                      const parsed = parseInt(v, 10)
-                      if (!isNaN(parsed)) setEditItemCantidad(Math.max(1, parsed))
-                    }}
+                    value={editItemCantidadStr}
+                    onValueChange={setEditItemCantidadStr}
                     variant="bordered"
                     radius="lg"
                   />
@@ -794,6 +995,59 @@ export default function MisListasPage() {
               </Button>
               <Button color="primary" onPress={guardarEditarItem} isDisabled={guardandoItem || !editItemRepuestoId} isLoading={guardandoItem}>
                 Guardar
+              </Button>
+            </ModalFooter>
+          </>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={agregandoItem} onOpenChange={abierto => !abierto && setAgregandoItem(false)}>
+        <ModalContent>
+          <>
+            <ModalHeader className="text-default-900">Agregar repuesto</ModalHeader>
+            <ModalBody>
+              <div className="space-y-4">
+                <Autocomplete
+                  label="Repuesto"
+                  placeholder="Buscar por nombre o part number..."
+                  defaultItems={agregarItemRepuestos}
+                  selectedKey={agregarItemRepuestoId}
+                  onSelectionChange={key => setAgregarItemRepuestoId(key)}
+                  variant="bordered"
+                  radius="lg"
+                  isLoading={agregarItemCargando}
+                  isDisabled={agregarItemCargando}
+                  autoFocus
+                >
+                  {r => (
+                    <AutocompleteItem key={r.id} textValue={`${r.nombre} ${r.part_number}`}>
+                      <span>{r.nombre}</span>
+                      <span className="text-default-400 ml-2 font-mono text-xs">{r.part_number}</span>
+                    </AutocompleteItem>
+                  )}
+                </Autocomplete>
+                <Input
+                  label="Cantidad"
+                  type="text"
+                  inputMode="numeric"
+                  value={agregarItemCantidadStr}
+                  onValueChange={setAgregarItemCantidadStr}
+                  variant="bordered"
+                  radius="lg"
+                />
+              </div>
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" onPress={() => setAgregandoItem(false)}>
+                Cancelar
+              </Button>
+              <Button
+                color="primary"
+                onPress={agregarItemALista}
+                isDisabled={guardandoAgregarItem || !agregarItemRepuestoId}
+                isLoading={guardandoAgregarItem}
+              >
+                Agregar
               </Button>
             </ModalFooter>
           </>
