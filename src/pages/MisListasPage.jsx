@@ -326,26 +326,6 @@ export default function MisListasPage() {
     }
   }
 
-  async function actualizarCantidad(item, nuevaCantidad) {
-    const qty = Math.max(1, Math.floor(Number(nuevaCantidad)) || 1)
-    if (qty === (item.quantity ?? 1)) return
-
-    setItems(prev => prev.map(i => (i.id === item.id ? { ...i, quantity: qty } : i)))
-
-    const { error } = await supabase
-      .from('spare_part_list_items')
-      .update({ quantity: qty })
-      .eq('id', item.id)
-
-    if (error) {
-      setItems(prev => prev.map(i => (i.id === item.id ? { ...i, quantity: item.quantity } : i)))
-      setMensaje({ color: 'danger', texto: error.message })
-      return
-    }
-
-    await db.sparePartListItems.filter(i => i.idRemoto === item.id).modify({ quantity: qty })
-  }
-
   async function copiarPartNumberYUnidades(item) {
     const texto = `${item.repuesto?.part_number || ''}\t${item.quantity ?? 1}`
     try {
@@ -627,21 +607,9 @@ export default function MisListasPage() {
                         </span>
                       </div>
                       <div className="flex items-center justify-end h-7">
-                        <Input
-                          type="number"
-                          min={1}
-                          size="sm"
-                          variant="bordered"
-                          radius="lg"
-                          aria-label="Unidades"
-                          value={String(item.quantity ?? 1)}
-                          onValueChange={v => actualizarCantidad(item, v)}
-                          classNames={{
-                            input: 'text-right text-[13px] font-mono tabular-nums',
-                            inputWrapper: 'min-h-0 h-7 px-2',
-                          }}
-                          className="w-16"
-                        />
+                        <span className="font-mono text-[13px] text-default-500 tabular-nums">
+                          {item.quantity ?? 1}
+                        </span>
                       </div>
                       <div className="flex items-center justify-center h-7">
                         <Button
