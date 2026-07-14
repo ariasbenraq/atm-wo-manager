@@ -775,10 +775,14 @@ export default function MisListasPage() {
                   </Autocomplete>
                   <Input
                     label="Unidades"
-                    type="number"
-                    min={1}
+                    type="text"
+                    inputMode="numeric"
                     value={String(editItemCantidad)}
-                    onValueChange={v => setEditItemCantidad(Math.max(1, parseInt(v, 10) || 1))}
+                    onValueChange={v => {
+                      if (v === '') return
+                      const parsed = parseInt(v, 10)
+                      if (!isNaN(parsed)) setEditItemCantidad(Math.max(1, parsed))
+                    }}
                     variant="bordered"
                     radius="lg"
                   />

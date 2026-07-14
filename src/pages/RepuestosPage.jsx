@@ -697,10 +697,14 @@ export default function RepuestosPage() {
                 />
                 <Input
                   label="Cantidad"
-                  type="number"
-                  min={1}
+                  type="text"
+                  inputMode="numeric"
                   value={String(cantidad)}
-                  onValueChange={v => setCantidad(Math.max(1, parseInt(v, 10) || 1))}
+                  onValueChange={v => {
+                    if (v === '') return
+                    const parsed = parseInt(v, 10)
+                    if (!isNaN(parsed)) setCantidad(Math.max(1, parsed))
+                  }}
                   variant="bordered"
                   radius="lg"
                   className="mt-3"
@@ -735,10 +739,14 @@ export default function RepuestosPage() {
               <ModalBody>
                 <Input
                   label="Cantidad"
-                  type="number"
-                  min={1}
+                  type="text"
+                  inputMode="numeric"
                   value={String(cantidad)}
-                  onValueChange={v => setCantidad(Math.max(1, parseInt(v, 10) || 1))}
+                  onValueChange={v => {
+                    if (v === '') return
+                    const parsed = parseInt(v, 10)
+                    if (!isNaN(parsed)) setCantidad(Math.max(1, parsed))
+                  }}
                   variant="bordered"
                   radius="lg"
                   className="mb-3"
