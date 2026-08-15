@@ -1,12 +1,12 @@
 services:
   web:
     image: ${IMAGE:-ghcr.io/ariasbenraq/atm-wo-manager}:${TAG:-latest}
-    restart: unless-stopped
     init: true
     networks:
       - edge
-    stop_grace_period: 10s
     deploy:
+      restart_policy:
+        condition: any
       resources:
         limits:
           memory: 512M
