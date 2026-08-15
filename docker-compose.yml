@@ -1,7 +1,6 @@
 services:
   web:
     image: ${IMAGE:-ghcr.io/ariasbenraq/atm-wo-manager}:${TAG:-latest}
-    pull_policy: always
     restart: unless-stopped
     init: true
     networks:
