@@ -429,7 +429,7 @@ export default function MisListasPage() {
     ))
 
     try {
-      await db.sparePartListItems.update(item.id, { quantity: cantidad })
+      await db.sparePartListItems.filter(i => i.idRemoto === item.id).modify({ quantity: cantidad })
     } catch { /* silent */ }
   }
 
@@ -467,6 +467,10 @@ export default function MisListasPage() {
     }
 
     setItems(prev => prev.filter(i => i.id !== itemId))
+
+    try {
+      await db.sparePartListItems.filter(i => i.idRemoto === itemId).delete()
+    } catch { /* silent */ }
 
     const nuevoConteo = items.length - 1
     setListas(prev => prev.map(l =>

@@ -221,3 +221,40 @@ db.version(16).stores({
     list.inventorySyncedAt = list.inventorySyncedAt || null
   })
 })
+
+db.version(17).stores({
+  tareas:              '++localId, wo, id_atm, fecha, ce',
+  mis_tareas:          '++localId, &wo, id_atm, fecha, ce, estado, completadaEn, ds, arribo, inicio, fin, retorno, tiemposUpdatedAt, tiemposSyncPendiente',
+  repuestos:           '++localId, nombre, partNumber, descripcion, tieneStock, compatibilidad, creadoEn',
+  sparePartLists:      '++localId, userId, name',
+  sparePartListItems:  '++localId, listId, sparePartId',
+  personal_cmca:       '++localId, nombre',
+  personal_cmpd:       '++localId, nombre',
+  motivos_aqr:         '++localId, descripcion',
+  cierres:             '++localId, wo',
+  warehouseItems:      '++localId, userId, partNumber',
+  warehouseTransactions: '++localId, userId, partNumber, createdAt',
+  pedidosWos:          '++localId, wo, idAtm, site',
+  pedidosPersonas:     '++localId, nombre, tipo',
+  pedidos:             '++localId, estado, wo',
+  pedidoItems:         '++localId, pedidoId, sparePartId',
+})
+
+db.version(18).stores({
+  tareas:              '++localId, wo, id_atm, fecha, ce',
+  mis_tareas:          '++localId, &wo, id_atm, fecha, ce, estado, completadaEn, ds, arribo, inicio, fin, retorno, tiemposUpdatedAt, tiemposSyncPendiente',
+  repuestos:           '++localId, nombre, partNumber, descripcion, tieneStock, compatibilidad, creadoEn',
+  sparePartLists:      '++localId, userId, name',
+  sparePartListItems:  '++localId, listId, sparePartId',
+  personal_cmca:       '++localId, nombre',
+  personal_cmpd:       '++localId, nombre',
+  motivos_aqr:         '++localId, descripcion',
+  cierres:             '++localId, wo',
+  warehouseItems:      '++localId, userId, partNumber',
+  warehouseTransactions: '++localId, userId, partNumber, createdAt',
+  pedidosWos:          '++localId, wo, idAtm, site',
+  pedidosPersonas:     '++localId, nombre, tipo',
+  pedidos:             '++localId, estado, wo',
+  pedidoItems:         '++localId, pedidoId, sparePartId',
+  workorders:          '++localId, wo, serie, distrito, codigoEquipo, legajo, fecha',
+})

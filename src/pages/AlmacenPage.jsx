@@ -9,7 +9,7 @@ import {
   Select, SelectItem,
   Autocomplete, AutocompleteItem,
 } from '@heroui/react'
-import { Search, Plus, Minus, Warehouse, History, RotateCcw } from 'lucide-react'
+import { Search, Plus, Minus, Warehouse, History, RotateCcw, Pencil, Trash2, Clock, Eye, EyeOff } from 'lucide-react'
 
 export default function AlmacenPage() {
   const { session } = useApp()
@@ -19,6 +19,7 @@ export default function AlmacenPage() {
   const [cargando, setCargando] = useState(true)
   const [filtro, setFiltro] = useState('')
   const [mensaje, setMensaje] = useState(null)
+  const [ocultarCeros, setOcultarCeros] = useState(true)
 
   const [ajustando, setAjustando] = useState(false)
   const [ajustePartNumber, setAjustePartNumber] = useState('')
@@ -31,6 +32,18 @@ export default function AlmacenPage() {
   const [transacciones, setTransacciones] = useState([])
   const [mostrandoTransacciones, setMostrandoTransacciones] = useState(false)
   const [cargandoTransacciones, setCargandoTransacciones] = useState(false)
+
+  const [itemEditando, setItemEditando] = useState(null)
+  const [editCantidad, setEditCantidad] = useState('1')
+  const [guardandoEdit, setGuardandoEdit] = useState(false)
+
+  const [itemEliminando, setItemEliminando] = useState(null)
+  const [eliminando, setEliminando] = useState(false)
+
+  const [itemHistorial, setItemHistorial] = useState(null)
+  const [historialTransacciones, setHistorialTransacciones] = useState([])
+  const [historialListas, setHistorialListas] = useState([])
+  const [cargandoHistorial, setCargandoHistorial] = useState(false)
 
   const cargar = useCallback(async () => {
     if (!userId) return
@@ -88,13 +101,15 @@ export default function AlmacenPage() {
 
   useEffect(() => { cargar() }, [cargar])
 
+  const itemsConStock = ocultarCeros ? items.filter(i => i.quantity > 0) : items
+
   const filtroNormalizado = filtro.trim().toLowerCase()
   const itemsFiltrados = filtroNormalizado
-    ? items.filter(i =>
+    ? itemsConStock.filter(i =>
         String(i.part_number || '').toLowerCase().includes(filtroNormalizado) ||
         String(i.nombre || '').toLowerCase().includes(filtroNormalizado)
       )
-    : items
+    : itemsConStock
 
   async function ajustarInventario() {
     if (!userId) return
@@ -193,10 +208,133 @@ export default function AlmacenPage() {
     }
   }
 
+  async function editarItem() {
+    if (!itemEditando) return
+    const cantidad = parseInt(editCantidad, 10)
+    if (isNaN(cantidad) || cantidad < 0) return
+
+    setGuardandoEdit(true)
+    try {
+      const delta = cantidad - itemEditando.quantity
+      const { error } = await supabase
+        .from('warehouse_items')
+        .update({ quantity: cantidad, updated_at: new Date().toISOString() })
+        .eq('id', itemEditando.id)
+
+      if (error) throw error
+
+      setItems(prev => prev.map(i =>
+        i.id === itemEditando.id ? { ...i, quantity: cantidad, updated_at: new Date().toISOString() } : i
+      ))
+
+      await db.warehouseItems.filter(i => i.idRemoto === itemEditando.id).modify({ quantity: cantidad })
+
+      if (delta !== 0) {
+        await supabase.from('warehouse_transactions').insert({
+          user_id: userId,
+          part_number: itemEditando.part_number,
+          quantity: Math.abs(delta),
+          type: delta > 0 ? 'IN' : 'OUT',
+          source_type: 'WAREHOUSE',
+        })
+      }
+
+      setItemEditando(null)
+      setMensaje({ color: 'success', texto: `${itemEditando.nombre || itemEditando.part_number} actualizado a ${cantidad}` })
+    } catch (e) {
+      setMensaje({ color: 'danger', texto: e.message || 'Error al actualizar.' })
+    } finally {
+      setGuardandoEdit(false)
+    }
+  }
+
+  async function eliminarItem() {
+    if (!itemEliminando) return
+    setEliminando(true)
+    try {
+      const { error } = await supabase
+        .from('warehouse_items')
+        .delete()
+        .eq('id', itemEliminando.id)
+
+      if (error) throw error
+
+      await supabase
+        .from('warehouse_transactions')
+        .delete()
+        .eq('user_id', userId)
+        .eq('part_number', itemEliminando.part_number)
+
+      setItems(prev => prev.filter(i => i.id !== itemEliminando.id))
+      await db.warehouseItems.filter(i => i.idRemoto === itemEliminando.id).delete()
+
+      setItemEliminando(null)
+      setMensaje({ color: 'success', texto: `${itemEliminando.nombre || itemEliminando.part_number} eliminado del almacén.` })
+    } catch (e) {
+      setMensaje({ color: 'danger', texto: e.message || 'Error al eliminar.' })
+    } finally {
+      setEliminando(false)
+    }
+  }
+
+  async function cargarHistorialItem(item) {
+    setItemHistorial(item)
+    setCargandoHistorial(true)
+    setHistorialTransacciones([])
+    setHistorialListas([])
+    try {
+      const { data: txs } = await supabase
+        .from('warehouse_transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('part_number', item.part_number)
+        .order('created_at', { ascending: false })
+
+      setHistorialTransacciones(txs || [])
+
+      const { data: rep } = await supabase
+        .from('repuestos')
+        .select('id')
+        .eq('part_number', item.part_number)
+        .maybeSingle()
+
+      if (rep) {
+        const { data: listItems } = await supabase
+          .from('spare_part_list_items')
+          .select('quantity, created_at, list_id')
+          .eq('spare_part_id', rep.id)
+
+        if (listItems?.length) {
+          const listIds = [...new Set(listItems.map(i => i.list_id))]
+          const { data: lists } = await supabase
+            .from('spare_part_lists')
+            .select('id, name, site, work_order, created_at')
+            .in('id', listIds)
+
+          const listMap = new Map((lists || []).map(l => [l.id, l]))
+          setHistorialListas(listItems.map(li => ({
+            ...li,
+            lista: listMap.get(li.list_id) || null,
+          })))
+        }
+      }
+    } catch {
+      setHistorialTransacciones([])
+      setHistorialListas([])
+    } finally {
+      setCargandoHistorial(false)
+    }
+  }
+
   function chipColor(tipo) {
     if (tipo === 'IN') return 'success'
     if (tipo === 'OUT') return 'danger'
     return 'warning'
+  }
+
+  function fechaCorta(fecha) {
+    if (!fecha) return '-'
+    return new Date(fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
   return (
@@ -217,7 +355,8 @@ export default function AlmacenPage() {
           <div>
             <h1 className="text-lg font-bold text-default-900">Almacén</h1>
             <p className="text-sm text-default-500">
-              {items.length} repuesto{items.length === 1 ? '' : 's'} en inventario
+              {itemsFiltrados.length} repuesto{itemsFiltrados.length === 1 ? '' : 's'}
+              {ocultarCeros && items.length !== itemsFiltrados.length ? ` de ${items.length}` : ''} en inventario
             </p>
           </div>
         </div>
@@ -254,15 +393,28 @@ export default function AlmacenPage() {
         </div>
       </div>
 
-      <Input
-        placeholder="Buscar por part number..."
-        startContent={<Search size={16} className="text-default-400" />}
-        value={filtro}
-        onValueChange={setFiltro}
-        variant="bordered"
-        radius="lg"
-        size="sm"
-      />
+      <div className="flex gap-2 items-center">
+        <Input
+          placeholder="Buscar por part number..."
+          startContent={<Search size={16} className="text-default-400" />}
+          value={filtro}
+          onValueChange={setFiltro}
+          variant="bordered"
+          radius="lg"
+          size="sm"
+          className="flex-1"
+        />
+        <Button
+          size="sm"
+          variant="flat"
+          radius="lg"
+          startContent={ocultarCeros ? <Eye size={14} /> : <EyeOff size={14} />}
+          onPress={() => setOcultarCeros(prev => !prev)}
+          className="shrink-0"
+        >
+          {ocultarCeros ? 'Solo con stock' : 'Mostrar todos'}
+        </Button>
+      </div>
 
       {cargando ? (
         <div className="rounded-xl border border-default-200 bg-white px-5 py-4 text-sm text-default-400">
@@ -271,11 +423,10 @@ export default function AlmacenPage() {
       ) : itemsFiltrados.length === 0 ? (
         <div className="rounded-xl border border-default-200 bg-white px-5 py-6 text-sm text-default-400 flex flex-col items-center gap-3">
           <RotateCcw size={24} className="text-default-300" />
-          <span>{filtro ? 'No se encontraron repuestos.' : 'El almacén está vacío. Agrega repuestos usando "Ajustar inventario".'}</span>
+          <span>{filtro ? 'No se encontraron repuestos.' : ocultarCeros && items.length > 0 ? 'Todos los repuestos están en cero.' : 'El almacén está vacío. Agrega repuestos usando "Ajustar inventario".'}</span>
         </div>
       ) : (
         <>
-          {/* Mobile: card layout */}
           <div className="block md:hidden space-y-2">
             {itemsFiltrados.map(item => (
               <div
@@ -297,71 +448,105 @@ export default function AlmacenPage() {
                     {item.quantity}
                   </span>
                 </div>
-                <div className="flex items-center justify-end gap-1 mt-2 pt-2 border-t border-default-100">
-                  <Button
-                    isIconOnly
-                    size="sm"
-                    variant="light"
-                    radius="lg"
-                    className="min-w-8 h-8 text-default-400 hover:text-danger"
-                    isDisabled={item.quantity <= 0}
-                    onPress={async () => {
-                      const nuevaCantidad = Math.max(0, item.quantity - 1)
-                      const { error } = await supabase
-                        .from('warehouse_items')
-                        .update({ quantity: nuevaCantidad, updated_at: new Date().toISOString() })
-                        .eq('id', item.id)
-                      if (!error) {
-                        setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: nuevaCantidad } : i))
-                        await db.warehouseItems.filter(i => i.idRemoto === item.id).modify({ quantity: nuevaCantidad })
-                        await supabase.from('warehouse_transactions').insert({
-                          user_id: userId, part_number: item.part_number, quantity: 1, type: 'OUT', source_type: 'WAREHOUSE',
-                        })
-                      }
-                    }}
-                  >
-                    <Minus size={15} />
-                  </Button>
-                  <Button
-                    isIconOnly
-                    size="sm"
-                    variant="light"
-                    radius="lg"
-                    className="min-w-8 h-8 text-default-400 hover:text-primary"
-                    onPress={async () => {
-                      const nuevaCantidad = item.quantity + 1
-                      const { error } = await supabase
-                        .from('warehouse_items')
-                        .update({ quantity: nuevaCantidad, updated_at: new Date().toISOString() })
-                        .eq('id', item.id)
-                      if (!error) {
-                        setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: nuevaCantidad } : i))
-                        await db.warehouseItems.filter(i => i.idRemoto === item.id).modify({ quantity: nuevaCantidad })
-                        await supabase.from('warehouse_transactions').insert({
-                          user_id: userId, part_number: item.part_number, quantity: 1, type: 'IN', source_type: 'WAREHOUSE',
-                        })
-                      }
-                    }}
-                  >
-                    <Plus size={15} />
-                  </Button>
+                <div className="flex items-center justify-between gap-1 mt-2 pt-2 border-t border-default-100">
+                  <div className="flex gap-1">
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      variant="light"
+                      radius="lg"
+                      className="min-w-8 h-8 text-default-400 hover:text-primary"
+                      onPress={() => { setItemEditando(item); setEditCantidad(String(item.quantity)) }}
+                    >
+                      <Pencil size={15} />
+                    </Button>
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      variant="light"
+                      radius="lg"
+                      className="min-w-8 h-8 text-default-400 hover:text-default-600"
+                      onPress={() => cargarHistorialItem(item)}
+                    >
+                      <Clock size={15} />
+                    </Button>
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      variant="light"
+                      radius="lg"
+                      className="min-w-8 h-8 text-default-400 hover:text-danger"
+                      onPress={() => setItemEliminando(item)}
+                    >
+                      <Trash2 size={15} />
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      variant="light"
+                      radius="lg"
+                      className="min-w-8 h-8 text-default-400 hover:text-danger"
+                      isDisabled={item.quantity <= 0}
+                      onPress={async () => {
+                        const nuevaCantidad = Math.max(0, item.quantity - 1)
+                        const { error } = await supabase
+                          .from('warehouse_items')
+                          .update({ quantity: nuevaCantidad, updated_at: new Date().toISOString() })
+                          .eq('id', item.id)
+                        if (!error) {
+                          setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: nuevaCantidad } : i))
+                          await db.warehouseItems.filter(i => i.idRemoto === item.id).modify({ quantity: nuevaCantidad })
+                          await supabase.from('warehouse_transactions').insert({
+                            user_id: userId, part_number: item.part_number, quantity: 1, type: 'OUT', source_type: 'WAREHOUSE',
+                          })
+                        }
+                      }}
+                    >
+                      <Minus size={15} />
+                    </Button>
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      variant="light"
+                      radius="lg"
+                      className="min-w-8 h-8 text-default-400 hover:text-primary"
+                      onPress={async () => {
+                        const nuevaCantidad = item.quantity + 1
+                        const { error } = await supabase
+                          .from('warehouse_items')
+                          .update({ quantity: nuevaCantidad, updated_at: new Date().toISOString() })
+                          .eq('id', item.id)
+                        if (!error) {
+                          setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: nuevaCantidad } : i))
+                          await db.warehouseItems.filter(i => i.idRemoto === item.id).modify({ quantity: nuevaCantidad })
+                          await supabase.from('warehouse_transactions').insert({
+                            user_id: userId, part_number: item.part_number, quantity: 1, type: 'IN', source_type: 'WAREHOUSE',
+                          })
+                        }
+                      }}
+                    >
+                      <Plus size={15} />
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
-          {/* Desktop: table layout */}
           <div className="hidden md:block overflow-x-auto rounded-xl border border-default-200 bg-white shadow-sm">
-            <div className="grid grid-cols-[1fr_auto_auto] gap-2 border-b border-default-100 bg-default-50/80 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400 items-center">
+            <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 border-b border-default-100 bg-default-50/80 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400 items-center">
               <span>Repuesto</span>
               <span className="text-center">Cantidad</span>
               <span className="text-center">Ajustar</span>
+              <span className="text-center">Acciones</span>
             </div>
             <ScrollShadow className="max-h-[55vh]">
               <div className="divide-y divide-default-100/80">
                 {itemsFiltrados.map(item => (
                   <div
                     key={item.id}
-                    className="grid grid-cols-[1fr_auto_auto] gap-2 px-4 py-2 items-center transition-colors hover:bg-default-50/60"
+                    className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-4 py-2 items-center transition-colors hover:bg-default-50/60"
                   >
                     <div className="flex items-center min-w-0 gap-2">
                       <p className="truncate text-[14px] font-medium text-default-900">
@@ -425,6 +610,38 @@ export default function AlmacenPage() {
                         }}
                       >
                         <Plus size={14} />
+                      </Button>
+                    </div>
+                    <div className="flex items-center justify-center gap-1">
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="light"
+                        radius="lg"
+                        className="min-w-7 h-7 text-default-400 hover:text-primary"
+                        onPress={() => { setItemEditando(item); setEditCantidad(String(item.quantity)) }}
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="light"
+                        radius="lg"
+                        className="min-w-7 h-7 text-default-400 hover:text-default-600"
+                        onPress={() => cargarHistorialItem(item)}
+                      >
+                        <Clock size={14} />
+                      </Button>
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="light"
+                        radius="lg"
+                        className="min-w-7 h-7 text-default-400 hover:text-danger"
+                        onPress={() => setItemEliminando(item)}
+                      >
+                        <Trash2 size={14} />
                       </Button>
                     </div>
                   </div>
@@ -531,7 +748,7 @@ export default function AlmacenPage() {
                           {tx.type === 'OUT' ? '-' : '+'}{tx.quantity}
                         </span>
                         <span className="text-xs text-default-400 text-right">
-                          {new Date(tx.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          {fechaCorta(tx.created_at)}
                         </span>
                       </div>
                     ))}
@@ -541,6 +758,197 @@ export default function AlmacenPage() {
             </ModalBody>
             <ModalFooter>
               <Button variant="light" onPress={() => setMostrandoTransacciones(false)}>
+                Cerrar
+              </Button>
+            </ModalFooter>
+          </>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={Boolean(itemEditando)} onOpenChange={abierto => !abierto && setItemEditando(null)} size="md">
+        <ModalContent>
+          <>
+            <ModalHeader className="text-default-900">Editar cantidad</ModalHeader>
+            <ModalBody className="space-y-4">
+              <div className="rounded-xl border border-default-200 bg-default-50 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">Repuesto</p>
+                <p className="mt-1 text-sm font-semibold text-default-800">{itemEditando?.nombre || itemEditando?.part_number}</p>
+                {itemEditando?.nombre && (
+                  <p className="mt-0.5 font-mono text-xs text-default-400">{itemEditando?.part_number}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  isIconOnly
+                  size="sm"
+                  variant="flat"
+                  radius="lg"
+                  className="text-default-500"
+                  isDisabled={parseInt(editCantidad, 10) <= 0}
+                  onPress={() => setEditCantidad(String(Math.max(0, parseInt(editCantidad, 10) - 1)))}
+                >
+                  <Minus size={16} />
+                </Button>
+                <Input
+                  label="Cantidad"
+                  type="text"
+                  inputMode="numeric"
+                  value={editCantidad}
+                  onValueChange={v => { if (/^\d*$/.test(v)) setEditCantidad(v) }}
+                  variant="bordered"
+                  radius="lg"
+                  className="flex-1"
+                />
+                <Button
+                  isIconOnly
+                  size="sm"
+                  variant="flat"
+                  radius="lg"
+                  className="text-default-500"
+                  onPress={() => setEditCantidad(String(parseInt(editCantidad, 10) + 1))}
+                >
+                  <Plus size={16} />
+                </Button>
+              </div>
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" onPress={() => setItemEditando(null)}>
+                Cancelar
+              </Button>
+              <Button
+                color="primary"
+                onPress={editarItem}
+                isDisabled={guardandoEdit || editCantidad === '' || parseInt(editCantidad, 10) < 0}
+                isLoading={guardandoEdit}
+              >
+                Guardar
+              </Button>
+            </ModalFooter>
+          </>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={Boolean(itemEliminando)} onOpenChange={abierto => !abierto && setItemEliminando(null)} size="sm">
+        <ModalContent>
+          <>
+            <ModalHeader className="text-danger">Eliminar del almacén</ModalHeader>
+            <ModalBody>
+              <p className="text-sm text-default-600">
+                ¿Eliminar <span className="font-semibold">{itemEliminando?.nombre || itemEliminando?.part_number}</span> del almacén? Se eliminarán también todas las transacciones asociadas.
+              </p>
+              {itemEliminando?.nombre && (
+                <p className="font-mono text-xs text-default-400">{itemEliminando?.part_number}</p>
+              )}
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" onPress={() => setItemEliminando(null)}>
+                Cancelar
+              </Button>
+              <Button
+                color="danger"
+                onPress={eliminarItem}
+                isLoading={eliminando}
+              >
+                Eliminar
+              </Button>
+            </ModalFooter>
+          </>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={Boolean(itemHistorial)} onOpenChange={abierto => !abierto && setItemHistorial(null)} size="2xl">
+        <ModalContent>
+          <>
+            <ModalHeader className="text-default-900">Historial del repuesto</ModalHeader>
+            <ModalBody className="space-y-5">
+              <div className="rounded-xl border border-default-200 bg-default-50 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">Repuesto</p>
+                <p className="mt-1 text-sm font-semibold text-default-800">{itemHistorial?.nombre || itemHistorial?.part_number}</p>
+                {itemHistorial?.nombre && (
+                  <p className="mt-0.5 font-mono text-xs text-default-400">{itemHistorial?.part_number}</p>
+                )}
+              </div>
+
+              {cargandoHistorial ? (
+                <p className="text-sm text-default-400">Cargando historial...</p>
+              ) : (
+                <>
+                  <div>
+                    <h3 className="text-sm font-semibold text-default-700 mb-2">Movimientos de almacén</h3>
+                    {historialTransacciones.length === 0 ? (
+                      <p className="text-xs text-default-400">Sin movimientos registrados.</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-lg border border-default-200">
+                        <div className="grid grid-cols-[auto_1fr_auto_auto] gap-2 border-b border-default-100 bg-default-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-default-400 items-center min-w-[480px]">
+                          <span>Tipo</span>
+                          <span>Cantidad</span>
+                          <span>Work Order</span>
+                          <span className="text-right">Fecha</span>
+                        </div>
+                        <div className="divide-y divide-default-100 max-h-[25vh] overflow-y-auto">
+                          {historialTransacciones.map(tx => (
+                            <div key={tx.id} className="grid grid-cols-[auto_1fr_auto_auto] gap-2 px-3 py-2 items-center min-w-[480px]">
+                              <Chip color={chipColor(tx.type)} variant="flat" size="sm" radius="lg">
+                                {tx.type}
+                              </Chip>
+                              <span className="font-mono text-sm text-default-700 tabular-nums">
+                                {tx.type === 'OUT' ? '-' : '+'}{tx.quantity}
+                              </span>
+                              <span className="text-xs text-default-500">
+                                {tx.work_order || '-'}
+                                {tx.site ? ` · ${tx.site}` : ''}
+                              </span>
+                              <span className="text-xs text-default-400 text-right whitespace-nowrap">
+                                {fechaCorta(tx.created_at)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-semibold text-default-700 mb-2">Uso en listas de repuestos</h3>
+                    {historialListas.length === 0 ? (
+                      <p className="text-xs text-default-400">Este repuesto no ha sido agregado a ninguna lista.</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-lg border border-default-200">
+                        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 border-b border-default-100 bg-default-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-default-400 items-center min-w-[500px]">
+                          <span>Lista</span>
+                          <span>Work Order</span>
+                          <span>Cant.</span>
+                          <span className="text-right">Fecha</span>
+                        </div>
+                        <div className="divide-y divide-default-100 max-h-[25vh] overflow-y-auto">
+                          {historialListas.map((uso, idx) => (
+                            <div key={idx} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-2 items-center min-w-[500px]">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-default-900 truncate">{uso.lista?.name || '-'}</p>
+                                {uso.lista?.site && (
+                                  <p className="text-[11px] text-default-400 truncate">{uso.lista.site}</p>
+                                )}
+                              </div>
+                              <span className="text-xs text-default-500 font-mono">
+                                {uso.lista?.work_order || '-'}
+                              </span>
+                              <span className="font-mono text-sm text-default-700 tabular-nums text-center">
+                                {uso.quantity}
+                              </span>
+                              <span className="text-xs text-default-400 text-right whitespace-nowrap">
+                                {fechaCorta(uso.lista?.created_at)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" onPress={() => setItemHistorial(null)}>
                 Cerrar
               </Button>
             </ModalFooter>

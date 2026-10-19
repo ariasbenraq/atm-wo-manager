@@ -1,0 +1,28 @@
+services:
+  web:
+    image: ${IMAGE:-ghcr.io/ariasbenraq/atm-wo-manager}:${TAG:-latest}
+    init: true
+    networks:
+      - edge
+    deploy:
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  edge:
+    external: true
