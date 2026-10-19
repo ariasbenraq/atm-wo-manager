@@ -25,13 +25,15 @@ import {
 } from '@heroui/react'
 import MuiAlert from '@mui/material/Alert'
 import Fade from '@mui/material/Fade'
-import { ClipboardList, List, LogOut, Menu, Package, Shield, Warehouse, Wrench } from 'lucide-react'
+import { ClipboardList, Headset, List, LogOut, Menu, Package, Shield, ShoppingCart, Warehouse, Wrench } from 'lucide-react'
 
 const vistas = [
   { key: 'tareas', label: 'Tareas', icon: ClipboardList, path: '/tareas' },
   { key: 'mis-tareas', label: 'Mis tareas', icon: Wrench, path: '/mis-tareas' },
+  { key: 'wos', label: "Wo's", icon: Headset, path: '/wos' },
   { key: 'repuestos', label: 'Repuestos', icon: Package, path: '/repuestos' },
   { key: 'mis-listas', label: 'Mis listas', icon: List, path: '/mis-listas' },
+  { key: 'pedidos', label: 'Pedidos', icon: ShoppingCart, path: '/pedidos' },
   { key: 'almacen', label: 'Almacén', icon: Warehouse, path: '/almacen' },
 ]
 

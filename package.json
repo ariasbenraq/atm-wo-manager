@@ -9,10 +9,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "preview:network": "vite preview --host 0.0.0.0 --port 4173",
-    "styles:build": "node scripts/build-tailwind-css.mjs",
-    "predev": "npm run styles:build",
-    "prebuild": "npm run styles:build"
+    "preview:network": "vite preview --host 0.0.0.0 --port 4173"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -24,8 +21,8 @@
     "@tailwindcss/vite": "^4.2.1",
     "dayjs": "^1.11.20",
     "dexie": "^4.3.0",
-    "dexie-react-hooks": "^4.2.0",
     "framer-motion": "^12.35.2",
+    "konsta": "^5.5.0",
     "lucide-react": "^0.577.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -34,16 +31,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
     "@vitejs/plugin-react": "^5.1.1",
-    "autoprefixer": "^10.4.27",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
-    "postcss": "^8.5.8",
     "tailwindcss": "^4.2.1",
     "vite": "^7.3.1"
   }
