@@ -60,6 +60,20 @@ const CAMPOS_BUSQUEDA = [
   ['serie', 'Serie'],
 ]
 
+const CLIENTES_MANUALES = ['Banco de Crédito', 'Interbank', 'BBVA', 'Banco Nación']
+
+const MODELOS_MANUALES = [
+  '6623-2000-8200',
+  '6627-3000-8200',
+  '2062-2050-8608',
+  '2004-2000-8600',
+  '6623-2051-8200',
+  '6627-4000-8200',
+  '6626-3000-8600',
+  '6627-3050-8200',
+  '6683-2000-8607',
+]
+
 function fechaEstado(fecha) {
   if (!fecha) return null
   const hoy = new Date().toISOString().slice(0, 10)
@@ -89,12 +103,17 @@ export default function WosPage() {
   const [nuevoAbierto, setNuevoAbierto] = useState(false)
   const [formWo, setFormWo] = useState('')
   const [formCliente, setFormCliente] = useState('')
+  const [formId, setFormId] = useState('')
   const [formSerie, setFormSerie] = useState('')
   const [formModelo, setFormModelo] = useState('')
-  const [formSite, setFormSite] = useState('')
+  const [formNombreEquipo, setFormNombreEquipo] = useState('')
   const [formFecha, setFormFecha] = useState('')
   const [errorForm, setErrorForm] = useState(null)
   const [guardando, setGuardando] = useState(false)
+
+  const opcionesCliente = [
+    ...new Set([...CLIENTES_MANUALES, ...wos.map(w => w.cliente).filter(Boolean)]),
+  ]
 
   const [detalle, setDetalle] = useState(null)
   const [eliminando, setEliminando] = useState(null)
@@ -186,9 +205,10 @@ export default function WosPage() {
   function abrirNuevo() {
     setFormWo('')
     setFormCliente('')
+    setFormId('')
     setFormSerie('')
     setFormModelo('')
-    setFormSite('')
+    setFormNombreEquipo('')
     setFormFecha('')
     setErrorForm(null)
     setGuardando(false)
@@ -216,9 +236,10 @@ export default function WosPage() {
         wo,
         fecha,
         cliente: formCliente.trim(),
+        codigo_equipo: formId.trim(),
         serie: formSerie.trim(),
         modelo: formModelo.trim(),
-        site: formSite.trim(),
+        nombre_equipo: formNombreEquipo.trim(),
         legajo: LEGAJO_ACTUAL,
         updated_at: new Date().toISOString(),
       }
@@ -438,10 +459,38 @@ export default function WosPage() {
               onValueChange={setFormWo}
               isRequired
             />
-            <Input label="Cliente" value={formCliente} onValueChange={setFormCliente} />
+            <Select
+              label="Cliente"
+              selectedKeys={formCliente ? [formCliente] : []}
+              onSelectionChange={keys => setFormCliente(Array.from(keys)[0] || '')}
+              aria-label="Cliente"
+            >
+              {opcionesCliente.map(cliente => (
+                <SelectItem key={cliente}>{cliente}</SelectItem>
+              ))}
+            </Select>
+            <Input
+              label="ID"
+              placeholder="Ej. C000213"
+              value={formId}
+              onValueChange={setFormId}
+            />
             <Input label="N° de Serie" value={formSerie} onValueChange={setFormSerie} />
-            <Input label="Modelo" value={formModelo} onValueChange={setFormModelo} />
-            <Input label="Site" value={formSite} onValueChange={setFormSite} />
+            <Select
+              label="Modelo"
+              selectedKeys={formModelo ? [formModelo] : []}
+              onSelectionChange={keys => setFormModelo(Array.from(keys)[0] || '')}
+              aria-label="Modelo"
+            >
+              {MODELOS_MANUALES.map(modelo => (
+                <SelectItem key={modelo}>{modelo}</SelectItem>
+              ))}
+            </Select>
+            <Input
+              label="Nombre de Agencia"
+              value={formNombreEquipo}
+              onValueChange={setFormNombreEquipo}
+            />
             <Input
               label="Fecha"
               type="date"
