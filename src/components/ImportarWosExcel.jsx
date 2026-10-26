@@ -2,7 +2,7 @@ import { useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
-import { excelFechaAString, excelHoraAString, normalizarEncabezado } from '../lib/excel'
+import { excelFechaAString, excelHoraAString, normalizarEncabezado, mesAISO } from '../lib/excel'
 import { LEGAJO_ACTUAL } from '../lib/wosConfig'
 import {
   Card, CardBody, CardHeader, Divider,
@@ -148,7 +148,7 @@ export default function ImportarWosExcel({ userId, onImportado }) {
           vistas.set(clave, {
             user_id: userId,
             anio: texto(cruda.anio),
-            mes: texto(cruda.mes),
+            mes: mesAISO(cruda.mes),
             cliente: texto(cruda.cliente),
             serie: texto(cruda.serie),
             modelo: texto(cruda.modelo),

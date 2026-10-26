@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
 import { formatearFecha } from '../lib/date'
+import { formatMes } from '../lib/excel'
 import { LEGAJO_ACTUAL } from '../lib/wosConfig'
 import ImportarWosExcel from '../components/ImportarWosExcel'
 import AppShell from '../components/AppShell'
@@ -14,7 +15,7 @@ import {
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
   Alert as HeroAlert,
 } from '@heroui/react'
-import { Plus, X, Check } from 'lucide-react'
+import { Plus, X, Check, ArrowUp, ArrowDown } from 'lucide-react'
 
 function normalizar(texto) {
   return String(texto || '')
@@ -74,11 +75,35 @@ const MODELOS_MANUALES = [
   '6683-2000-8607',
 ]
 
+// Convierte la hora (texto libre del Excel: "9:05", "09:05:00", "3:00 PM") a minutos para ordenar
+function horaAMinutos(hora) {
+  const match = String(hora || '').trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*([ap])?\.?\s*m?\.?/i)
+  if (!match) return null
+  let horas = Number(match[1]) % 24
+  const sufijo = match[3]?.toLowerCase()
+  if (sufijo === 'p' && horas < 12) horas += 12
+  if (sufijo === 'a' && horas === 12) horas = 0
+  return horas * 60 + Number(match[2])
+}
+
+function compararHora(a, b) {
+  const ma = horaAMinutos(a)
+  const mb = horaAMinutos(b)
+  if (ma === null && mb === null) return 0
+  if (ma === null) return 1
+  if (mb === null) return -1
+  return ma - mb
+}
+
 function fechaEstado(fecha) {
   if (!fecha) return null
   const hoy = new Date().toISOString().slice(0, 10)
   if (fecha === hoy) return 'hoy'
   return fecha < hoy ? 'pasado' : 'futuro'
+}
+
+function hoyLima() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(new Date())
 }
 
 const CLASES_ESTADO = {
@@ -99,6 +124,9 @@ export default function WosPage() {
   const [campoBusqueda, setCampoBusqueda] = useState('todos')
   const [pagina, setPagina] = useState(1)
   const [tamanoPagina, setTamanoPagina] = useState(10)
+  const [ordenAscendente, setOrdenAscendente] = useState(false)
+  const [filtroHoy, setFiltroHoy] = useState(false)
+  const [filtroFecha, setFiltroFecha] = useState('')
 
   const [nuevoAbierto, setNuevoAbierto] = useState(false)
   const [formWo, setFormWo] = useState('')
@@ -177,21 +205,34 @@ export default function WosPage() {
 
   useEffect(() => { cargar() }, [cargar])
 
-  const wosFiltradas = (() => {
+  const wosFiltradas = useMemo(() => {
     const tokens = normalizar(busqueda).split(/\s+/).filter(Boolean)
-    if (!tokens.length) return wos
-    return wos.filter(w => {
-      const fuente = {
-        todos: [w.wo, w.codigo_equipo, w.distrito, w.serie],
-        wo: [w.wo],
-        id: [w.codigo_equipo],
-        distrito: [w.distrito],
-        serie: [w.serie],
-      }[campoBusqueda] || [w.wo, w.codigo_equipo, w.distrito, w.serie]
-      const campos = fuente.map(normalizar)
-      return tokens.every(token => campos.some(campo => campo.includes(token)))
+    let resultado = wos
+    if (tokens.length) {
+      resultado = resultado.filter(w => {
+        const fuente = {
+          todos: [w.wo, w.codigo_equipo, w.distrito, w.serie],
+          wo: [w.wo],
+          id: [w.codigo_equipo],
+          distrito: [w.distrito],
+          serie: [w.serie],
+        }[campoBusqueda] || [w.wo, w.codigo_equipo, w.distrito, w.serie]
+        const campos = fuente.map(normalizar)
+        return tokens.every(token => campos.some(campo => campo.includes(token)))
+      })
+    }
+    const fechaFiltro = filtroHoy ? hoyLima() : filtroFecha
+    if (fechaFiltro) {
+      resultado = resultado.filter(w => w.fecha === fechaFiltro)
+    }
+    return [...resultado].sort((a, b) => {
+      const cmpFecha = String(a.fecha || '').localeCompare(String(b.fecha || ''))
+      if (cmpFecha !== 0) return ordenAscendente ? cmpFecha : -cmpFecha
+      const cmpHora = compararHora(a.hora, b.hora)
+      if (cmpHora !== 0) return ordenAscendente ? cmpHora : -cmpHora
+      return String(a.wo || '').localeCompare(String(b.wo || ''))
     })
-  })()
+  }, [wos, busqueda, campoBusqueda, filtroHoy, filtroFecha, ordenAscendente])
 
   const totalPaginas = Math.max(1, Math.ceil(wosFiltradas.length / tamanoPagina))
   const paginaSegura = Math.min(pagina, totalPaginas)
@@ -200,7 +241,22 @@ export default function WosPage() {
     paginaSegura * tamanoPagina
   )
 
-  useEffect(() => { setPagina(1) }, [busqueda, tamanoPagina])
+  useEffect(() => { setPagina(1) }, [busqueda, tamanoPagina, filtroHoy, filtroFecha, ordenAscendente])
+
+  function alternarFiltroHoy() {
+    if (filtroHoy) {
+      setFiltroHoy(false)
+      setFiltroFecha('')
+    } else {
+      setFiltroHoy(true)
+      setFiltroFecha(hoyLima())
+    }
+  }
+
+  function limpiarFiltroFecha() {
+    setFiltroHoy(false)
+    setFiltroFecha('')
+  }
 
   function abrirNuevo() {
     setFormWo('')
@@ -341,14 +397,55 @@ export default function WosPage() {
           ))}
           <span className="ml-auto shrink-0 text-xs text-gray-500">{wosFiltradas.length} resultados</span>
         </div>
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="flat"
+            startContent={ordenAscendente ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+            onPress={() => setOrdenAscendente(v => !v)}
+            aria-label={ordenAscendente ? 'Ordenar más antiguas primero' : 'Ordenar más recientes primero'}
+          >
+            {ordenAscendente ? 'Antiguas' : 'Recientes'}
+          </Button>
+          <Button
+            size="sm"
+            variant={filtroHoy ? 'solid' : 'flat'}
+            color="primary"
+            onPress={alternarFiltroHoy}
+            aria-pressed={filtroHoy}
+          >
+            Hoy
+          </Button>
+          <Input
+            size="sm"
+            type="date"
+            aria-label="Filtrar por fecha"
+            value={filtroFecha}
+            onValueChange={value => {
+              setFiltroFecha(value)
+              setFiltroHoy(false)
+            }}
+            className="w-40"
+            endContent={filtroFecha ? (
+              <button
+                type="button"
+                className="cursor-pointer text-default-400 hover:text-default-600"
+                onClick={limpiarFiltroFecha}
+                aria-label="Limpiar filtro de fecha"
+              >
+                <X size={14} />
+              </button>
+            ) : undefined}
+          />
+        </div>
       </div>
 
       {cargando ? (
         <p className="py-6 text-center text-sm text-gray-500">Cargando workorders...</p>
       ) : wosPagina.length === 0 ? (
         <p className="py-6 text-center text-sm text-gray-500">
-          {busqueda
-            ? 'Sin resultados para esa búsqueda.'
+          {busqueda || filtroHoy || filtroFecha
+            ? 'Sin WOs para este filtro.'
             : 'No hay workorders. Importa un Excel o toca + para crear una.'}
         </p>
       ) : (
@@ -359,7 +456,7 @@ export default function WosPage() {
                 key={wo.id}
                 title={wo.wo || '—'}
                 subtitle={[wo.cliente, wo.serie, wo.modelo].filter(Boolean).join(' · ')}
-                text={[wo.codigo_equipo, wo.site, wo.distrito].filter(Boolean).join(' · ')}
+                text={[wo.codigo_equipo, wo.nombre_equipo || 'Agencia', wo.distrito].filter(Boolean).join(' · ')}
                 after={
                   <div className="flex flex-col items-end gap-1">
                     {wo.fecha && (
@@ -367,7 +464,9 @@ export default function WosPage() {
                         {formatearFecha(wo.fecha)}
                       </Chip>
                     )}
-                    {wo.tipo_pm && <Chip outline className="px-2">{wo.tipo_pm}</Chip>}
+                    {wo.hora && (
+                      <span className="text-xs font-medium">{wo.hora}</span>
+                    )}
                   </div>
                 }
                 link
@@ -420,7 +519,7 @@ export default function WosPage() {
           </div>
           <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
             {detalle && CAMPOS_DETALLE.map(([etiqueta, campo]) => {
-              const valor = campo === '__fecha' ? formatearFecha(detalle?.fecha) : detalle?.[campo]
+              const valor = campo === '__fecha' ? formatearFecha(detalle?.fecha) : campo === 'mes' ? formatMes(detalle?.mes) : detalle?.[campo]
               if (!valor) return null
               return (
                 <div key={campo}>
