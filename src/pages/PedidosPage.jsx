@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
+import { recepcionarPedido, mensajeErrorInventario, codigoErrorInventario } from '../lib/inventario'
 import { useIsAdmin } from '../hooks/usePermissions'
 import { formatearFecha, formatearFechaHora } from '../lib/date'
 import PersonasPedidos from '../components/pedidos/PersonasPedidos'
@@ -428,140 +429,46 @@ export default function PedidosPage() {
       return
     }
 
-    const ahora = new Date().toISOString()
-    const personaRec = personas.find(p => p.id === recepcionPorId) || null
-    const personaEnt = personas.find(p => p.id === entregaPorId) || null
-    const ownerUserId = pedido.user_id || userId
-
     setConfirmandoRecepcion(true)
     setErrorRecepcion(null)
 
     try {
-      // 1. Pasar todo el pedido al inventario personal (almacén)
-      for (const item of pedido.items) {
-        const pn = item.repuesto?.part_number
-        if (!pn) continue
-
-        const { data: existing } = await supabase
-          .from('warehouse_items')
-          .select('*')
-          .eq('user_id', ownerUserId)
-          .eq('part_number', pn)
-          .maybeSingle()
-
-        if (existing) {
-          const nuevaCantidad = existing.quantity + (item.quantity ?? 1)
-          const { error } = await supabase
-            .from('warehouse_items')
-            .update({ quantity: nuevaCantidad, updated_at: ahora })
-            .eq('id', existing.id)
-          if (error) throw error
-
-          await db.warehouseItems.filter(i => i.idRemoto === existing.id).modify({ quantity: nuevaCantidad })
-        } else {
-          const { data: nuevo, error } = await supabase
-            .from('warehouse_items')
-            .insert({ user_id: ownerUserId, part_number: pn, quantity: item.quantity ?? 1 })
-            .select('*')
-            .single()
-          if (error) throw error
-
-          await db.warehouseItems.add({
-            idRemoto: nuevo.id,
-            userId: ownerUserId,
-            partNumber: pn,
-            nombre: item.repuesto?.nombre || '',
-            quantity: item.quantity ?? 1,
-            createdAt: nuevo.created_at,
-            updatedAt: ahora,
-          })
-        }
-
-        const { error: errTx } = await supabase.from('warehouse_transactions').insert({
-          user_id: ownerUserId,
-          part_number: pn,
-          quantity: item.quantity ?? 1,
-          type: 'IN',
-          source_type: 'ORDER',
-          source_id: pedido.id,
-          site: pedido.site || '',
-          work_order: pedido.wo || '',
-        })
-        if (errTx) throw errTx
-      }
-
-      // 2. Crear lista "Uso de repuestos - {WO}"
-      const nombreLista = `Uso de repuestos - ${pedido.wo || String(pedido.id).slice(0, 8)}`
-      const { data: lista, error: errLista } = await supabase
-        .from('spare_part_lists')
-        .insert({
-          user_id: ownerUserId,
-          name: nombreLista,
-          site: pedido.site || '',
-          work_order: pedido.wo || '',
-        })
-        .select('*')
-        .single()
-
-      if (errLista) throw errLista
-
-      const listaItems = pedido.items
-        .filter(i => i.spare_part_id)
-        .map(i => ({
-          list_id: lista.id,
-          spare_part_id: i.spare_part_id,
-          quantity: i.quantity ?? 1,
-        }))
-
-      if (listaItems.length) {
-        const { error: errItemsLista } = await supabase
-          .from('spare_part_list_items')
-          .insert(listaItems)
-        if (errItemsLista) throw errItemsLista
-      }
+      // Ingreso al almacén, lista "Uso de repuestos" y cambio de estado en una sola operación
+      const resultado = await recepcionarPedido({
+        pedidoId: pedido.id,
+        recepcionadoPorId: recepcionPorId === 'ninguno' ? null : recepcionPorId,
+        entregadoPorId: entregaPorId === 'ninguno' ? null : entregaPorId,
+      })
+      const { lista, item_count: itemCount, recepcionado_at: recepcionadoAt } = resultado
+      const recepcionadoPorNombre = resultado.recepcionado_por_nombre || ''
+      const entregadoPorNombre = resultado.entregado_por_nombre || ''
 
       await db.sparePartLists.add({
         idRemoto: lista.id,
-        userId: ownerUserId,
-        name: nombreLista,
-        site: pedido.site || '',
-        workOrder: pedido.wo || '',
-        itemCount: listaItems.length,
+        userId: lista.user_id,
+        name: lista.name,
+        site: lista.site || '',
+        workOrder: lista.work_order || '',
+        itemCount,
         inventorySynced: false,
         inventorySyncedAt: null,
         creadoEn: lista.created_at,
       })
 
-      // 3. Marcar el pedido como recepcionado
-      const { error: errUpd } = await supabase
-        .from('pedidos')
-        .update({
-          estado: 'recepcionado',
-          recepcionado_por_id: personaRec?.id || null,
-          recepcionado_por_nombre: personaRec?.nombre || '',
-          entregado_por_id: personaEnt?.id || null,
-          entregado_por_nombre: personaEnt?.nombre || '',
-          recepcionado_at: ahora,
-          updated_at: ahora,
-        })
-        .eq('id', pedido.id)
-
-      if (errUpd) throw errUpd
-
       await db.pedidos.filter(p => p.idRemoto === pedido.id).modify({
         estado: 'recepcionado',
-        recepcionadoPorNombre: personaRec?.nombre || '',
-        entregadoPorNombre: personaEnt?.nombre || '',
-        recepcionadoAt: ahora,
+        recepcionadoPorNombre,
+        entregadoPorNombre,
+        recepcionadoAt,
       })
 
       setPedidos(prev => prev.map(p => p.id === pedido.id
         ? {
             ...p,
             estado: 'recepcionado',
-            recepcionado_por_nombre: personaRec?.nombre || '',
-            entregado_por_nombre: personaEnt?.nombre || '',
-            recepcionado_at: ahora,
+            recepcionado_por_nombre: recepcionadoPorNombre,
+            entregado_por_nombre: entregadoPorNombre,
+            recepcionado_at: recepcionadoAt,
           }
         : p
       ))
@@ -570,13 +477,17 @@ export default function PedidosPage() {
       setPedidoRecepcion(null)
       setMensaje({
         color: 'success',
-        texto: `Pedido recepcionado: inventario actualizado y lista "${nombreLista}" creada.`,
+        texto: `Pedido recepcionado: inventario actualizado y lista "${lista.name}" creada.`,
       })
     } catch (e) {
-      setErrorRecepcion(
-        e.message ||
-        'Ocurrió un error durante la recepción. Revisa el inventario y las listas antes de reintentar.'
-      )
+      if (codigoErrorInventario(e) === 'PEDIDO_YA_RECEPCIONADO') {
+        setRecepcionAbierta(false)
+        setPedidoRecepcion(null)
+        setMensaje({ color: 'warning', texto: mensajeErrorInventario(e) })
+        cargarPedidos()
+        return
+      }
+      setErrorRecepcion(mensajeErrorInventario(e, 'Ocurrió un error durante la recepción. No se aplicó ningún cambio.'))
     } finally {
       setConfirmandoRecepcion(false)
     }

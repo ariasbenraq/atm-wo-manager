@@ -3,6 +3,9 @@ import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
 import {
+  ajustarStock, fijarStock, eliminarItemAlmacen, mensajeErrorInventario, cantidadConSigno,
+} from '../lib/inventario'
+import {
   Input, Button, Chip,
   ScrollShadow, Alert as HeroAlert,
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
@@ -25,6 +28,8 @@ export default function AlmacenPage() {
   const [ajustePartNumber, setAjustePartNumber] = useState('')
   const [ajusteTipo, setAjusteTipo] = useState('IN')
   const [ajusteCantidad, setAjusteCantidad] = useState('1')
+  const [ajusteMotivo, setAjusteMotivo] = useState('')
+  const [ajusteWo, setAjusteWo] = useState('')
   const [guardandoAjuste, setGuardandoAjuste] = useState(false)
   const [ajusteRepuestos, setAjusteRepuestos] = useState([])
   const [ajusteRepuestosCargando, setAjusteRepuestosCargando] = useState(false)
@@ -35,10 +40,12 @@ export default function AlmacenPage() {
 
   const [itemEditando, setItemEditando] = useState(null)
   const [editCantidad, setEditCantidad] = useState('1')
+  const [editMotivo, setEditMotivo] = useState('')
   const [guardandoEdit, setGuardandoEdit] = useState(false)
 
   const [itemEliminando, setItemEliminando] = useState(null)
   const [eliminando, setEliminando] = useState(false)
+  const [moviendo, setMoviendo] = useState(() => new Set())
 
   const [itemHistorial, setItemHistorial] = useState(null)
   const [historialTransacciones, setHistorialTransacciones] = useState([])
@@ -111,79 +118,67 @@ export default function AlmacenPage() {
       )
     : itemsConStock
 
+  // Refleja en pantalla y en Dexie el saldo que devolvió el servidor
+  async function aplicarResultado(partNumber, quantity) {
+    const ahora = new Date().toISOString()
+    if (!items.some(i => i.part_number === partNumber)) {
+      await cargar()
+      return
+    }
+    setItems(prev => prev.map(i =>
+      i.part_number === partNumber ? { ...i, quantity, updated_at: ahora } : i
+    ))
+    await db.warehouseItems.filter(i => i.partNumber === partNumber).modify({ quantity, updatedAt: ahora })
+  }
+
   async function ajustarInventario() {
     if (!userId) return
     const cantidad = parseInt(ajusteCantidad, 10)
     if (!cantidad || cantidad < 1) return
+    const partNumber = ajustePartNumber.trim()
 
     setGuardandoAjuste(true)
     try {
-      const delta = ajusteTipo === 'OUT' ? -cantidad : cantidad
-
-      const { data: existing } = await supabase
-        .from('warehouse_items')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('part_number', ajustePartNumber.trim())
-        .maybeSingle()
-
-      if (existing) {
-        const nuevaCantidad = Math.max(0, existing.quantity + delta)
-        const { error } = await supabase
-          .from('warehouse_items')
-          .update({ quantity: nuevaCantidad, updated_at: new Date().toISOString() })
-          .eq('id', existing.id)
-
-        if (error) throw error
-
-        setItems(prev => prev.map(i =>
-          i.id === existing.id ? { ...i, quantity: nuevaCantidad, updated_at: new Date().toISOString() } : i
-        ))
-
-        await db.warehouseItems.filter(i => i.idRemoto === existing.id).modify({ quantity: nuevaCantidad })
-      } else {
-        if (ajusteTipo === 'OUT') {
-          setMensaje({ color: 'warning', texto: 'No puedes retirar un repuesto que no está en el almacén.' })
-          return
-        }
-        const { data, error } = await supabase
-          .from('warehouse_items')
-          .insert({ user_id: userId, part_number: ajustePartNumber.trim(), quantity: cantidad })
-          .select('*')
-          .single()
-
-        if (error) throw error
-
-        setItems(prev => [...prev, data])
-
-        await db.warehouseItems.add({
-          idRemoto: data.id,
-          userId: data.user_id,
-          partNumber: data.part_number,
-          quantity: data.quantity,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at,
-        })
-      }
-
-      await supabase
-        .from('warehouse_transactions')
-        .insert({
-          user_id: userId,
-          part_number: ajustePartNumber.trim(),
-          quantity: cantidad,
-          type: ajusteTipo,
-          source_type: 'WAREHOUSE',
-        })
+      const resultado = await ajustarStock({
+        partNumber,
+        tipo: ajusteTipo,
+        cantidad,
+        motivo: ajusteMotivo.trim(),
+        wo: ajusteWo.trim(),
+      })
+      await aplicarResultado(resultado.part_number, resultado.quantity)
 
       setAjustando(false)
       setAjustePartNumber('')
       setAjusteCantidad('1')
-      setMensaje({ color: 'success', texto: `Inventario actualizado: ${ajusteTipo === 'IN' ? '+' : '-'}${cantidad} ${ajustePartNumber.trim()}` })
+      setAjusteMotivo('')
+      setAjusteWo('')
+      setMensaje({ color: 'success', texto: `Inventario actualizado: ${ajusteTipo === 'IN' ? '+' : '-'}${cantidad} ${partNumber}` })
     } catch (e) {
-      setMensaje({ color: 'danger', texto: e.message || 'Error al ajustar inventario.' })
+      setMensaje({ color: 'danger', texto: mensajeErrorInventario(e) })
     } finally {
       setGuardandoAjuste(false)
+    }
+  }
+
+  async function moverUno(item, delta) {
+    if (moviendo.has(item.part_number)) return
+    setMoviendo(prev => new Set(prev).add(item.part_number))
+    try {
+      const resultado = await ajustarStock({
+        partNumber: item.part_number,
+        tipo: delta > 0 ? 'IN' : 'OUT',
+        cantidad: 1,
+      })
+      await aplicarResultado(resultado.part_number, resultado.quantity)
+    } catch (e) {
+      setMensaje({ color: 'danger', texto: mensajeErrorInventario(e) })
+    } finally {
+      setMoviendo(prev => {
+        const siguiente = new Set(prev)
+        siguiente.delete(item.part_number)
+        return siguiente
+      })
     }
   }
 
@@ -211,38 +206,21 @@ export default function AlmacenPage() {
   async function editarItem() {
     if (!itemEditando) return
     const cantidad = parseInt(editCantidad, 10)
-    if (isNaN(cantidad) || cantidad < 0) return
+    if (isNaN(cantidad) || cantidad < 0 || !editMotivo.trim()) return
 
     setGuardandoEdit(true)
     try {
-      const delta = cantidad - itemEditando.quantity
-      const { error } = await supabase
-        .from('warehouse_items')
-        .update({ quantity: cantidad, updated_at: new Date().toISOString() })
-        .eq('id', itemEditando.id)
-
-      if (error) throw error
-
-      setItems(prev => prev.map(i =>
-        i.id === itemEditando.id ? { ...i, quantity: cantidad, updated_at: new Date().toISOString() } : i
-      ))
-
-      await db.warehouseItems.filter(i => i.idRemoto === itemEditando.id).modify({ quantity: cantidad })
-
-      if (delta !== 0) {
-        await supabase.from('warehouse_transactions').insert({
-          user_id: userId,
-          part_number: itemEditando.part_number,
-          quantity: Math.abs(delta),
-          type: delta > 0 ? 'IN' : 'OUT',
-          source_type: 'WAREHOUSE',
-        })
-      }
+      const resultado = await fijarStock({
+        partNumber: itemEditando.part_number,
+        cantidad,
+        motivo: editMotivo.trim(),
+      })
+      await aplicarResultado(resultado.part_number, resultado.quantity)
 
       setItemEditando(null)
       setMensaje({ color: 'success', texto: `${itemEditando.nombre || itemEditando.part_number} actualizado a ${cantidad}` })
     } catch (e) {
-      setMensaje({ color: 'danger', texto: e.message || 'Error al actualizar.' })
+      setMensaje({ color: 'danger', texto: mensajeErrorInventario(e, 'Error al actualizar.') })
     } finally {
       setGuardandoEdit(false)
     }
@@ -252,26 +230,15 @@ export default function AlmacenPage() {
     if (!itemEliminando) return
     setEliminando(true)
     try {
-      const { error } = await supabase
-        .from('warehouse_items')
-        .delete()
-        .eq('id', itemEliminando.id)
+      await eliminarItemAlmacen(itemEliminando.part_number)
 
-      if (error) throw error
-
-      await supabase
-        .from('warehouse_transactions')
-        .delete()
-        .eq('user_id', userId)
-        .eq('part_number', itemEliminando.part_number)
-
-      setItems(prev => prev.filter(i => i.id !== itemEliminando.id))
-      await db.warehouseItems.filter(i => i.idRemoto === itemEliminando.id).delete()
+      setItems(prev => prev.filter(i => i.part_number !== itemEliminando.part_number))
+      await db.warehouseItems.filter(i => i.partNumber === itemEliminando.part_number).delete()
 
       setItemEliminando(null)
       setMensaje({ color: 'success', texto: `${itemEliminando.nombre || itemEliminando.part_number} eliminado del almacén.` })
     } catch (e) {
-      setMensaje({ color: 'danger', texto: e.message || 'Error al eliminar.' })
+      setMensaje({ color: 'danger', texto: mensajeErrorInventario(e, 'Error al eliminar.') })
     } finally {
       setEliminando(false)
     }
@@ -332,6 +299,11 @@ export default function AlmacenPage() {
     return 'warning'
   }
 
+  function cantidadTexto(tx) {
+    const n = cantidadConSigno(tx)
+    return n > 0 ? `+${n}` : String(n)
+  }
+
   function fechaCorta(fecha) {
     if (!fecha) return '-'
     return new Date(fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -379,6 +351,8 @@ export default function AlmacenPage() {
               setAjustePartNumber('')
               setAjusteTipo('IN')
               setAjusteCantidad('1')
+              setAjusteMotivo('')
+              setAjusteWo('')
               setAjusteRepuestos([])
               setAjusteRepuestosCargando(true)
               setAjustando(true)
@@ -456,7 +430,7 @@ export default function AlmacenPage() {
                       variant="light"
                       radius="lg"
                       className="min-w-8 h-8 text-default-400 hover:text-primary"
-                      onPress={() => { setItemEditando(item); setEditCantidad(String(item.quantity)) }}
+                      onPress={() => { setItemEditando(item); setEditCantidad(String(item.quantity)); setEditMotivo('') }}
                     >
                       <Pencil size={15} />
                     </Button>
@@ -475,6 +449,7 @@ export default function AlmacenPage() {
                       size="sm"
                       variant="light"
                       radius="lg"
+                      isDisabled={item.quantity > 0}
                       className="min-w-8 h-8 text-default-400 hover:text-danger"
                       onPress={() => setItemEliminando(item)}
                     >
@@ -488,21 +463,8 @@ export default function AlmacenPage() {
                       variant="light"
                       radius="lg"
                       className="min-w-8 h-8 text-default-400 hover:text-danger"
-                      isDisabled={item.quantity <= 0}
-                      onPress={async () => {
-                        const nuevaCantidad = Math.max(0, item.quantity - 1)
-                        const { error } = await supabase
-                          .from('warehouse_items')
-                          .update({ quantity: nuevaCantidad, updated_at: new Date().toISOString() })
-                          .eq('id', item.id)
-                        if (!error) {
-                          setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: nuevaCantidad } : i))
-                          await db.warehouseItems.filter(i => i.idRemoto === item.id).modify({ quantity: nuevaCantidad })
-                          await supabase.from('warehouse_transactions').insert({
-                            user_id: userId, part_number: item.part_number, quantity: 1, type: 'OUT', source_type: 'WAREHOUSE',
-                          })
-                        }
-                      }}
+                      isDisabled={item.quantity <= 0 || moviendo.has(item.part_number)}
+                      onPress={() => moverUno(item, -1)}
                     >
                       <Minus size={15} />
                     </Button>
@@ -511,21 +473,9 @@ export default function AlmacenPage() {
                       size="sm"
                       variant="light"
                       radius="lg"
+                      isDisabled={moviendo.has(item.part_number)}
                       className="min-w-8 h-8 text-default-400 hover:text-primary"
-                      onPress={async () => {
-                        const nuevaCantidad = item.quantity + 1
-                        const { error } = await supabase
-                          .from('warehouse_items')
-                          .update({ quantity: nuevaCantidad, updated_at: new Date().toISOString() })
-                          .eq('id', item.id)
-                        if (!error) {
-                          setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: nuevaCantidad } : i))
-                          await db.warehouseItems.filter(i => i.idRemoto === item.id).modify({ quantity: nuevaCantidad })
-                          await supabase.from('warehouse_transactions').insert({
-                            user_id: userId, part_number: item.part_number, quantity: 1, type: 'IN', source_type: 'WAREHOUSE',
-                          })
-                        }
-                      }}
+                      onPress={() => moverUno(item, 1)}
                     >
                       <Plus size={15} />
                     </Button>
@@ -570,21 +520,8 @@ export default function AlmacenPage() {
                         variant="light"
                         radius="lg"
                         className="min-w-7 h-7 text-default-400 hover:text-danger"
-                        isDisabled={item.quantity <= 0}
-                        onPress={async () => {
-                          const nuevaCantidad = Math.max(0, item.quantity - 1)
-                          const { error } = await supabase
-                            .from('warehouse_items')
-                            .update({ quantity: nuevaCantidad, updated_at: new Date().toISOString() })
-                            .eq('id', item.id)
-                          if (!error) {
-                            setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: nuevaCantidad } : i))
-                            await db.warehouseItems.filter(i => i.idRemoto === item.id).modify({ quantity: nuevaCantidad })
-                            await supabase.from('warehouse_transactions').insert({
-                              user_id: userId, part_number: item.part_number, quantity: 1, type: 'OUT', source_type: 'WAREHOUSE',
-                            })
-                          }
-                        }}
+                        isDisabled={item.quantity <= 0 || moviendo.has(item.part_number)}
+                        onPress={() => moverUno(item, -1)}
                       >
                         <Minus size={14} />
                       </Button>
@@ -593,21 +530,9 @@ export default function AlmacenPage() {
                         size="sm"
                         variant="light"
                         radius="lg"
+                        isDisabled={moviendo.has(item.part_number)}
                         className="min-w-7 h-7 text-default-400 hover:text-primary"
-                        onPress={async () => {
-                          const nuevaCantidad = item.quantity + 1
-                          const { error } = await supabase
-                            .from('warehouse_items')
-                            .update({ quantity: nuevaCantidad, updated_at: new Date().toISOString() })
-                            .eq('id', item.id)
-                          if (!error) {
-                            setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: nuevaCantidad } : i))
-                            await db.warehouseItems.filter(i => i.idRemoto === item.id).modify({ quantity: nuevaCantidad })
-                            await supabase.from('warehouse_transactions').insert({
-                              user_id: userId, part_number: item.part_number, quantity: 1, type: 'IN', source_type: 'WAREHOUSE',
-                            })
-                          }
-                        }}
+                        onPress={() => moverUno(item, 1)}
                       >
                         <Plus size={14} />
                       </Button>
@@ -619,7 +544,7 @@ export default function AlmacenPage() {
                         variant="light"
                         radius="lg"
                         className="min-w-7 h-7 text-default-400 hover:text-primary"
-                        onPress={() => { setItemEditando(item); setEditCantidad(String(item.quantity)) }}
+                        onPress={() => { setItemEditando(item); setEditCantidad(String(item.quantity)); setEditMotivo('') }}
                       >
                         <Pencil size={14} />
                       </Button>
@@ -638,6 +563,7 @@ export default function AlmacenPage() {
                         size="sm"
                         variant="light"
                         radius="lg"
+                        isDisabled={item.quantity > 0}
                         className="min-w-7 h-7 text-default-400 hover:text-danger"
                         onPress={() => setItemEliminando(item)}
                       >
@@ -685,7 +611,6 @@ export default function AlmacenPage() {
               >
                 <SelectItem key="IN">Ingreso (IN)</SelectItem>
                 <SelectItem key="OUT">Salida (OUT)</SelectItem>
-                <SelectItem key="ADJUSTMENT">Ajuste manual</SelectItem>
               </Select>
               <Input
                 label="Cantidad"
@@ -696,6 +621,24 @@ export default function AlmacenPage() {
                 variant="bordered"
                 radius="lg"
               />
+              <Input
+                label="WO (opcional)"
+                value={ajusteWo}
+                onValueChange={setAjusteWo}
+                variant="bordered"
+                radius="lg"
+              />
+              <Input
+                label="Motivo (opcional)"
+                placeholder="Ej.: devolución, préstamo a otro CE"
+                value={ajusteMotivo}
+                onValueChange={setAjusteMotivo}
+                variant="bordered"
+                radius="lg"
+              />
+              <p className="text-xs text-default-400">
+                Para corregir la cantidad por un conteo físico usa Editar en el repuesto.
+              </p>
             </ModalBody>
             <ModalFooter>
               <Button variant="light" onPress={() => setAjustando(false)}>
@@ -734,7 +677,14 @@ export default function AlmacenPage() {
                   <div className="divide-y divide-default-100 max-h-[50vh] overflow-y-auto">
                     {transacciones.map(tx => (
                       <div key={tx.id} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-2 items-center min-w-[450px]">
-                        <span className="text-sm font-medium text-default-900 truncate">{tx.part_number}</span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-default-900 truncate">{tx.part_number}</p>
+                          {(tx.work_order || tx.motivo) && (
+                            <p className="text-[11px] text-default-400 truncate">
+                              {[tx.work_order, tx.motivo].filter(Boolean).join(' · ')}
+                            </p>
+                          )}
+                        </div>
                         <Chip
                           color={chipColor(tx.type)}
                           variant="flat"
@@ -745,7 +695,7 @@ export default function AlmacenPage() {
                           {tx.type}
                         </Chip>
                         <span className="font-mono text-sm text-default-700 tabular-nums text-center">
-                          {tx.type === 'OUT' ? '-' : '+'}{tx.quantity}
+                          {cantidadTexto(tx)}
                         </span>
                         <span className="text-xs text-default-400 text-right">
                           {fechaCorta(tx.created_at)}
@@ -810,6 +760,18 @@ export default function AlmacenPage() {
                   <Plus size={16} />
                 </Button>
               </div>
+              <Input
+                label="Motivo"
+                placeholder="Ej.: conteo físico"
+                value={editMotivo}
+                onValueChange={setEditMotivo}
+                variant="bordered"
+                radius="lg"
+                isRequired
+              />
+              <p className="text-xs text-default-400">
+                Se registra como ajuste en el historial.
+              </p>
             </ModalBody>
             <ModalFooter>
               <Button variant="light" onPress={() => setItemEditando(null)}>
@@ -818,7 +780,7 @@ export default function AlmacenPage() {
               <Button
                 color="primary"
                 onPress={editarItem}
-                isDisabled={guardandoEdit || editCantidad === '' || parseInt(editCantidad, 10) < 0}
+                isDisabled={guardandoEdit || editCantidad === '' || parseInt(editCantidad, 10) < 0 || !editMotivo.trim()}
                 isLoading={guardandoEdit}
               >
                 Guardar
@@ -834,7 +796,7 @@ export default function AlmacenPage() {
             <ModalHeader className="text-danger">Eliminar del almacén</ModalHeader>
             <ModalBody>
               <p className="text-sm text-default-600">
-                ¿Eliminar <span className="font-semibold">{itemEliminando?.nombre || itemEliminando?.part_number}</span> del almacén? Se eliminarán también todas las transacciones asociadas.
+                ¿Eliminar <span className="font-semibold">{itemEliminando?.nombre || itemEliminando?.part_number}</span> del almacén? Su historial de movimientos se conserva.
               </p>
               {itemEliminando?.nombre && (
                 <p className="font-mono text-xs text-default-400">{itemEliminando?.part_number}</p>
@@ -892,11 +854,15 @@ export default function AlmacenPage() {
                                 {tx.type}
                               </Chip>
                               <span className="font-mono text-sm text-default-700 tabular-nums">
-                                {tx.type === 'OUT' ? '-' : '+'}{tx.quantity}
+                                {cantidadTexto(tx)}
+                                {tx.balance_after != null && (
+                                  <span className="ml-1 text-[11px] text-default-400">→ {tx.balance_after}</span>
+                                )}
                               </span>
                               <span className="text-xs text-default-500">
                                 {tx.work_order || '-'}
                                 {tx.site ? ` · ${tx.site}` : ''}
+                                {tx.motivo && <span className="block text-[11px] text-default-400">{tx.motivo}</span>}
                               </span>
                               <span className="text-xs text-default-400 text-right whitespace-nowrap">
                                 {fechaCorta(tx.created_at)}

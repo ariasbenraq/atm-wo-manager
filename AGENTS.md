@@ -66,6 +66,7 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 | `src/lib/sync.js` | Supabase → Dexie sync + merge logic |
 | `src/lib/date.js` | Date formatting helpers (DD/MM/YYYY) |
 | `src/lib/excel.js` | Shared SheetJS helpers: fecha/hora parsing + header normalizer |
+| `src/lib/inventario.js` | Wrappers of the inventory RPCs (`ajustar_stock`, `fijar_stock`, `eliminar_item_almacen`, `recepcionar_pedido`, `consumir_lista`, `revertir_consumo_lista`) + Spanish error messages |
 | `src/lib/wosConfig.js` | `LEGAJO_ACTUAL` ('PE101L84') — legajo filter for Wo's ingestion/view |
 | `src/hooks/usePermissions.js` | Roles/permissions (`useIsAdmin`, `useCan`) |
 | `src/context/AppContext.jsx` | Shared state, auth, sync orchestration, CRUD |
@@ -86,7 +87,8 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 - **No testing infrastructure** — adding one requires setup from scratch
 - **`.env` is tracked in git** — contains live Supabase dev keys (public anon key)
 - **Supabase tables in use:** `tareas`, `mis_tareas`, `repuestos`, `personal_cmca`, `personal_cmpd`, `motivos_aqr`, `profiles`, `spare_part_lists`, `spare_part_list_items`, `warehouse_items`, `warehouse_transactions`, `pedidos`, `pedido_items`, `pedidos_personas`, `workorders`
-- **RLS:** `repuestos` write is admin-only; lists/items/warehouse/pedidos/workorders are owner-or-admin; `pedidos_personas` is read-for-authenticated/write-admin-only; `profiles` is world-readable (pre-auth username lookup — username enumeration is a known tradeoff)
+- **RLS:** `repuestos` write is admin-only; lists/items/pedidos/workorders are owner-or-admin; warehouse tables are read-only for clients (owner, or admin for reports); `pedidos_personas` is read-for-authenticated/write-admin-only; `profiles` is world-readable (pre-auth username lookup — username enumeration is a known tradeoff)
 - **Excel import** expects columns: `WO`, `MODELO`, `SERIE`, `ID`, `NOMBRE`, `DIRECCION`, `DISTRITO`, `FECHA`, `HORA`, `CE`. Duplicate WO values in the file are rejected without saving anything.
 - **Wo's Excel import** (`ImportarWosExcel`): headers matched after accent/space normalization; only rows matching `LEGAJO_ACTUAL` ('PE101L84') are stored (comparison strips spaces/symbols and uppercases; on zero matches the report lists the legajo values found in the file); in-file duplicate key is **WO + Fecha** (a WO can be reprogrammed to another date); upserts to Supabase on `(user_id, wo, fecha)`. Multi-sheet workbooks: sheet picker with all tabs pre-selected. The Wo's page is the source of truth for WO selection when creating pedidos.
+- **Inventory:** never write `warehouse_items` / `warehouse_transactions` from the client — every stock change goes through the RPCs in `supabase/migrations/20261027_inventario_rpc.sql` (atomic, owner-or-admin, row locks). History is append-only: IN/OUT quantities are positive, ADJUSTMENT is signed; `v_stock_diferencias` must stay empty. A list with `inventory_synced` is locked until `revertir_consumo_lista`.
 - **Deploy:** push to `produccion` triggers Docker image build → GHCR → Portainer. `.env` values are injected as Docker build args / GH Actions secrets.
