@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
+import { recepcionarPedido, mensajeErrorInventario, codigoErrorInventario } from '../lib/inventario'
 import { useIsAdmin } from '../hooks/usePermissions'
-import { formatearFechaHora } from '../lib/date'
+import { formatearFecha, formatearFechaHora } from '../lib/date'
 import PersonasPedidos from '../components/pedidos/PersonasPedidos'
 import {
   Card, CardBody, CardHeader, Divider,
@@ -26,6 +27,39 @@ function agruparItemsPorPedido(items) {
   return porPedido
 }
 
+function hoyLima() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(new Date())
+}
+
+// 0 = hoy, 1 = días posteriores, 2 = días anteriores o sin fecha
+function rangoFecha(fecha, hoy) {
+  if (!fecha) return 2
+  if (fecha === hoy) return 0
+  return fecha > hoy ? 1 : 2
+}
+
+// Hoy primero, luego días posteriores (ascendente) y al final los anteriores (más reciente primero).
+// Una WO reprogramada aparece una sola vez, con su fecha más relevante.
+function ordenarWosCatalogo(lista) {
+  const hoy = hoyLima()
+  const ordenadas = [...lista].sort((a, b) => {
+    const ra = rangoFecha(a.fecha, hoy)
+    const rb = rangoFecha(b.fecha, hoy)
+    if (ra !== rb) return ra - rb
+    const cmp = String(a.fecha || '').localeCompare(String(b.fecha || ''))
+    return ra === 2 ? -cmp : cmp
+  })
+  const vistas = new Set()
+  const unicas = []
+  for (const w of ordenadas) {
+    const wo = String(w.wo || '').trim()
+    if (!wo || vistas.has(wo)) continue
+    vistas.add(wo)
+    unicas.push({ ...w, wo })
+  }
+  return unicas
+}
+
 export default function PedidosPage() {
   const { session } = useApp()
   const userId = session?.user?.id
@@ -41,9 +75,11 @@ export default function PedidosPage() {
   const [personas, setPersonas] = useState([])
 
   const [nuevoAbierto, setNuevoAbierto] = useState(false)
+  const [woCatalogoKey, setWoCatalogoKey] = useState(null)
   const [formWo, setFormWo] = useState('')
   const [formIdAtm, setFormIdAtm] = useState('')
   const [formSite, setFormSite] = useState('')
+  const [formModelo, setFormModelo] = useState('')
   const [formDireccion, setFormDireccion] = useState('')
   const [itemsForm, setItemsForm] = useState([])
   const [itemRepuestoId, setItemRepuestoId] = useState('')
@@ -103,6 +139,7 @@ export default function PedidosPage() {
           wo: p.wo || '',
           idAtm: p.id_atm || '',
           site: p.site || '',
+          modelo: p.modelo || '',
           direccion: p.direccion || '',
           recepcionadoPorNombre: p.recepcionado_por_nombre || '',
           entregadoPorNombre: p.entregado_por_nombre || '',
@@ -141,6 +178,7 @@ export default function PedidosPage() {
           wo: p.wo || '',
           id_atm: p.idAtm || '',
           site: p.site || '',
+          modelo: p.modelo || '',
           direccion: p.direccion || '',
           recepcionado_por_nombre: p.recepcionadoPorNombre || '',
           entregado_por_nombre: p.entregadoPorNombre || '',
@@ -163,21 +201,10 @@ export default function PedidosPage() {
         supabase.from('repuestos').select('id, nombre, part_number').order('nombre'),
         supabase
           .from('workorders')
-          .select('wo, codigo_equipo, site, direccion, serie, distrito')
-          .order('fecha', { ascending: false }),
+          .select('wo, codigo_equipo, nombre_equipo, modelo, site, direccion, serie, distrito, fecha'),
       ])
       if (repRes.data) setRepuestos(repRes.data)
-      if (woRes.data) {
-        const vistas = new Set()
-        const unicas = []
-        for (const w of woRes.data) {
-          const wo = String(w.wo || '').trim()
-          if (!wo || vistas.has(wo)) continue
-          vistas.add(wo)
-          unicas.push(w)
-        }
-        setWosCatalogo(unicas)
-      }
+      if (woRes.data) setWosCatalogo(ordenarWosCatalogo(woRes.data))
       if (repRes.error || woRes.error) throw new Error('parcial')
     } catch {
       if (!repuestos.length) {
@@ -190,20 +217,17 @@ export default function PedidosPage() {
       }
       if (!wosCatalogo.length) {
         const local = await db.workorders.toArray()
-        const vistas = new Set()
-        const unicas = []
-        for (const w of local) {
-          const wo = String(w.wo || '').trim()
-          if (!wo || vistas.has(wo)) continue
-          vistas.add(wo)
-          unicas.push({
-            wo,
-            codigo_equipo: w.codigoEquipo || '',
-            site: w.site || '',
-            direccion: w.direccion || '',
-          })
-        }
-        setWosCatalogo(unicas)
+        setWosCatalogo(ordenarWosCatalogo(local.map(w => ({
+          wo: w.wo,
+          codigo_equipo: w.codigoEquipo || '',
+          nombre_equipo: w.nombreEquipo || '',
+          modelo: w.modelo || '',
+          site: w.site || '',
+          direccion: w.direccion || '',
+          serie: w.serie || '',
+          distrito: w.distrito || '',
+          fecha: w.fecha || '',
+        }))))
       }
     } finally {
       setCatalogosCargando(false)
@@ -225,9 +249,11 @@ export default function PedidosPage() {
   }
 
   function abrirNuevo() {
+    setWoCatalogoKey(null)
     setFormWo('')
     setFormIdAtm('')
     setFormSite('')
+    setFormModelo('')
     setFormDireccion('')
     setItemsForm([])
     setItemRepuestoId('')
@@ -238,11 +264,13 @@ export default function PedidosPage() {
   }
 
   function seleccionarWoCatalogo(woKey) {
+    setWoCatalogoKey(woKey)
     const wo = wosCatalogo.find(w => w.wo === woKey)
     if (!wo) return
     setFormWo(wo.wo || '')
     setFormIdAtm(wo.codigo_equipo || '')
-    setFormSite(wo.site || '')
+    setFormSite(wo.nombre_equipo || '')
+    setFormModelo(wo.modelo || '')
     setFormDireccion(wo.direccion || '')
   }
 
@@ -290,6 +318,7 @@ export default function PedidosPage() {
           wo: formWo.trim(),
           id_atm: formIdAtm.trim(),
           site: formSite.trim(),
+          modelo: formModelo.trim(),
           direccion: formDireccion.trim(),
         })
         .select('*')
@@ -334,6 +363,7 @@ export default function PedidosPage() {
         wo: pedido.wo || '',
         idAtm: pedido.id_atm || '',
         site: pedido.site || '',
+        modelo: pedido.modelo || '',
         direccion: pedido.direccion || '',
         recepcionadoPorNombre: '',
         entregadoPorNombre: '',
@@ -399,140 +429,46 @@ export default function PedidosPage() {
       return
     }
 
-    const ahora = new Date().toISOString()
-    const personaRec = personas.find(p => p.id === recepcionPorId) || null
-    const personaEnt = personas.find(p => p.id === entregaPorId) || null
-    const ownerUserId = pedido.user_id || userId
-
     setConfirmandoRecepcion(true)
     setErrorRecepcion(null)
 
     try {
-      // 1. Pasar todo el pedido al inventario personal (almacén)
-      for (const item of pedido.items) {
-        const pn = item.repuesto?.part_number
-        if (!pn) continue
-
-        const { data: existing } = await supabase
-          .from('warehouse_items')
-          .select('*')
-          .eq('user_id', ownerUserId)
-          .eq('part_number', pn)
-          .maybeSingle()
-
-        if (existing) {
-          const nuevaCantidad = existing.quantity + (item.quantity ?? 1)
-          const { error } = await supabase
-            .from('warehouse_items')
-            .update({ quantity: nuevaCantidad, updated_at: ahora })
-            .eq('id', existing.id)
-          if (error) throw error
-
-          await db.warehouseItems.filter(i => i.idRemoto === existing.id).modify({ quantity: nuevaCantidad })
-        } else {
-          const { data: nuevo, error } = await supabase
-            .from('warehouse_items')
-            .insert({ user_id: ownerUserId, part_number: pn, quantity: item.quantity ?? 1 })
-            .select('*')
-            .single()
-          if (error) throw error
-
-          await db.warehouseItems.add({
-            idRemoto: nuevo.id,
-            userId: ownerUserId,
-            partNumber: pn,
-            nombre: item.repuesto?.nombre || '',
-            quantity: item.quantity ?? 1,
-            createdAt: nuevo.created_at,
-            updatedAt: ahora,
-          })
-        }
-
-        const { error: errTx } = await supabase.from('warehouse_transactions').insert({
-          user_id: ownerUserId,
-          part_number: pn,
-          quantity: item.quantity ?? 1,
-          type: 'IN',
-          source_type: 'ORDER',
-          source_id: pedido.id,
-          site: pedido.site || '',
-          work_order: pedido.wo || '',
-        })
-        if (errTx) throw errTx
-      }
-
-      // 2. Crear lista "Uso de repuestos - {WO}"
-      const nombreLista = `Uso de repuestos - ${pedido.wo || String(pedido.id).slice(0, 8)}`
-      const { data: lista, error: errLista } = await supabase
-        .from('spare_part_lists')
-        .insert({
-          user_id: ownerUserId,
-          name: nombreLista,
-          site: pedido.site || '',
-          work_order: pedido.wo || '',
-        })
-        .select('*')
-        .single()
-
-      if (errLista) throw errLista
-
-      const listaItems = pedido.items
-        .filter(i => i.spare_part_id)
-        .map(i => ({
-          list_id: lista.id,
-          spare_part_id: i.spare_part_id,
-          quantity: i.quantity ?? 1,
-        }))
-
-      if (listaItems.length) {
-        const { error: errItemsLista } = await supabase
-          .from('spare_part_list_items')
-          .insert(listaItems)
-        if (errItemsLista) throw errItemsLista
-      }
+      // Ingreso al almacén, lista "Uso de repuestos" y cambio de estado en una sola operación
+      const resultado = await recepcionarPedido({
+        pedidoId: pedido.id,
+        recepcionadoPorId: recepcionPorId === 'ninguno' ? null : recepcionPorId,
+        entregadoPorId: entregaPorId === 'ninguno' ? null : entregaPorId,
+      })
+      const { lista, item_count: itemCount, recepcionado_at: recepcionadoAt } = resultado
+      const recepcionadoPorNombre = resultado.recepcionado_por_nombre || ''
+      const entregadoPorNombre = resultado.entregado_por_nombre || ''
 
       await db.sparePartLists.add({
         idRemoto: lista.id,
-        userId: ownerUserId,
-        name: nombreLista,
-        site: pedido.site || '',
-        workOrder: pedido.wo || '',
-        itemCount: listaItems.length,
+        userId: lista.user_id,
+        name: lista.name,
+        site: lista.site || '',
+        workOrder: lista.work_order || '',
+        itemCount,
         inventorySynced: false,
         inventorySyncedAt: null,
         creadoEn: lista.created_at,
       })
 
-      // 3. Marcar el pedido como recepcionado
-      const { error: errUpd } = await supabase
-        .from('pedidos')
-        .update({
-          estado: 'recepcionado',
-          recepcionado_por_id: personaRec?.id || null,
-          recepcionado_por_nombre: personaRec?.nombre || '',
-          entregado_por_id: personaEnt?.id || null,
-          entregado_por_nombre: personaEnt?.nombre || '',
-          recepcionado_at: ahora,
-          updated_at: ahora,
-        })
-        .eq('id', pedido.id)
-
-      if (errUpd) throw errUpd
-
       await db.pedidos.filter(p => p.idRemoto === pedido.id).modify({
         estado: 'recepcionado',
-        recepcionadoPorNombre: personaRec?.nombre || '',
-        entregadoPorNombre: personaEnt?.nombre || '',
-        recepcionadoAt: ahora,
+        recepcionadoPorNombre,
+        entregadoPorNombre,
+        recepcionadoAt,
       })
 
       setPedidos(prev => prev.map(p => p.id === pedido.id
         ? {
             ...p,
             estado: 'recepcionado',
-            recepcionado_por_nombre: personaRec?.nombre || '',
-            entregado_por_nombre: personaEnt?.nombre || '',
-            recepcionado_at: ahora,
+            recepcionado_por_nombre: recepcionadoPorNombre,
+            entregado_por_nombre: entregadoPorNombre,
+            recepcionado_at: recepcionadoAt,
           }
         : p
       ))
@@ -541,13 +477,17 @@ export default function PedidosPage() {
       setPedidoRecepcion(null)
       setMensaje({
         color: 'success',
-        texto: `Pedido recepcionado: inventario actualizado y lista "${nombreLista}" creada.`,
+        texto: `Pedido recepcionado: inventario actualizado y lista "${lista.name}" creada.`,
       })
     } catch (e) {
-      setErrorRecepcion(
-        e.message ||
-        'Ocurrió un error durante la recepción. Revisa el inventario y las listas antes de reintentar.'
-      )
+      if (codigoErrorInventario(e) === 'PEDIDO_YA_RECEPCIONADO') {
+        setRecepcionAbierta(false)
+        setPedidoRecepcion(null)
+        setMensaje({ color: 'warning', texto: mensajeErrorInventario(e) })
+        cargarPedidos()
+        return
+      }
+      setErrorRecepcion(mensajeErrorInventario(e, 'Ocurrió un error durante la recepción. No se aplicó ningún cambio.'))
     } finally {
       setConfirmandoRecepcion(false)
     }
@@ -616,6 +556,7 @@ export default function PedidosPage() {
                               {[
                                 pedido.id_atm && `ID: ${pedido.id_atm}`,
                                 pedido.site && `Site: ${pedido.site}`,
+                                pedido.modelo && `Modelo: ${pedido.modelo}`,
                                 `${(pedido.items || []).length} repuestos · ${totalUnidades(pedido)} uds.`,
                               ].filter(Boolean).join(' · ')}
                             </p>
@@ -680,17 +621,20 @@ export default function PedidosPage() {
           <ModalBody className="gap-3">
             <Autocomplete
               label="Cargar desde Wo's (opcional)"
-              placeholder="Busca por WO, código o site"
-              selectedKey={null}
+              placeholder="Busca por WO, ID o nombre de equipo"
+              selectedKey={woCatalogoKey}
               onSelectionChange={seleccionarWoCatalogo}
               isLoading={catalogosCargando}
               emptyContent="Sin workorders. Puedes ingresar los datos manualmente."
             >
               {wosCatalogo.map(w => (
-                <AutocompleteItem key={w.wo} textValue={`${w.wo} ${w.codigo_equipo || ''} ${w.site || ''} ${w.serie || ''}`}>
-                  <span className="text-sm font-medium">{w.wo}</span>
+                <AutocompleteItem key={w.wo} textValue={`${w.wo} ${w.codigo_equipo || ''} ${w.nombre_equipo || ''}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{w.wo}</span>
+                    {w.fecha && <span className="text-xs text-default-400">{formatearFecha(w.fecha)}</span>}
+                  </div>
                   <span className="text-xs text-default-400">
-                    {[w.codigo_equipo, w.site, w.serie, w.distrito].filter(Boolean).join(' · ')}
+                    {[w.codigo_equipo, w.nombre_equipo].filter(Boolean).join(' · ')}
                   </span>
                 </AutocompleteItem>
               ))}
@@ -699,7 +643,8 @@ export default function PedidosPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Input label="WO" placeholder="Manual o desde catálogo" value={formWo} onValueChange={setFormWo} />
               <Input label="ID ATM" placeholder="ID del cajero" value={formIdAtm} onValueChange={setFormIdAtm} />
-              <Input label="Site" placeholder="Nombre del site" value={formSite} onValueChange={setFormSite} />
+              <Input label="Site" placeholder="Nombre del equipo" value={formSite} onValueChange={setFormSite} />
+              <Input label="Modelo" placeholder="Modelo del equipo" value={formModelo} onValueChange={setFormModelo} />
               <Input label="Dirección" placeholder="Dirección del ATM" value={formDireccion} onValueChange={setFormDireccion} />
             </div>
 
@@ -874,6 +819,7 @@ export default function PedidosPage() {
               <p><span className="text-default-400">WO:</span> {pedidoDetalle?.wo || '—'}</p>
               <p><span className="text-default-400">ID ATM:</span> {pedidoDetalle?.id_atm || '—'}</p>
               <p><span className="text-default-400">Site:</span> {pedidoDetalle?.site || '—'}</p>
+              <p><span className="text-default-400">Modelo:</span> {pedidoDetalle?.modelo || '—'}</p>
               <p><span className="text-default-400">Dirección:</span> {pedidoDetalle?.direccion || '—'}</p>
               <p>
                 <span className="text-default-400">Estado:</span>{' '}

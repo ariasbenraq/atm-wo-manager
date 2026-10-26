@@ -52,3 +52,69 @@ export function normalizarEncabezado(texto) {
     .replace(/\s+/g, ' ')
     .trim()
 }
+
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic']
+
+const INDICE_MESES = {
+  ene: 0, feb: 1, mar: 2, abr: 3, may: 4, jun: 5, jul: 6,
+  ago: 7, set: 8, sep: 8, oct: 9, nov: 10, dic: 11,
+}
+
+function primeraFechaDeMes(anio, mes) {
+  if (!(anio >= 1900 && anio <= 2200) || !(mes >= 1 && mes <= 12)) return null
+  return new Date(Date.UTC(anio, mes - 1, 1))
+}
+
+function serialAFecha(serial) {
+  if (!Number.isFinite(serial) || serial < 1) return null
+  const parsed = XLSX.SSF.parse_date_code(serial)
+  if (!parsed) return null
+  return primeraFechaDeMes(parsed.y, parsed.m)
+}
+
+function mesAFecha(valor) {
+  if (valor === null || valor === undefined) return null
+
+  if (typeof valor === 'number') return serialAFecha(valor)
+
+  if (valor instanceof Date) {
+    if (Number.isNaN(valor.getTime())) return null
+    return primeraFechaDeMes(valor.getUTCFullYear(), valor.getUTCMonth() + 1)
+  }
+
+  const txt = String(valor).trim().toLowerCase()
+  if (!txt) return null
+
+  if (/^\d+(\.\d+)?$/.test(txt)) return serialAFecha(Number(txt))
+
+  const iso = txt.match(/^(\d{4})-(\d{1,2})(?:-\d{1,2})?/)
+  if (iso) return primeraFechaDeMes(Number(iso[1]), Number(iso[2]))
+
+  const mesAnio = txt.match(/^(\d{1,2})[/\-.](\d{2,4})$/)
+  if (mesAnio) {
+    const anio = Number(mesAnio[2])
+    return primeraFechaDeMes(anio < 100 ? 2000 + anio : anio, Number(mesAnio[1]))
+  }
+
+  const letras = txt.match(/^([a-z]+)[\s\-./]*(\d{2,4})$/)
+  if (letras) {
+    const idx = INDICE_MESES[letras[1].slice(0, 3)]
+    if (idx === undefined) return null
+    const anio = Number(letras[2])
+    const anioCompleto = anio < 100 ? (anio < 30 ? 2000 + anio : 1900 + anio) : anio
+    return primeraFechaDeMes(anioCompleto, idx + 1)
+  }
+
+  return null
+}
+
+export function mesAISO(valor) {
+  const fecha = mesAFecha(valor)
+  return fecha ? fecha.toISOString().slice(0, 10) : ''
+}
+
+export function formatMes(valor) {
+  const fecha = mesAFecha(valor)
+  if (!fecha) return '-'
+  return `${MESES_CORTOS[fecha.getUTCMonth()]}-${String(fecha.getUTCFullYear()).slice(-2)}`
+}

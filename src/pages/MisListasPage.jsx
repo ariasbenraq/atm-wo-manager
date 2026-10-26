@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
 import { useIsAdmin } from '../hooks/usePermissions'
+import { consumirLista, revertirConsumoLista, mensajeErrorInventario } from '../lib/inventario'
 import {
   Input, Button, Chip,
   ScrollShadow, Alert as HeroAlert,
@@ -10,7 +11,7 @@ import {
   Autocomplete, AutocompleteItem,
 } from '@heroui/react'
 import {
-  List, Plus, Minus, ArrowLeft, Pencil, Trash2, Copy, Share2, X, Check, Warehouse, ChevronRight,
+  List, Plus, Minus, ArrowLeft, Pencil, Trash2, Copy, Share2, X, Check, Warehouse, ChevronRight, Undo2,
 } from 'lucide-react'
 
 function tiempoRelativo(iso) {
@@ -73,6 +74,13 @@ export default function MisListasPage() {
   const [sincronizando, setSincronizando] = useState(false)
   const [confirmarSync, setConfirmarSync] = useState(false)
   const [erroresSync, setErroresSync] = useState([])
+  const [revirtiendo, setRevirtiendo] = useState(false)
+  const [motivoReversion, setMotivoReversion] = useState('')
+  const [guardandoReversion, setGuardandoReversion] = useState(false)
+
+  // Una lista ya descontada del almacén no se edita: hay que revertir primero
+  const listaSincronizada = Boolean(listaActiva?.inventory_synced)
+  const AVISO_SINCRONIZADA = 'Lista sincronizada con el almacén. Revierte la sincronización para modificarla.'
 
   const cargarListas = useCallback(async () => {
     if (!esAdmin && !userId) return
@@ -275,6 +283,11 @@ export default function MisListasPage() {
 
   async function eliminarLista() {
     if (!eliminando) return
+    if (eliminando.inventory_synced) {
+      setEliminando(null)
+      setMensaje({ color: 'warning', texto: AVISO_SINCRONIZADA })
+      return
+    }
 
     const { error } = await supabase
       .from('spare_part_lists')
@@ -324,6 +337,10 @@ export default function MisListasPage() {
 
   async function guardarEditarItem() {
     if (!editandoItem || !editItemRepuestoId) return
+    if (listaSincronizada) {
+      setMensaje({ color: 'warning', texto: AVISO_SINCRONIZADA })
+      return
+    }
     setGuardandoItem(true)
     const cantidad = Math.max(1, parseInt(editItemCantidadStr, 10) || 1)
     try {
@@ -362,6 +379,10 @@ export default function MisListasPage() {
 
   async function agregarItemALista() {
     if (!listaActiva || !agregarItemRepuestoId) return
+    if (listaSincronizada) {
+      setMensaje({ color: 'warning', texto: AVISO_SINCRONIZADA })
+      return
+    }
     setGuardandoAgregarItem(true)
     const cantidad = Math.max(1, parseInt(agregarItemCantidadStr, 10) || 1)
     try {
@@ -412,7 +433,7 @@ export default function MisListasPage() {
   }
 
   async function actualizarCantidad(item, cantidad) {
-    if (cantidad < 1) return
+    if (cantidad < 1 || listaSincronizada) return
 
     const { error } = await supabase
       .from('spare_part_list_items')
@@ -456,6 +477,10 @@ export default function MisListasPage() {
   }
 
   async function eliminarItem(itemId) {
+    if (listaSincronizada) {
+      setMensaje({ color: 'warning', texto: AVISO_SINCRONIZADA })
+      return
+    }
     const { error } = await supabase
       .from('spare_part_list_items')
       .delete()
@@ -527,87 +552,55 @@ export default function MisListasPage() {
     await copiarLista()
   }
 
+  function marcarSincronizada(sincronizada, fecha) {
+    const cambios = { inventory_synced: sincronizada, inventory_synced_at: fecha }
+    setListas(prev => prev.map(l => (l.id === listaActiva.id ? { ...l, ...cambios } : l)))
+    setListaActiva(prev => ({ ...prev, ...cambios }))
+    return db.sparePartLists.filter(l => l.idRemoto === listaActiva.id).modify({
+      inventorySynced: sincronizada,
+      inventorySyncedAt: fecha,
+    })
+  }
+
   async function sincronizarConAlmacen() {
-    if (!listaActiva || !items.length || !userId) return
+    if (!listaActiva || !items.length) return
     setSincronizando(true)
     try {
-      const partNumbers = items.map(i => i.repuesto?.part_number).filter(Boolean)
-      const { data: warehouseItems } = await supabase
-        .from('warehouse_items')
-        .select('*')
-        .eq('user_id', userId)
-        .in('part_number', partNumbers)
-
-      const whMap = new Map((warehouseItems || []).map(w => [w.part_number, w]))
-      const errores = []
-
-      for (const item of items) {
-        const pn = item.repuesto?.part_number
-        if (!pn) continue
-        const qty = item.quantity ?? 1
-        const wh = whMap.get(pn)
-        if (!wh) {
-          errores.push({ partNumber: pn, required: qty, available: 0 })
-        } else if (wh.quantity < qty) {
-          errores.push({ partNumber: pn, required: qty, available: wh.quantity })
-        }
-      }
-
-      if (errores.length) {
-        setErroresSync(errores)
+      // Valida stock, descuenta y marca la lista en una sola operación (descuenta del almacén del dueño)
+      const resultado = await consumirLista(listaActiva.id)
+      if (!resultado.ok) {
+        setErroresSync(resultado.faltantes.map(f => ({
+          partNumber: f.part_number,
+          required: f.requerido,
+          available: f.disponible,
+        })))
         setConfirmarSync(false)
-        setSincronizando(false)
         return
       }
 
-      for (const item of items) {
-        const pn = item.repuesto?.part_number
-        if (!pn) continue
-        const qty = item.quantity ?? 1
-        const wh = whMap.get(pn)
-        if (!wh) continue
-
-        const nuevaCantidad = wh.quantity - qty
-        await supabase
-          .from('warehouse_items')
-          .update({ quantity: nuevaCantidad, updated_at: new Date().toISOString() })
-          .eq('id', wh.id)
-
-        await db.warehouseItems.filter(i => i.idRemoto === wh.id).modify({ quantity: nuevaCantidad })
-
-        await supabase.from('warehouse_transactions').insert({
-          user_id: userId,
-          part_number: pn,
-          quantity: qty,
-          type: 'OUT',
-          source_type: 'LIST',
-          source_id: listaActiva.id,
-          site: listaActiva.site || '',
-          work_order: listaActiva.work_order || listaActiva.workOrder || '',
-        })
-      }
-
-      const now = new Date().toISOString()
-      await supabase
-        .from('spare_part_lists')
-        .update({ inventory_synced: true, inventory_synced_at: now })
-        .eq('id', listaActiva.id)
-
-      await db.sparePartLists.filter(l => l.idRemoto === listaActiva.id).modify({
-        inventorySynced: true,
-        inventorySyncedAt: now,
-      })
-
-      setListas(prev => prev.map(l =>
-        l.id === listaActiva.id ? { ...l, inventory_synced: true, inventory_synced_at: now } : l
-      ))
-      setListaActiva(prev => ({ ...prev, inventory_synced: true, inventory_synced_at: now }))
+      await marcarSincronizada(true, resultado.synced_at)
       setConfirmarSync(false)
       setMensaje({ color: 'success', texto: 'Inventario sincronizado correctamente.' })
     } catch (e) {
-      setMensaje({ color: 'danger', texto: e.message || 'Error al sincronizar inventario.' })
+      setConfirmarSync(false)
+      setMensaje({ color: 'danger', texto: mensajeErrorInventario(e, 'Error al sincronizar inventario.') })
     } finally {
       setSincronizando(false)
+    }
+  }
+
+  async function revertirSincronizacion() {
+    if (!listaActiva || !motivoReversion.trim()) return
+    setGuardandoReversion(true)
+    try {
+      await revertirConsumoLista({ listId: listaActiva.id, motivo: motivoReversion.trim() })
+      await marcarSincronizada(false, null)
+      setRevirtiendo(false)
+      setMensaje({ color: 'success', texto: 'Sincronización revertida: los repuestos volvieron al almacén y la lista se puede editar.' })
+    } catch (e) {
+      setMensaje({ color: 'danger', texto: mensajeErrorInventario(e, 'Error al revertir la sincronización.') })
+    } finally {
+      setGuardandoReversion(false)
     }
   }
 
@@ -735,6 +728,7 @@ export default function MisListasPage() {
                 aria-label="Agregar repuesto"
                 startContent={<Plus size={14} />}
                 className="text-[13px] font-medium h-8 px-2.5"
+                isDisabled={listaSincronizada}
                 onPress={() => {
                   setAgregandoItem(true)
                   setAgregarItemRepuestoId(null)
@@ -753,14 +747,21 @@ export default function MisListasPage() {
                 size="sm"
                 variant="light"
                 radius="lg"
-                startContent={<Warehouse size={14} />}
-                className={`text-[13px] font-medium h-8 px-2.5 ${listaActiva.inventory_synced ? 'text-success' : ''}`}
-                aria-label="Sincronizar con almacén"
-                isDisabled={sincronizando}
+                startContent={listaSincronizada ? <Undo2 size={14} /> : <Warehouse size={14} />}
+                className="text-[13px] font-medium h-8 px-2.5"
+                aria-label={listaSincronizada ? 'Revertir sincronización' : 'Sincronizar con almacén'}
+                isDisabled={sincronizando || guardandoReversion}
                 isLoading={sincronizando}
-                onPress={() => setConfirmarSync(true)}
+                onPress={() => {
+                  if (listaSincronizada) {
+                    setMotivoReversion('')
+                    setRevirtiendo(true)
+                  } else {
+                    setConfirmarSync(true)
+                  }
+                }}
               >
-                {listaActiva.inventory_synced ? 'Sincronizado' : 'Sinc. Inventario'}
+                {listaSincronizada ? 'Revertir sinc.' : 'Sinc. Inventario'}
               </Button>
               <Button
                 isIconOnly
@@ -784,6 +785,7 @@ export default function MisListasPage() {
                 variant="light"
                 radius="lg"
                 aria-label="Eliminar lista"
+                isDisabled={listaSincronizada}
                 onPress={() => setEliminando(listaActiva)}
               >
                 <Trash2 size={16} className="text-danger" />
@@ -813,6 +815,10 @@ export default function MisListasPage() {
 
           <div className="border-b border-default-100" />
 
+          {listaSincronizada && (
+            <HeroAlert color="success" variant="flat" title="Descontada del almacén" description={AVISO_SINCRONIZADA} />
+          )}
+
           {cargandoItems ? (
             <div className="rounded-xl border border-default-200 bg-white px-5 py-4 text-sm text-default-400">
               Cargando repuestos...
@@ -826,6 +832,7 @@ export default function MisListasPage() {
                 radius="lg"
                 size="sm"
                 startContent={<Plus size={14} />}
+                isDisabled={listaSincronizada}
                 onPress={() => {
                   setAgregandoItem(true)
                   setAgregarItemRepuestoId(null)
@@ -866,7 +873,7 @@ export default function MisListasPage() {
                           variant="light"
                           radius="lg"
                           className="min-w-7 h-7 text-default-400 hover:text-default-700 data-[disabled=true]:opacity-30"
-                          isDisabled={(item.quantity ?? 1) <= 1}
+                          isDisabled={listaSincronizada || (item.quantity ?? 1) <= 1}
                           onPress={() => actualizarCantidad(item, (item.quantity ?? 1) - 1)}
                         >
                           <Minus size={13} />
@@ -880,6 +887,7 @@ export default function MisListasPage() {
                           variant="light"
                           radius="lg"
                           className="min-w-7 h-7 text-default-400 hover:text-default-700"
+                          isDisabled={listaSincronizada}
                           onPress={() => actualizarCantidad(item, (item.quantity ?? 1) + 1)}
                         >
                           <Plus size={13} />
@@ -903,6 +911,7 @@ export default function MisListasPage() {
                         variant="light"
                         radius="lg"
                         className="min-w-8 h-8 text-default-400 hover:text-default-600"
+                        isDisabled={listaSincronizada}
                         onPress={() => abrirEditarItem(item)}
                       >
                         <Pencil size={14} />
@@ -913,6 +922,7 @@ export default function MisListasPage() {
                         variant="light"
                         radius="lg"
                         className="min-w-8 h-8 text-default-400 hover:text-danger"
+                        isDisabled={listaSincronizada}
                         onPress={() => eliminarItem(item.id)}
                       >
                         <Trash2 size={14} />
@@ -952,7 +962,7 @@ export default function MisListasPage() {
                             variant="light"
                             radius="lg"
                             className="min-w-6 h-6 text-default-400 hover:text-default-700 data-[disabled=true]:opacity-30"
-                            isDisabled={(item.quantity ?? 1) <= 1}
+                            isDisabled={listaSincronizada || (item.quantity ?? 1) <= 1}
                             onPress={() => actualizarCantidad(item, (item.quantity ?? 1) - 1)}
                           >
                             <Minus size={12} />
@@ -966,6 +976,7 @@ export default function MisListasPage() {
                             variant="light"
                             radius="lg"
                             className="min-w-6 h-6 text-default-400 hover:text-default-700"
+                            isDisabled={listaSincronizada}
                             onPress={() => actualizarCantidad(item, (item.quantity ?? 1) + 1)}
                           >
                             <Plus size={12} />
@@ -993,6 +1004,7 @@ export default function MisListasPage() {
                             variant="light"
                             radius="lg"
                             className="text-default-300 hover:text-default-600 min-w-7 h-7"
+                            isDisabled={listaSincronizada}
                             onPress={() => abrirEditarItem(item)}
                           >
                             <Pencil size={13} />
@@ -1005,6 +1017,7 @@ export default function MisListasPage() {
                             variant="light"
                             radius="lg"
                             className="text-default-300 hover:text-danger min-w-7 h-7"
+                            isDisabled={listaSincronizada}
                             onPress={() => eliminarItem(item.id)}
                           >
                             <X size={13} />
@@ -1269,6 +1282,41 @@ export default function MisListasPage() {
             <Button variant="light" onPress={() => setConfirmarSync(false)}>Cancelar</Button>
             <Button color="primary" onPress={sincronizarConAlmacen} isLoading={sincronizando} isDisabled={sincronizando}>
               Confirmar sincronización
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={revirtiendo} onOpenChange={abierto => !abierto && setRevirtiendo(false)}>
+        <ModalContent>
+          <ModalHeader className="text-default-900">Revertir sincronización</ModalHeader>
+          <ModalBody>
+            <p className="text-sm text-default-600">
+              Se devolverá al almacén lo que esta lista descontó y la lista quedará editable para corregirla y volver a sincronizar.
+            </p>
+            <p className="text-xs text-default-400 mt-1">
+              Se registra como ajuste en el historial del almacén.
+            </p>
+            <Input
+              label="Motivo"
+              placeholder="Ej.: cantidad errada, repuesto equivocado"
+              value={motivoReversion}
+              onValueChange={setMotivoReversion}
+              variant="bordered"
+              radius="lg"
+              isRequired
+              className="mt-3"
+            />
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="light" onPress={() => setRevirtiendo(false)}>Cancelar</Button>
+            <Button
+              color="warning"
+              onPress={revertirSincronizacion}
+              isLoading={guardandoReversion}
+              isDisabled={guardandoReversion || !motivoReversion.trim()}
+            >
+              Revertir
             </Button>
           </ModalFooter>
         </ModalContent>
