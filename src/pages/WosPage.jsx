@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
+import { refrescarCacheWos, leerCacheWos, wosADexie } from '../lib/wosCache'
 import { db } from '../lib/db'
 import { formatearFecha } from '../lib/date'
 import { formatMes } from '../lib/excel'
@@ -136,52 +137,11 @@ export default function WosPage() {
   const cargar = useCallback(async () => {
     setCargando(true)
     try {
-      const { data, error } = await supabase
-        .from('workorders')
-        .select('*')
-        .order('fecha', { ascending: false })
-        .order('wo')
-
-      if (error) throw error
-
-      setWos(data || [])
-
-      await db.workorders.clear()
-      if (data?.length) {
-        await db.workorders.bulkAdd(data.map(mapearADexie))
-      }
+      const data = await refrescarCacheWos()
+      setWos(data)
     } catch {
       try {
-        const local = await db.workorders.orderBy('localId').reverse().toArray()
-        setWos(local.map(w => ({
-          id: w.idRemoto,
-          user_id: w.userId,
-          anio: w.anio || '',
-          mes: w.mes || '',
-          cliente: w.cliente || '',
-          serie: w.serie || '',
-          modelo: w.modelo || '',
-          tipo_pm: w.tipoPm || '',
-          codigo_equipo: w.codigoEquipo || '',
-          nombre_equipo: w.nombreEquipo || '',
-          site: w.site || '',
-          direccion: w.direccion || '',
-          distrito: w.distrito || '',
-          provincia: w.provincia || '',
-          departamento: w.departamento || '',
-          lp: w.lp || '',
-          funcion_atm: w.funcionAtm || '',
-          horario_pv: w.horarioPv || '',
-          restricciones: w.restricciones || '',
-          responsable_boveda: w.responsableBoveda || '',
-          wo: w.wo || '',
-          fecha: w.fecha || '',
-          hora: w.hora || '',
-          hora_pv: w.horaPv || '',
-          legajo: w.legajo || '',
-          ce: w.ce || '',
-          dni: w.dni || '',
-        })))
+        setWos(await leerCacheWos())
         setMensaje({ color: 'warning', texto: "Sin conexión. Mostrando las Wo's locales." })
       } catch { /* silent */ }
     } finally {
@@ -291,7 +251,7 @@ export default function WosPage() {
         )
       })
 
-      const local = mapearADexie(data)
+      const local = wosADexie(data)
       const existe = await db.workorders.filter(w => w.idRemoto === data.id).count()
       if (existe) {
         await db.workorders.filter(w => w.idRemoto === data.id).modify(local)
@@ -601,38 +561,4 @@ export default function WosPage() {
       </Modal>
     </AppShell>
   )
-}
-
-function mapearADexie(row) {
-  return {
-    idRemoto: row.id,
-    userId: row.user_id,
-    anio: row.anio || '',
-    mes: row.mes || '',
-    cliente: row.cliente || '',
-    serie: row.serie || '',
-    modelo: row.modelo || '',
-    tipoPm: row.tipo_pm || '',
-    codigoEquipo: row.codigo_equipo || '',
-    nombreEquipo: row.nombre_equipo || '',
-    site: row.site || '',
-    direccion: row.direccion || '',
-    distrito: row.distrito || '',
-    provincia: row.provincia || '',
-    departamento: row.departamento || '',
-    lp: row.lp || '',
-    funcionAtm: row.funcion_atm || '',
-    horarioPv: row.horario_pv || '',
-    restricciones: row.restricciones || '',
-    responsableBoveda: row.responsable_boveda || '',
-    wo: row.wo || '',
-    fecha: row.fecha || '',
-    hora: row.hora || '',
-    horaPv: row.hora_pv || '',
-    legajo: row.legajo || '',
-    ce: row.ce || '',
-    dni: row.dni || '',
-    creadoEn: row.created_at,
-    actualizadoEn: row.updated_at,
-  }
 }

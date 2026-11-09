@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { db } from './db'
+import { refrescarCacheWos } from './wosCache'
 
 function normalizarTarea(tarea) {
   return {
@@ -121,6 +122,10 @@ export async function syncFromSupabase(userId) {
       if (misTareasNormalizadas.length) {
         await db.mis_tareas.bulkAdd(misTareasNormalizadas)
       }
+    }
+
+    if (userId) {
+      try { await refrescarCacheWos() } catch (err) { console.warn('WO: se conserva el caché local', err) }
     }
 
     console.log('✅ Sync completado')
