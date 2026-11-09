@@ -2,63 +2,21 @@ import { useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
-import { excelFechaAString, excelHoraAString, normalizarEncabezado, mesAISO } from '../lib/excel'
+import { excelFechaAString, excelHoraAString, mesAISO } from '../lib/excel'
 import { LEGAJO_ACTUAL } from '../lib/wosConfig'
+import { mapearFila, resolverSite, fusionarVacios, texto } from '../lib/wosImport'
+import WosSkeleton from './WosSkeleton'
 import {
-  Card, CardBody, CardHeader, Divider,
-  Button, Chip, Alert as HeroAlert, Spinner,
+  Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
+  Button, Chip, Alert as HeroAlert,
 } from '@heroui/react'
-import { Upload, FileSpreadsheet, Check } from 'lucide-react'
-
-const MAPEO_COLUMNAS = {
-  'ano': 'anio',
-  'mes': 'mes',
-  'cliente': 'cliente',
-  'n de serie': 'serie',
-  'numero de serie': 'serie',
-  'modelo': 'modelo',
-  'tipo pm': 'tipo_pm',
-  'codigo del equipo': 'codigo_equipo',
-  'nombre del equipo': 'nombre_equipo',
-  'site': 'site',
-  'direccion': 'direccion',
-  'distrito': 'distrito',
-  'provincia': 'provincia',
-  'departamento': 'departamento',
-  'l/p': 'lp',
-  'funcion atm': 'funcion_atm',
-  'horario con pv': 'horario_pv',
-  'restricciones / documentacion': 'restricciones',
-  'restricciones documentacion': 'restricciones',
-  'responsable boveda etv/oficina': 'responsable_boveda',
-  'responsable boveda etv oficina': 'responsable_boveda',
-  'wo': 'wo',
-  'fecha': 'fecha',
-  'hora': 'hora',
-  'hora pv': 'hora_pv',
-  'legajo': 'legajo',
-  'ce': 'ce',
-  'dni': 'dni',
-}
-
-function mapearFila(fila) {
-  const resultado = {}
-  for (const [clave, valor] of Object.entries(fila)) {
-    const campo = MAPEO_COLUMNAS[normalizarEncabezado(clave)]
-    if (campo) resultado[campo] = valor
-  }
-  return resultado
-}
-
-function texto(valor) {
-  return String(valor ?? '').trim()
-}
+import { Upload, FileSpreadsheet, Check, X } from 'lucide-react'
 
 function normalizarLegajo(valor) {
   return texto(valor).replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
 }
 
-export default function ImportarWosExcel({ userId, onImportado }) {
+export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado }) {
   const [cargando, setCargando] = useState(false)
   const [archivo, setArchivo] = useState(null)
   const [hojas, setHojas] = useState([])
@@ -66,6 +24,21 @@ export default function ImportarWosExcel({ userId, onImportado }) {
   const [dragging, setDragging] = useState(false)
   const [estado, setEstado] = useState(null)
   const [mensaje, setMensaje] = useState('')
+
+  function reiniciar() {
+    setArchivo(null)
+    setHojas([])
+    setHojasSeleccionadas([])
+    setEstado(null)
+    setMensaje('')
+    setDragging(false)
+  }
+
+  function cerrar() {
+    if (cargando && estado === 'loading') return
+    reiniciar()
+    onClose && onClose()
+  }
 
   function alternarHoja(nombre) {
     setHojasSeleccionadas(prev =>
@@ -140,12 +113,7 @@ export default function ImportarWosExcel({ userId, onImportado }) {
 
           const fecha = excelFechaAString(cruda.fecha) || texto(cruda.fecha)
           const clave = `${wo}|${fecha}`
-          if (vistas.has(clave)) {
-            duplicadasArchivo++
-            continue
-          }
-
-          vistas.set(clave, {
+          const registro = {
             user_id: userId,
             anio: texto(cruda.anio),
             mes: mesAISO(cruda.mes),
@@ -155,7 +123,7 @@ export default function ImportarWosExcel({ userId, onImportado }) {
             tipo_pm: texto(cruda.tipo_pm),
             codigo_equipo: texto(cruda.codigo_equipo),
             nombre_equipo: texto(cruda.nombre_equipo),
-            site: texto(cruda.site),
+            site: resolverSite(cruda),
             direccion: texto(cruda.direccion),
             distrito: texto(cruda.distrito),
             provincia: texto(cruda.provincia),
@@ -173,11 +141,18 @@ export default function ImportarWosExcel({ userId, onImportado }) {
             ce: texto(cruda.ce),
             dni: texto(cruda.dni),
             updated_at: new Date().toISOString(),
-          })
+          }
+
+          if (vistas.has(clave)) {
+            duplicadasArchivo++
+            vistas.set(clave, fusionarVacios(vistas.get(clave), registro))
+          } else {
+            vistas.set(clave, registro)
+          }
         }
       }
 
-      const registros = Array.from(vistas.values())
+      let registros = Array.from(vistas.values())
 
       if (!registros.length) {
         const topLegajos = Array.from(legajosVistos.entries())
@@ -194,6 +169,30 @@ export default function ImportarWosExcel({ userId, onImportado }) {
         setCargando(false)
         return
       }
+
+      setMensaje('Comparando con workorders existentes...')
+
+      // Evita pisar valores válidos ya guardados con celdas vacías de otro archivo.
+      const existentes = new Map()
+      const wosUnicas = [...new Set(registros.map(r => r.wo))]
+      for (let i = 0; i < wosUnicas.length; i += 200) {
+        const { data: previas, error: errPrevias } = await supabase
+          .from('workorders')
+          .select('*')
+          .eq('user_id', userId)
+          .in('wo', wosUnicas.slice(i, i + 200))
+        if (errPrevias) throw errPrevias
+        for (const previa of previas || []) existentes.set(`${previa.wo}|${previa.fecha}`, previa)
+      }
+
+      let actualizadas = 0
+      registros = registros.map(r => {
+        const previa = existentes.get(`${r.wo}|${r.fecha}`)
+        if (!previa) return r
+        actualizadas++
+        return fusionarVacios(r, previa)
+      })
+      const nuevas = registros.length - actualizadas
 
       setMensaje(`Guardando ${registros.length} workorders...`)
 
@@ -246,9 +245,9 @@ export default function ImportarWosExcel({ userId, onImportado }) {
 
       setEstado('ok')
       setMensaje(
-        `${(data || []).length} workorders importadas. ` +
-        `(Leídas: ${leidas}, duplicadas en archivo: ${duplicadasArchivo}, ` +
-        `otras legajos: ${otrasLegajos}, sin WO: ${sinWo})`
+        `${nuevas} nuevas, ${actualizadas} actualizadas. ` +
+        `Omitidas: ${otrasLegajos} de otros legajos, ${sinWo} sin WO, ` +
+        `${duplicadasArchivo} duplicadas en archivo (fusionadas). Leídas: ${leidas}.`
       )
       setArchivo(null)
       setHojas([])
@@ -268,97 +267,125 @@ export default function ImportarWosExcel({ userId, onImportado }) {
     loading: { color: 'primary', title: 'Procesando archivo' },
   }
 
-  return (
-    <Card shadow="sm">
-      <CardHeader className="flex gap-3 pb-0">
-        <FileSpreadsheet size={18} className="text-default-400" />
-        <p className="text-sm font-semibold">Importar Wo&apos;s desde Excel</p>
-      </CardHeader>
-      <Divider className="mt-3" />
-      <CardBody className="gap-3">
-        <label
-          onDragOver={e => { e.preventDefault(); setDragging(true) }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={e => { e.preventDefault(); setDragging(false); leerArchivo(e.dataTransfer.files[0]) }}
-          className={`flex flex-col items-center justify-center gap-3 border-2
-            border-dashed rounded-xl p-6 cursor-pointer transition-all
-            ${dragging ? 'border-primary bg-primary-50' : 'border-default-200 hover:border-primary-300'}`}
-        >
-          <Upload size={24} className={dragging ? 'text-primary' : 'text-default-300'} />
-          <div className="text-center">
-            <p className="text-sm font-medium text-default-600">
-              {cargando && !archivo ? 'Procesando...' : archivo ? archivo.archivo.name : 'Sube tu archivo Excel'}
-            </p>
-            <p className="text-xs text-default-400 mt-0.5">
-              .xlsx · con pestañas por rango de fechas · solo legajo {LEGAJO_ACTUAL}
-            </p>
-          </div>
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={e => leerArchivo(e.target.files[0])}
-            disabled={cargando}
-            className="hidden"
-          />
-        </label>
+  const importando = estado === 'loading'
+  const terminado = estado === 'ok'
 
-        {hojas.length > 0 && (
-          <div className="rounded-lg border border-default-200 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-default-400">
-                Pestañas ({hojasSeleccionadas.length}/{hojas.length} seleccionadas)
-              </p>
-              <div className="flex gap-1">
-                <Button size="sm" variant="light" onPress={() => setHojasSeleccionadas([...hojas])}>
-                  Todas
-                </Button>
-                <Button size="sm" variant="light" onPress={() => setHojasSeleccionadas([])}>
-                  Ninguna
-                </Button>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {hojas.map(nombre => {
-                const activa = hojasSeleccionadas.includes(nombre)
-                return (
-                  <Chip
-                    key={nombre}
-                    size="sm"
-                    variant={activa ? 'flat' : 'bordered'}
-                    color={activa ? 'primary' : 'default'}
-                    startContent={activa ? <Check size={12} /> : undefined}
-                    className="cursor-pointer"
-                    onPress={() => alternarHoja(nombre)}
-                  >
-                    {nombre}
-                  </Chip>
-                )
-              })}
-            </div>
+  return (
+    <Modal
+      isOpen={isOpen}
+      onOpenChange={open => { if (!open) cerrar() }}
+      isDismissable={!importando}
+      hideCloseButton={importando}
+      placement="center"
+      size="md"
+      scrollBehavior="inside"
+    >
+      <ModalContent>
+        <ModalHeader className="flex items-center gap-2">
+          <FileSpreadsheet size={18} className="text-default-400" />
+          Importar Wo&apos;s desde Excel
+        </ModalHeader>
+        <ModalBody className="gap-3">
+          {importando ? (
+            <>
+              <p className="text-sm text-default-500">{mensaje}</p>
+              <WosSkeleton filas={3} />
+            </>
+          ) : (
+            <>
+              {!terminado && (
+                <label
+                  onDragOver={e => { e.preventDefault(); setDragging(true) }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={e => { e.preventDefault(); setDragging(false); leerArchivo(e.dataTransfer.files[0]) }}
+                  className={`flex flex-col items-center justify-center gap-3 border-2
+                    border-dashed rounded-xl p-6 cursor-pointer transition-all
+                    ${dragging ? 'border-primary bg-primary-50' : 'border-default-200 hover:border-primary-300'}`}
+                >
+                  <Upload size={24} className={dragging ? 'text-primary' : 'text-default-300'} />
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-default-600">
+                      {cargando && !archivo ? 'Leyendo archivo...' : archivo ? archivo.archivo.name : 'Elegir archivo Excel'}
+                    </p>
+                    <p className="text-xs text-default-400 mt-0.5">
+                      .xlsx · pestañas por rango de fechas · solo legajo {LEGAJO_ACTUAL}
+                    </p>
+                  </div>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={e => leerArchivo(e.target.files[0])}
+                    disabled={cargando}
+                    className="hidden"
+                  />
+                </label>
+              )}
+
+              {cargando && !archivo && <WosSkeleton filas={1} />}
+
+              {hojas.length > 0 && (
+                <div className="rounded-lg border border-default-200 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-default-400">
+                      Pestañas ({hojasSeleccionadas.length}/{hojas.length})
+                    </p>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="light" onPress={() => setHojasSeleccionadas([...hojas])}>
+                        Todas
+                      </Button>
+                      <Button size="sm" variant="light" onPress={() => setHojasSeleccionadas([])}>
+                        Ninguna
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {hojas.map(nombre => {
+                      const activa = hojasSeleccionadas.includes(nombre)
+                      return (
+                        <Chip
+                          key={nombre}
+                          size="sm"
+                          variant={activa ? 'flat' : 'bordered'}
+                          color={activa ? 'primary' : 'default'}
+                          startContent={activa ? <Check size={12} /> : undefined}
+                          className="cursor-pointer"
+                          onClick={() => alternarHoja(nombre)}
+                        >
+                          {nombre}
+                        </Chip>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {mensaje && (
+                <HeroAlert
+                  color={alertConfig[estado]?.color || 'primary'}
+                  title={alertConfig[estado]?.title || 'Estado de importación'}
+                  description={mensaje}
+                />
+              )}
+            </>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="flat" onPress={cerrar} isDisabled={importando} startContent={<X size={16} />}>
+            {terminado ? 'Cerrar' : 'Cancelar'}
+          </Button>
+          {!terminado && (
             <Button
-              size="sm"
               color="primary"
               onPress={importar}
-              isLoading={cargando}
-              isDisabled={!hojasSeleccionadas.length}
-              startContent={!cargando ? <Check size={16} /> : undefined}
-              className="mt-1"
+              isLoading={importando}
+              isDisabled={!archivo || !hojasSeleccionadas.length || cargando}
+              startContent={!importando ? <Check size={16} /> : undefined}
             >
-              Importar pestañas seleccionadas
+              Importar
             </Button>
-          </div>
-        )}
-
-        {mensaje && (
-          <HeroAlert
-            color={alertConfig[estado]?.color || 'primary'}
-            title={alertConfig[estado]?.title || 'Estado de importación'}
-            description={mensaje}
-            startContent={estado === 'loading' ? <Spinner size="sm" /> : undefined}
-            onClose={() => { setEstado(null); setMensaje('') }}
-          />
-        )}
-      </CardBody>
-    </Card>
+          )}
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   )
 }
