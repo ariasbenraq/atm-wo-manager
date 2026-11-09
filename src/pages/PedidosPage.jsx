@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
+import { leerCacheWos, siteDeWo } from '../lib/wosCache'
 import { db } from '../lib/db'
 import { recepcionarPedido, mensajeErrorInventario, codigoErrorInventario } from '../lib/inventario'
 import { useIsAdmin } from '../hooks/usePermissions'
@@ -216,18 +217,7 @@ export default function PedidosPage() {
         })))
       }
       if (!wosCatalogo.length) {
-        const local = await db.workorders.toArray()
-        setWosCatalogo(ordenarWosCatalogo(local.map(w => ({
-          wo: w.wo,
-          codigo_equipo: w.codigoEquipo || '',
-          nombre_equipo: w.nombreEquipo || '',
-          modelo: w.modelo || '',
-          site: w.site || '',
-          direccion: w.direccion || '',
-          serie: w.serie || '',
-          distrito: w.distrito || '',
-          fecha: w.fecha || '',
-        }))))
+        setWosCatalogo(ordenarWosCatalogo(await leerCacheWos()))
       }
     } finally {
       setCatalogosCargando(false)
@@ -269,7 +259,7 @@ export default function PedidosPage() {
     if (!wo) return
     setFormWo(wo.wo || '')
     setFormIdAtm(wo.codigo_equipo || '')
-    setFormSite(wo.nombre_equipo || '')
+    setFormSite(siteDeWo(wo))
     setFormModelo(wo.modelo || '')
     setFormDireccion(wo.direccion || '')
   }

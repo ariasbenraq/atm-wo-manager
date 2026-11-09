@@ -1,29 +1,25 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
+import { refrescarCacheWos, leerCacheWos, wosADexie } from '../lib/wosCache'
 import { db } from '../lib/db'
 import { formatearFecha } from '../lib/date'
 import { formatMes } from '../lib/excel'
 import { LEGAJO_ACTUAL } from '../lib/wosConfig'
 import ImportarWosExcel from '../components/ImportarWosExcel'
+import WosSkeleton from '../components/WosSkeleton'
+import WoCard from '../components/WoCard'
+import BuscarWoModal from '../components/BuscarWoModal'
 import AppShell from '../components/AppShell'
 import {
-  Searchbar, List, ListItem, Card, Chip, Fab, Sheet, Button as KonstaButton,
+  Chip, Fab, Sheet, Button as KonstaButton,
 } from 'konsta/react'
 import {
-  Input, Button, Select, SelectItem, Pagination,
+  Input, Button, Switch, Select, SelectItem, Pagination,
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
   Alert as HeroAlert,
 } from '@heroui/react'
-import { Plus, X, Check, ArrowUp, ArrowDown } from 'lucide-react'
-
-function normalizar(texto) {
-  return String(texto || '')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .trim()
-}
+import { Plus, X, Check, FileSpreadsheet, FilePlus2, Search } from 'lucide-react'
 
 const CAMPOS_DETALLE = [
   ['Año', 'anio'],
@@ -51,14 +47,6 @@ const CAMPOS_DETALLE = [
   ['Legajo', 'legajo'],
   ['CE', 'ce'],
   ['DNI', 'dni'],
-]
-
-const CAMPOS_BUSQUEDA = [
-  ['todos', 'Todos'],
-  ['wo', 'WO'],
-  ['id', 'ID'],
-  ['distrito', 'Distrito'],
-  ['serie', 'Serie'],
 ]
 
 const CLIENTES_MANUALES = ['Banco de Crédito', 'Interbank', 'BBVA', 'Banco Nación']
@@ -97,7 +85,7 @@ function compararHora(a, b) {
 
 function fechaEstado(fecha) {
   if (!fecha) return null
-  const hoy = new Date().toISOString().slice(0, 10)
+  const hoy = hoyLima()
   if (fecha === hoy) return 'hoy'
   return fecha < hoy ? 'pasado' : 'futuro'
 }
@@ -106,10 +94,8 @@ function hoyLima() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(new Date())
 }
 
-const CLASES_ESTADO = {
-  hoy: 'bg-amber-100 text-amber-800',
-  pasado: 'bg-gray-200 text-gray-600',
-  futuro: 'bg-green-100 text-green-800',
+function normalizarLegajo(texto) {
+  return String(texto || '').replace(/[^a-z0-9]/gi, '').toUpperCase()
 }
 
 export default function WosPage() {
@@ -120,14 +106,15 @@ export default function WosPage() {
   const [cargando, setCargando] = useState(true)
   const [mensaje, setMensaje] = useState(null)
 
-  const [busqueda, setBusqueda] = useState('')
-  const [campoBusqueda, setCampoBusqueda] = useState('todos')
+  const [seleccion, setSeleccion] = useState(null)
+  const [buscarAbierto, setBuscarAbierto] = useState(false)
   const [pagina, setPagina] = useState(1)
   const [tamanoPagina, setTamanoPagina] = useState(10)
-  const [ordenAscendente, setOrdenAscendente] = useState(false)
+  const [soloMios, setSoloMios] = useState(false)
   const [filtroHoy, setFiltroHoy] = useState(false)
-  const [filtroFecha, setFiltroFecha] = useState('')
 
+  const [fabAbierto, setFabAbierto] = useState(false)
+  const [importarAbierto, setImportarAbierto] = useState(false)
   const [nuevoAbierto, setNuevoAbierto] = useState(false)
   const [formWo, setFormWo] = useState('')
   const [formCliente, setFormCliente] = useState('')
@@ -150,52 +137,11 @@ export default function WosPage() {
   const cargar = useCallback(async () => {
     setCargando(true)
     try {
-      const { data, error } = await supabase
-        .from('workorders')
-        .select('*')
-        .order('fecha', { ascending: false })
-        .order('wo')
-
-      if (error) throw error
-
-      setWos(data || [])
-
-      await db.workorders.clear()
-      if (data?.length) {
-        await db.workorders.bulkAdd(data.map(mapearADexie))
-      }
+      const data = await refrescarCacheWos()
+      setWos(data)
     } catch {
       try {
-        const local = await db.workorders.orderBy('localId').reverse().toArray()
-        setWos(local.map(w => ({
-          id: w.idRemoto,
-          user_id: w.userId,
-          anio: w.anio || '',
-          mes: w.mes || '',
-          cliente: w.cliente || '',
-          serie: w.serie || '',
-          modelo: w.modelo || '',
-          tipo_pm: w.tipoPm || '',
-          codigo_equipo: w.codigoEquipo || '',
-          nombre_equipo: w.nombreEquipo || '',
-          site: w.site || '',
-          direccion: w.direccion || '',
-          distrito: w.distrito || '',
-          provincia: w.provincia || '',
-          departamento: w.departamento || '',
-          lp: w.lp || '',
-          funcion_atm: w.funcionAtm || '',
-          horario_pv: w.horarioPv || '',
-          restricciones: w.restricciones || '',
-          responsable_boveda: w.responsableBoveda || '',
-          wo: w.wo || '',
-          fecha: w.fecha || '',
-          hora: w.hora || '',
-          hora_pv: w.horaPv || '',
-          legajo: w.legajo || '',
-          ce: w.ce || '',
-          dni: w.dni || '',
-        })))
+        setWos(await leerCacheWos())
         setMensaje({ color: 'warning', texto: "Sin conexión. Mostrando las Wo's locales." })
       } catch { /* silent */ }
     } finally {
@@ -206,33 +152,33 @@ export default function WosPage() {
   useEffect(() => { cargar() }, [cargar])
 
   const wosFiltradas = useMemo(() => {
-    const tokens = normalizar(busqueda).split(/\s+/).filter(Boolean)
     let resultado = wos
-    if (tokens.length) {
-      resultado = resultado.filter(w => {
-        const fuente = {
-          todos: [w.wo, w.codigo_equipo, w.distrito, w.serie],
-          wo: [w.wo],
-          id: [w.codigo_equipo],
-          distrito: [w.distrito],
-          serie: [w.serie],
-        }[campoBusqueda] || [w.wo, w.codigo_equipo, w.distrito, w.serie]
-        const campos = fuente.map(normalizar)
-        return tokens.every(token => campos.some(campo => campo.includes(token)))
-      })
+    if (seleccion) {
+      resultado = resultado.filter(w => w.id === seleccion.id)
     }
-    const fechaFiltro = filtroHoy ? hoyLima() : filtroFecha
+    const hoy = hoyLima()
+    const fechaFiltro = filtroHoy ? hoy : ''
     if (fechaFiltro) {
       resultado = resultado.filter(w => w.fecha === fechaFiltro)
     }
+    if (soloMios) {
+      const mio = normalizarLegajo(LEGAJO_ACTUAL)
+      resultado = resultado.filter(w => normalizarLegajo(w.legajo) === mio)
+    }
+    // Hoy y lo más próximo hacia el futuro (fecha y hora ascendente); las pasadas al final, de la más reciente a la más antigua
     return [...resultado].sort((a, b) => {
-      const cmpFecha = String(a.fecha || '').localeCompare(String(b.fecha || ''))
-      if (cmpFecha !== 0) return ordenAscendente ? cmpFecha : -cmpFecha
+      const fa = String(a.fecha || '')
+      const fb = String(b.fecha || '')
+      const pasadaA = fa < hoy
+      const pasadaB = fb < hoy
+      if (pasadaA !== pasadaB) return pasadaA ? 1 : -1
+      const cmpFecha = fa.localeCompare(fb)
+      if (cmpFecha !== 0) return pasadaA ? -cmpFecha : cmpFecha
       const cmpHora = compararHora(a.hora, b.hora)
-      if (cmpHora !== 0) return ordenAscendente ? cmpHora : -cmpHora
+      if (cmpHora !== 0) return cmpHora
       return String(a.wo || '').localeCompare(String(b.wo || ''))
     })
-  }, [wos, busqueda, campoBusqueda, filtroHoy, filtroFecha, ordenAscendente])
+  }, [wos, seleccion, filtroHoy, soloMios])
 
   const totalPaginas = Math.max(1, Math.ceil(wosFiltradas.length / tamanoPagina))
   const paginaSegura = Math.min(pagina, totalPaginas)
@@ -241,21 +187,10 @@ export default function WosPage() {
     paginaSegura * tamanoPagina
   )
 
-  useEffect(() => { setPagina(1) }, [busqueda, tamanoPagina, filtroHoy, filtroFecha, ordenAscendente])
+  useEffect(() => { setPagina(1) }, [seleccion, tamanoPagina, filtroHoy, soloMios])
 
   function alternarFiltroHoy() {
-    if (filtroHoy) {
-      setFiltroHoy(false)
-      setFiltroFecha('')
-    } else {
-      setFiltroHoy(true)
-      setFiltroFecha(hoyLima())
-    }
-  }
-
-  function limpiarFiltroFecha() {
-    setFiltroHoy(false)
-    setFiltroFecha('')
+    setFiltroHoy(v => !v)
   }
 
   function abrirNuevo() {
@@ -316,7 +251,7 @@ export default function WosPage() {
         )
       })
 
-      const local = mapearADexie(data)
+      const local = wosADexie(data)
       const existe = await db.workorders.filter(w => w.idRemoto === data.id).count()
       if (existe) {
         await db.workorders.filter(w => w.idRemoto === data.id).modify(local)
@@ -375,106 +310,47 @@ export default function WosPage() {
         />
       )}
 
-      <ImportarWosExcel userId={userId} onImportado={cargar} />
-
-      <div className="sticky top-0 z-20 -mx-4 mt-3 bg-md-light-surface px-6 pb-2 pt-1 dark:bg-md-dark-surface">
-        <Searchbar
-          value={busqueda}
-          onInput={e => setBusqueda(e.target.value)}
-          placeholder="Buscar por WO, ID, distrito o serie"
-          disableButton
-        />
-        <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-1">
-          {CAMPOS_BUSQUEDA.map(([valor, etiqueta]) => (
+      <div className="sticky top-0 z-20 -mx-4 bg-md-light-surface px-6 pb-2 pt-1 dark:bg-md-dark-surface">
+        <div className="flex items-center gap-1.5 pb-1">
+          {seleccion && (
             <Chip
-              key={valor}
-              className={`shrink-0 cursor-pointer ${campoBusqueda === valor ? 'bg-primary text-white' : ''}`}
-              outline={campoBusqueda !== valor}
-              onClick={() => setCampoBusqueda(valor)}
+              className="shrink-0 cursor-pointer bg-primary text-white"
+              onClick={() => setSeleccion(null)}
             >
-              {etiqueta}
+              {seleccion.wo} ✕
             </Chip>
-          ))}
+          )}
           <span className="ml-auto shrink-0 text-xs text-gray-500">{wosFiltradas.length} resultados</span>
         </div>
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="flat"
-            startContent={ordenAscendente ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
-            onPress={() => setOrdenAscendente(v => !v)}
-            aria-label={ordenAscendente ? 'Ordenar más antiguas primero' : 'Ordenar más recientes primero'}
-          >
-            {ordenAscendente ? 'Antiguas' : 'Recientes'}
-          </Button>
-          <Button
-            size="sm"
-            variant={filtroHoy ? 'solid' : 'flat'}
-            color="primary"
-            onPress={alternarFiltroHoy}
-            aria-pressed={filtroHoy}
-          >
-            Hoy
-          </Button>
-          <Input
-            size="sm"
-            type="date"
-            aria-label="Filtrar por fecha"
-            value={filtroFecha}
-            onValueChange={value => {
-              setFiltroFecha(value)
-              setFiltroHoy(false)
-            }}
-            className="w-40"
-            endContent={filtroFecha ? (
-              <button
-                type="button"
-                className="cursor-pointer text-default-400 hover:text-default-600"
-                onClick={limpiarFiltroFecha}
-                aria-label="Limpiar filtro de fecha"
-              >
-                <X size={14} />
-              </button>
-            ) : undefined}
-          />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Switch size="sm" isSelected={soloMios} onValueChange={setSoloMios}>
+            Asignados a mí
+          </Switch>
+          <Switch size="sm" isSelected={filtroHoy} onValueChange={alternarFiltroHoy}>
+            Work orders de hoy
+          </Switch>
         </div>
       </div>
 
       {cargando ? (
-        <p className="py-6 text-center text-sm text-gray-500">Cargando workorders...</p>
+        <WosSkeleton filas={6} className="pt-3" />
       ) : wosPagina.length === 0 ? (
         <p className="py-6 text-center text-sm text-gray-500">
-          {busqueda || filtroHoy || filtroFecha
+          {seleccion || filtroHoy || soloMios
             ? 'Sin WOs para este filtro.'
-            : 'No hay workorders. Importa un Excel o toca + para crear una.'}
+            : 'No hay workorders. Toca + para importar un Excel o crear una.'}
         </p>
       ) : (
-        <Card>
-          <List inset={false}>
-            {wosPagina.map(wo => (
-              <ListItem
-                key={wo.id}
-                title={wo.wo || '—'}
-                subtitle={[wo.cliente, wo.serie, wo.modelo].filter(Boolean).join(' · ')}
-                text={[wo.codigo_equipo, wo.nombre_equipo || 'Agencia', wo.distrito].filter(Boolean).join(' · ')}
-                after={
-                  <div className="flex flex-col items-end gap-1">
-                    {wo.fecha && (
-                      <Chip className={`px-2 ${CLASES_ESTADO[fechaEstado(wo.fecha)] || ''}`}>
-                        {formatearFecha(wo.fecha)}
-                      </Chip>
-                    )}
-                    {wo.hora && (
-                      <span className="text-xs font-medium">{wo.hora}</span>
-                    )}
-                  </div>
-                }
-                link
-                onClick={() => setDetalle(wo)}
-              />
-            ))}
-          </List>
-        </Card>
+        <div>
+          {wosPagina.map(wo => (
+            <WoCard
+              key={wo.id}
+              wo={wo}
+              estadoFecha={fechaEstado(wo.fecha)}
+              onClick={() => setDetalle(wo)}
+            />
+          ))}
+        </div>
       )}
 
       {totalPaginas > 1 && (
@@ -502,9 +378,58 @@ export default function WosPage() {
         </Select>
       </div>
 
-      <Fab onClick={abrirNuevo} className="fixed right-4 bottom-4 z-30" aria-label="Nueva WO">
-        <Plus size={24} />
-      </Fab>
+      {fabAbierto && (
+        <div className="fixed inset-0 z-20" onClick={() => setFabAbierto(false)} aria-hidden="true" />
+      )}
+      <div className="fixed right-4 bottom-4 z-30 flex flex-col items-end gap-3">
+        {fabAbierto && (
+          <>
+            <button
+              type="button"
+              onClick={() => { setFabAbierto(false); setBuscarAbierto(true) }}
+              className="flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-medium text-gray-900 shadow-lg dark:bg-gray-800 dark:text-white"
+            >
+              <Search size={18} /> Buscar WO
+            </button>
+            <button
+              type="button"
+              onClick={() => { setFabAbierto(false); setImportarAbierto(true) }}
+              className="flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-medium text-gray-900 shadow-lg dark:bg-gray-800 dark:text-white"
+            >
+              <FileSpreadsheet size={18} /> Importar Excel
+            </button>
+            <button
+              type="button"
+              onClick={() => { setFabAbierto(false); abrirNuevo() }}
+              className="flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-medium text-gray-900 shadow-lg dark:bg-gray-800 dark:text-white"
+            >
+              <FilePlus2 size={18} /> Nueva WO
+            </button>
+          </>
+        )}
+        <Fab
+          onClick={() => setFabAbierto(v => !v)}
+          aria-label={fabAbierto ? 'Cerrar acciones' : 'Abrir acciones'}
+          icon={<Plus size={24} className={`transition-transform ${fabAbierto ? 'rotate-45' : ''}`} />}
+        />
+      </div>
+
+      <BuscarWoModal
+        isOpen={buscarAbierto}
+        onClose={() => setBuscarAbierto(false)}
+        onSeleccionar={item => {
+          setSeleccion(item)
+          setFiltroHoy(false)
+          setSoloMios(false)
+        }}
+      />
+
+      <ImportarWosExcel
+        isOpen={importarAbierto}
+        onClose={() => setImportarAbierto(false)}
+        userId={userId}
+        onImportado={cargar}
+      />
 
       {/* Sheet: detalle + acciones */}
       <Sheet opened={Boolean(detalle)} onBackdropClick={() => setDetalle(null)}>
@@ -636,38 +561,4 @@ export default function WosPage() {
       </Modal>
     </AppShell>
   )
-}
-
-function mapearADexie(row) {
-  return {
-    idRemoto: row.id,
-    userId: row.user_id,
-    anio: row.anio || '',
-    mes: row.mes || '',
-    cliente: row.cliente || '',
-    serie: row.serie || '',
-    modelo: row.modelo || '',
-    tipoPm: row.tipo_pm || '',
-    codigoEquipo: row.codigo_equipo || '',
-    nombreEquipo: row.nombre_equipo || '',
-    site: row.site || '',
-    direccion: row.direccion || '',
-    distrito: row.distrito || '',
-    provincia: row.provincia || '',
-    departamento: row.departamento || '',
-    lp: row.lp || '',
-    funcionAtm: row.funcion_atm || '',
-    horarioPv: row.horario_pv || '',
-    restricciones: row.restricciones || '',
-    responsableBoveda: row.responsable_boveda || '',
-    wo: row.wo || '',
-    fecha: row.fecha || '',
-    hora: row.hora || '',
-    horaPv: row.hora_pv || '',
-    legajo: row.legajo || '',
-    ce: row.ce || '',
-    dni: row.dni || '',
-    creadoEn: row.created_at,
-    actualizadoEn: row.updated_at,
-  }
 }
