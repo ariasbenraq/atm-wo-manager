@@ -8,7 +8,7 @@ import { mapearFila, resolverSite, fusionarVacios, texto } from '../lib/wosImpor
 import WosSkeleton from './WosSkeleton'
 import {
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
-  Button, Chip, Alert as HeroAlert,
+  Button, Chip, Switch, Alert as HeroAlert,
 } from '@heroui/react'
 import { Upload, FileSpreadsheet, Check, X } from 'lucide-react'
 
@@ -22,6 +22,7 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
   const [hojas, setHojas] = useState([])
   const [hojasSeleccionadas, setHojasSeleccionadas] = useState([])
   const [dragging, setDragging] = useState(false)
+  const [todosLegajos, setTodosLegajos] = useState(true)
   const [estado, setEstado] = useState(null)
   const [mensaje, setMensaje] = useState('')
 
@@ -106,7 +107,7 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
           const claveLegajo = legajoCrudo || '(sin columna legajo)'
           legajosVistos.set(claveLegajo, (legajosVistos.get(claveLegajo) || 0) + 1)
 
-          if (legajo !== objetivo) {
+          if (!todosLegajos && legajo !== objetivo) {
             otrasLegajos++
             continue
           }
@@ -162,7 +163,7 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
           .join(', ')
         setEstado('warning')
         setMensaje(
-          `No se encontraron filas para importar (legajo ${LEGAJO_ACTUAL}). ` +
+          `No se encontraron filas para importar${todosLegajos ? '' : ` (legajo ${LEGAJO_ACTUAL})`}. ` +
           `Leídas: ${leidas}, sin WO: ${sinWo}, otras legajos: ${otrasLegajos}. ` +
           `Legajos encontrados en el archivo: ${topLegajos || 'ninguno'}.`
         )
@@ -190,7 +191,10 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
         const previa = existentes.get(`${r.wo}|${r.fecha}`)
         if (!previa) return r
         actualizadas++
-        return fusionarVacios(r, previa)
+        // Solo columnas importadas: así no se cuelan id/created_at de la fila previa
+        // (un id null en filas nuevas rompe el upsert por lotes).
+        const fusionada = fusionarVacios(r, previa)
+        return Object.fromEntries(Object.keys(r).map(k => [k, fusionada[k]]))
       })
       const nuevas = registros.length - actualizadas
 
@@ -246,7 +250,7 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
       setEstado('ok')
       setMensaje(
         `${nuevas} nuevas, ${actualizadas} actualizadas. ` +
-        `Omitidas: ${otrasLegajos} de otros legajos, ${sinWo} sin WO, ` +
+        `Omitidas: ${todosLegajos ? '' : `${otrasLegajos} de otros legajos, `}${sinWo} sin WO, ` +
         `${duplicadasArchivo} duplicadas en archivo (fusionadas). Leídas: ${leidas}.`
       )
       setArchivo(null)
@@ -308,7 +312,7 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
                       {cargando && !archivo ? 'Leyendo archivo...' : archivo ? archivo.archivo.name : 'Elegir archivo Excel'}
                     </p>
                     <p className="text-xs text-default-400 mt-0.5">
-                      .xlsx · pestañas por rango de fechas · solo legajo {LEGAJO_ACTUAL}
+                      .xlsx · pestañas por rango de fechas
                     </p>
                   </div>
                   <input
@@ -357,6 +361,15 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
                     })}
                   </div>
                 </div>
+              )}
+
+              {hojas.length > 0 && (
+                <Switch size="sm" isSelected={todosLegajos} onValueChange={setTodosLegajos}>
+                  <span className="text-sm">
+                    Importar todos los legajos
+                    {!todosLegajos && <span className="text-default-400"> (solo {LEGAJO_ACTUAL})</span>}
+                  </span>
+                </Switch>
               )}
 
               {mensaje && (

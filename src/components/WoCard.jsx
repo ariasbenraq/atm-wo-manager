@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Card, Chip } from 'konsta/react'
+import { Card } from 'konsta/react'
 import { Copy, Check } from 'lucide-react'
 import { formatearFecha } from '../lib/date'
 
@@ -32,7 +32,25 @@ async function copiarTexto(texto) {
   }
 }
 
-function CampoCopiable({ etiqueta, valor, destacado = false }) {
+// Color del ID según el banco (campo `cliente`, comparado sin tildes ni mayúsculas)
+const COLORES_BANCO = [
+  { patron: /credito|bcp/, clases: 'bg-blue-700 text-white' },
+  { patron: /interbank|ibk/, clases: 'bg-green-600 text-white' },
+  { patron: /bbva|continental/, clases: 'bg-sky-500 text-white' },
+  { patron: /nacion|bn\b/, clases: 'bg-red-600 text-white' },
+]
+
+function clasesBanco(cliente) {
+  const texto = String(cliente || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+  return COLORES_BANCO.find(c => c.patron.test(texto))?.clases || null
+}
+
+const CHIP_FECHA_HORA = 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium'
+
+function CampoCopiable({ etiqueta, valor, destacado = false, clasesValor = null }) {
   const [copiado, setCopiado] = useState(false)
   const timer = useRef(null)
 
@@ -48,23 +66,29 @@ function CampoCopiable({ etiqueta, valor, destacado = false }) {
     }
   }
 
+  const tamano = destacado ? 'text-base font-semibold' : 'text-sm'
+
   return (
-    <div className="flex min-w-0 items-center justify-between gap-2">
-      <div className="min-w-0">
+    <div className="min-w-0">
+      <div className="flex items-center gap-0.5">
         <p className="text-[10px] uppercase tracking-wide text-gray-400">{etiqueta}</p>
-        <p className={`truncate ${destacado ? 'text-base font-semibold' : 'text-sm'}`}>
-          {valor || '—'}
-        </p>
+        {valor && (
+          <button
+            type="button"
+            onClick={copiar}
+            aria-label={copiado ? `${etiqueta} copiado` : `Copiar ${etiqueta}`}
+            className="cursor-pointer rounded-full p-1 text-gray-400 hover:bg-black/5 active:bg-black/10 dark:hover:bg-white/10"
+          >
+            {copiado ? <Check size={13} className="text-green-600" /> : <Copy size={13} />}
+          </button>
+        )}
       </div>
-      {valor && (
-        <button
-          type="button"
-          onClick={copiar}
-          aria-label={copiado ? `${etiqueta} copiado` : `Copiar ${etiqueta}`}
-          className="shrink-0 cursor-pointer rounded-full p-1.5 text-gray-400 hover:bg-black/5 active:bg-black/10 dark:hover:bg-white/10"
-        >
-          {copiado ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
-        </button>
+      {clasesValor && valor ? (
+        <span className={`inline-block max-w-full truncate rounded-md px-2 py-0.5 ${tamano} ${clasesValor}`}>
+          {valor}
+        </span>
+      ) : (
+        <p className={`truncate ${tamano}`}>{valor || '—'}</p>
       )}
     </div>
   )
@@ -85,15 +109,19 @@ export default function WoCard({ wo, estadoFecha, onClick }) {
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
           {wo.fecha && (
-            <Chip className={`px-2 ${CLASES_ESTADO[estadoFecha] || ''}`}>
+            <span className={`${CHIP_FECHA_HORA} ${CLASES_ESTADO[estadoFecha] || 'bg-gray-100 text-gray-700'}`}>
               {formatearFecha(wo.fecha)}
-            </Chip>
+            </span>
           )}
-          {wo.hora && <span className="text-xs font-medium">{wo.hora}</span>}
+          {wo.hora && (
+            <span className={`${CHIP_FECHA_HORA} ${CLASES_ESTADO[estadoFecha] || 'bg-gray-100 text-gray-700'}`}>
+              {wo.hora}
+            </span>
+          )}
         </div>
       </div>
       <div className="grid grid-cols-1 gap-1.5">
-        <CampoCopiable etiqueta="ID" valor={wo.codigo_equipo} />
+        <CampoCopiable etiqueta="ID" valor={wo.codigo_equipo} clasesValor={clasesBanco(wo.cliente)} />
         <CampoCopiable etiqueta="Site" valor={site} />
         <div className="grid grid-cols-2 gap-2">
           <CampoCopiable etiqueta="Modelo" valor={wo.modelo} />
