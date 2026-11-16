@@ -66,9 +66,7 @@ export default function MisListasPage() {
   const [mensaje, setMensaje] = useState(null)
 
   const [creando, setCreando] = useState(false)
-  const [nuevoNombre, setNuevoNombre] = useState('')
-  const [nuevoSite, setNuevoSite] = useState('')
-  const [nuevoWorkOrder, setNuevoWorkOrder] = useState('')
+  const [busquedaWo, setBusquedaWo] = useState('')
   // WOs del legajo del usuario para elegir al crear una lista
   const [wosLegajo, setWosLegajo] = useState([])
   const [wosCargando, setWosCargando] = useState(false)
@@ -282,11 +280,12 @@ export default function MisListasPage() {
   }
 
   const textoWo = w => `${w.wo} ${w.codigo_equipo || ''} ${siteDeWo(w)}`
+  const woNueva = wosLegajo.find(w => w.wo === woClaveNueva) || null
+  // El nombre se genera solo: ID del equipo · site · WO
+  const nombreAutomatico = w => [w.codigo_equipo, siteDeWo(w), w.wo].filter(Boolean).join(' · ')
 
   async function abrirCrearLista() {
-    setNuevoNombre('')
-    setNuevoSite('')
-    setNuevoWorkOrder('')
+    setBusquedaWo('')
     setWoClaveNueva(null)
     setErrorNombre(null)
     setCreando(true)
@@ -300,28 +299,18 @@ export default function MisListasPage() {
     }
   }
 
-  function elegirWoNueva(key) {
-    setWoClaveNueva(key)
-    const w = wosLegajo.find(x => x.wo === key)
-    if (!w) return
-    setNuevoNombre(w.wo)
-    setNuevoSite(siteDeWo(w))
-    setNuevoWorkOrder(w.wo)
-    setErrorNombre(null)
-  }
-
   async function crearLista() {
     if (guardandoLista) return
     setGuardandoLista(true)
     setErrorNombre(null)
     try {
-      const name = nuevoNombre.trim()
-      const site = nuevoSite.trim()
-      const workOrder = nuevoWorkOrder.trim()
-      if (!name) {
-        setErrorNombre('El nombre es obligatorio.')
+      if (!woNueva) {
+        setErrorNombre('Elige una workorder de tu legajo.')
         return
       }
+      const name = nombreAutomatico(woNueva)
+      const site = siteDeWo(woNueva)
+      const workOrder = woNueva.wo
 
       const { data, error } = await supabase
         .from('spare_part_lists')
@@ -348,9 +337,8 @@ export default function MisListasPage() {
 
       setListas(prev => [{ ...data, itemCount: 0 }, ...prev])
       setCreando(false)
-      setNuevoNombre('')
-      setNuevoSite('')
-      setNuevoWorkOrder('')
+      setBusquedaWo('')
+      setWoClaveNueva(null)
       setMensaje({ color: 'success', texto: `Lista "${data.name}" creada.` })
     } finally {
       setGuardandoLista(false)
@@ -1174,27 +1162,25 @@ export default function MisListasPage() {
             <ModalBody>
               <Autocomplete
                 {...LISTA_DOS_LINEAS}
-                label="Nombre de la lista"
-                placeholder="Elige una WO de tu legajo o escribe un nombre"
-                allowsCustomValue
-                inputValue={nuevoNombre}
+                label="Workorder"
+                placeholder="Busca por WO, ID o site"
+                inputValue={busquedaWo}
                 selectedKey={woClaveNueva}
                 onInputChange={v => {
-                  // Al elegir una opción el componente devuelve su texto completo: se guarda solo la WO
+                  // Al elegir una opción el componente devuelve su texto completo: se muestra solo la WO
                   const w = wosLegajo.find(x => textoWo(x) === v)
-                  if (w) { setNuevoNombre(w.wo); return }
-                  setNuevoNombre(v)
-                  if (woClaveNueva && v !== woClaveNueva) setWoClaveNueva(null)
+                  setBusquedaWo(w ? w.wo : v)
+                  if (!w && woClaveNueva && v !== woClaveNueva) setWoClaveNueva(null)
                   if (errorNombre) setErrorNombre(null)
                 }}
-                onSelectionChange={key => { if (key) elegirWoNueva(String(key)) }}
+                onSelectionChange={key => { setWoClaveNueva(key ? String(key) : null); setErrorNombre(null) }}
                 isLoading={wosCargando}
                 isInvalid={Boolean(errorNombre)}
                 errorMessage={errorNombre}
                 variant="bordered"
                 radius="lg"
                 autoFocus
-                emptyContent={legajoUsuario ? 'Sin WOs de tu legajo. Escribe un nombre.' : 'Tu perfil no tiene legajo. Escribe un nombre.'}
+                emptyContent={legajoUsuario ? 'No hay workorders asignadas a tu legajo.' : 'Tu perfil no tiene legajo asignado.'}
               >
                 {wosLegajo.map(w => (
                   <AutocompleteItem key={w.wo} className={CLASE_DOS_LINEAS} textValue={textoWo(w)}>
@@ -1206,30 +1192,21 @@ export default function MisListasPage() {
                   </AutocompleteItem>
                 ))}
               </Autocomplete>
-              <Input
-                label="Site"
-                placeholder="Ej. SITIO001"
-                value={nuevoSite}
-                onValueChange={v => setNuevoSite(v)}
-                variant="bordered"
-                radius="lg"
-                className="mt-3"
-              />
-              <Input
-                label="Work Order"
-                placeholder="Ej. WO-2025-00123"
-                value={nuevoWorkOrder}
-                onValueChange={v => setNuevoWorkOrder(v)}
-                variant="bordered"
-                radius="lg"
-                className="mt-3"
-              />
+              {woNueva ? (
+                <p className="mt-3 text-xs text-default-500">
+                  Nombre de la lista: <strong className="text-foreground">{nombreAutomatico(woNueva)}</strong>
+                </p>
+              ) : (
+                <p className="mt-3 text-xs text-default-500">
+                  El nombre de la lista se crea solo con el ID, el site y la workorder que elijas.
+                </p>
+              )}
             </ModalBody>
             <ModalFooter>
               <Button variant="light" onPress={() => setCreando(false)}>
                 Cancelar
               </Button>
-              <Button color="primary" onPress={crearLista} isDisabled={guardandoLista} isLoading={guardandoLista}>
+              <Button color="primary" onPress={crearLista} isDisabled={guardandoLista || !woNueva} isLoading={guardandoLista}>
                 Crear lista
               </Button>
             </ModalFooter>
