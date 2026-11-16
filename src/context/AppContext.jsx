@@ -10,6 +10,11 @@ export function AppProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(true)
   const [sesionExpirada, setSesionExpirada] = useState(false)
   const [profile, setProfile] = useState(null)
+  // En /restablecer-clave la sesión es temporal (link de recuperación): no se
+  // carga el perfil ni se sincroniza (sync.js vacía las tablas locales).
+  const [recuperandoClave, setRecuperandoClave] = useState(
+    () => window.location.pathname.startsWith('/restablecer-clave')
+  )
   const cierreManualRef = useRef(false)
 
   const cerrarSesion = useCallback(async () => {
@@ -36,6 +41,7 @@ export function AppProvider({ children }) {
       if ((event === 'SIGNED_OUT' || event === 'USER_DELETED') && !cierreManualRef.current) {
         setSesionExpirada(true)
       }
+      if (event === 'PASSWORD_RECOVERY') setRecuperandoClave(true)
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (nuevaSession) {
           setSesionExpirada(false)
@@ -65,23 +71,28 @@ export function AppProvider({ children }) {
         .single()
       if (!error && data) {
         setProfile(data)
-      } else {
-        setProfile({ id: userId, role: 'user' })
+        return data
       }
     } catch {
-      setProfile({ id: userId, role: 'user' })
+      // se usa el perfil mínimo de abajo
     }
+    const minimo = { id: userId, role: 'user' }
+    setProfile(minimo)
+    return minimo
   }, [])
 
   useEffect(() => {
     async function init() {
       setSyncing(true)
-      await cargarProfile(session.user.id)
-      await syncFromSupabase(session.user.id)
+      const perfil = await cargarProfile(session.user.id)
+      // Cuentas pendientes o suspendidas no sincronizan (las bloquea la RLS)
+      if (!perfil?.estado || perfil.estado === 'activo') {
+        await syncFromSupabase(session.user.id)
+      }
       setSyncing(false)
     }
 
-    if (session) {
+    if (session && !recuperandoClave) {
       init()
     } else {
       // Sin sesión: limpiar perfil y estado de sincronización
@@ -89,7 +100,7 @@ export function AppProvider({ children }) {
       setProfile(null)
       setSyncing(false)
     }
-  }, [session, cargarProfile])
+  }, [session, cargarProfile, recuperandoClave])
 
   const value = useMemo(() => ({
     syncing,
@@ -97,9 +108,11 @@ export function AppProvider({ children }) {
     authLoading,
     sesionExpirada,
     profile,
+    recuperandoClave,
+    setRecuperandoClave,
     setSession,
     cerrarSesion,
-  }), [syncing, session, authLoading, sesionExpirada, profile, cerrarSesion])
+  }), [syncing, session, authLoading, sesionExpirada, profile, recuperandoClave, cerrarSesion])
 
   return (
     <AppContext.Provider value={value}>

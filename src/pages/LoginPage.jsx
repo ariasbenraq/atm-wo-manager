@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { traducirErrorAuth } from '../lib/registro'
 import { useApp } from '../context/AppContext'
 import {
   Card,
@@ -13,6 +14,7 @@ import {
 export default function LoginPage() {
   const { setSession } = useApp()
   const navigate = useNavigate()
+  const aviso = useLocation().state?.aviso
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [errores, setErrores] = useState({})
@@ -61,7 +63,18 @@ export default function LoginPage() {
       })
 
       if (error) {
-        setMensaje({ color: 'danger', texto: error.message })
+        // Si el admin reinició la clave, la anterior ya no sirve: explicarlo
+        const { data: perfil } = await supabase
+          .from('profiles')
+          .select('clave_reiniciada_en')
+          .eq('email', email)
+          .maybeSingle()
+        setMensaje({
+          color: 'danger',
+          texto: perfil?.clave_reiniciada_en
+            ? 'Tu clave fue reiniciada por el administrador. Usa el enlace que te enviaron para crear una nueva contraseña, o pídelo de nuevo.'
+            : traducirErrorAuth(error),
+        })
         return
       }
 
@@ -130,6 +143,13 @@ export default function LoginPage() {
                 description={mensaje.texto}
               />
             )}
+
+            {aviso && !mensaje && <HeroAlert color="success" title="Listo" description={aviso} />}
+
+            <p className="text-center text-sm text-default-500">
+              ¿Primera vez?{' '}
+              <Link to="/registro" className="font-medium text-primary hover:underline">Crear cuenta</Link>
+            </p>
           </CardBody>
         </Card>
       </div>

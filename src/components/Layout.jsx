@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { useIsAdmin } from '../hooks/usePermissions'
+import CuentaBloqueada from './CuentaBloqueada'
 import {
   Navbar,
   NavbarBrand,
@@ -92,6 +93,19 @@ export default function Layout() {
 
   if (!session && !sesionExpirada) {
     return null
+  }
+
+  if (session && profile && profile.estado && profile.estado !== 'activo') {
+    return (
+      <CuentaBloqueada
+        estado={profile.estado}
+        nombre={profile.nombre}
+        onSalir={() => {
+          cerrarSesion()
+          navigate('/login', { replace: true })
+        }}
+      />
+    )
   }
 
   const path = location.pathname.replace(/^\//, '') || 'inicio'
