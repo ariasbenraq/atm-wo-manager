@@ -168,6 +168,12 @@ begin
     'pedidos', 'pedido_items', 'pedidos_personas',
     'workorders', 'preferencias_usuario'
   ] loop
+    -- Se omiten las tablas que aún no existen en esta base; si se crean
+    -- después, vuelve a ejecutar este bloque.
+    if to_regclass('public.' || t) is null then
+      raise notice 'Tabla public.% no existe: se omite', t;
+      continue;
+    end if;
     execute format('drop policy if exists "solo_cuentas_activas" on public.%I', t);
     execute format(
       'create policy "solo_cuentas_activas" on public.%I as restrictive for all to authenticated using (public.usuario_activo()) with check (public.usuario_activo())',
