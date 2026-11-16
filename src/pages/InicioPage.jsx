@@ -7,6 +7,7 @@ import { refrescarCacheWos, leerCacheWos } from '../lib/wosCache'
 import { cargarResumenRemoto, resumirWos, resumirPartes } from '../lib/resumen'
 import { formatearFecha } from '../lib/date'
 import { calcularKit } from '../lib/kitMantenimiento'
+import { useLegajo } from '../hooks/useLegajo'
 
 const FORMATO_DIA = new Intl.DateTimeFormat('es-PE', {
   weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Lima',
@@ -127,6 +128,7 @@ export default function InicioPage() {
   const { session, profile } = useApp()
   const navigate = useNavigate()
   const userId = session?.user?.id
+  const legajo = useLegajo()
 
   const [wos, setWos] = useState(null)
   const [remoto, setRemoto] = useState(null)
@@ -158,7 +160,7 @@ export default function InicioPage() {
     return () => { activo = false }
   }, [userId])
 
-  const resumenWos = useMemo(() => (wos ? resumirWos(wos, userId) : null), [wos, userId])
+  const resumenWos = useMemo(() => (wos ? resumirWos(wos, legajo) : null), [wos, legajo])
   const partes = useMemo(() => (
     resumenWos && remoto?.pedidos
       ? resumirPartes(remoto.pedidos, resumenWos.propias, resumenWos.hoy, resumenWos.fin)
