@@ -66,7 +66,7 @@ export default function LoginPage() {
       }
 
       setSession(data.session ?? null)
-      navigate('/tareas', { replace: true })
+      navigate('/inicio', { replace: true })
     } catch {
       setMensaje({ color: 'danger', texto: 'Error al conectar con el servidor.' })
     } finally {

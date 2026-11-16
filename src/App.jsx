@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { AppProvider } from './context/AppContext'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
+import InicioPage from './pages/InicioPage'
 import TareasPage from './pages/TareasPage'
 import WosPage from './pages/WosPage'
 import RepuestosPage from './pages/RepuestosPage'
@@ -16,6 +17,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route element={<Layout />}>
+          <Route path="/inicio" element={<InicioPage />} />
           <Route path="/tareas" element={<TareasPage />} />
           <Route path="/wos" element={<WosPage />} />
           <Route path="/repuestos" element={<RepuestosPage />} />
@@ -24,7 +26,7 @@ export default function App() {
           <Route path="/pedidos" element={<PedidosPage />} />
           <Route path="/admin/usuarios" element={<AdminUsuariosPage />} />
         </Route>
-        <Route path="*" element={<Navigate to="/tareas" replace />} />
+        <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>
     </AppProvider>
   )

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { refrescarCacheWos, leerCacheWos, wosADexie } from '../lib/wosCache'
@@ -124,7 +125,8 @@ export default function WosPage() {
   const [pagina, setPagina] = useState(1)
   const [tamanoPagina, setTamanoPagina] = useState(10)
   const [soloMios, setSoloMios] = useState(false)
-  const [filtroHoy, setFiltroHoy] = useState(false)
+  const [searchParams] = useSearchParams()
+  const [filtroHoy, setFiltroHoy] = useState(() => searchParams.get('filtro') === 'hoy')
   const [filtrosBusqueda, setFiltrosBusqueda] = useState(null)
   const [nombres, setNombres] = useState({})
 

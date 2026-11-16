@@ -25,9 +25,10 @@ import {
 } from '@heroui/react'
 import MuiAlert from '@mui/material/Alert'
 import Fade from '@mui/material/Fade'
-import { ClipboardList, Headset, List, LogOut, Menu, Package, Shield, ShoppingCart, Warehouse } from 'lucide-react'
+import { ClipboardList, Headset, Home, List, LogOut, Menu, Package, Shield, ShoppingCart, Warehouse } from 'lucide-react'
 
 const vistas = [
+  { key: 'inicio', label: 'Inicio', icon: Home, path: '/inicio' },
   { key: 'tareas', label: 'Tareas', icon: ClipboardList, path: '/tareas' },
   { key: 'wos', label: "Wo's", icon: Headset, path: '/wos' },
   { key: 'repuestos', label: 'Repuestos', icon: Package, path: '/repuestos' },
@@ -40,7 +41,7 @@ const vistasAdmin = [
   { key: 'admin/usuarios', label: 'Usuarios', icon: Shield, path: '/admin/usuarios' },
 ]
 
-const CLAVES_INFERIOR = ['wos', 'pedidos', 'almacen', 'mis-listas']
+const CLAVES_INFERIOR = ['inicio', 'wos', 'pedidos', 'mis-listas', 'almacen']
 const vistasInferior = CLAVES_INFERIOR.map(k => vistas.find(v => v.key === k))
 const vistasMas = vistas.filter(v => !CLAVES_INFERIOR.includes(v.key))
 
@@ -168,7 +169,7 @@ export default function Layout() {
     ? `PROXIMA TAREA ${formatearTiempoRestanteCorto(proximaTarea.marca - ahoraMs)}`
     : ''
 
-  const path = location.pathname.replace(/^\//, '') || 'tareas'
+  const path = location.pathname.replace(/^\//, '') || 'inicio'
   const vistaActiva = [...vistas, ...vistasAdmin].find(v => v.key === path) || vistas[0]
   const enMas = vistasMas.some(v => v.key === vistaActiva.key) || vistasAdmin.some(v => v.key === vistaActiva.key)
 
