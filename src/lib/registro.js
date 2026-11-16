@@ -21,6 +21,9 @@ export function traducirErrorAuth(error) {
   const msg = String(error?.message || error || '')
   if (/already registered|already been registered/i.test(msg)) return 'Ese correo ya está registrado.'
   if (/banned/i.test(msg)) return 'Tu cuenta está suspendida. Contacta al administrador.'
+  if (/email not confirmed/i.test(msg)) {
+    return 'Tu correo aún no está confirmado. Pide al administrador que revise la configuración de la cuenta.'
+  }
   if (/invalid login credentials/i.test(msg)) return 'Usuario o contraseña incorrectos.'
   if (/password should be at least/i.test(msg)) return `La contraseña debe tener al menos ${CLAVE_MIN} caracteres.`
   if (/rate limit|too many/i.test(msg)) return 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.'
