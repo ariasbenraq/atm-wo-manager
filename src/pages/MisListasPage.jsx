@@ -12,6 +12,8 @@ import {
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
   Autocomplete, AutocompleteItem,
 } from '@heroui/react'
+import OpcionDosLineas from '../components/ui/OpcionDosLineas'
+import { LISTA_DOS_LINEAS, CLASE_DOS_LINEAS } from '../components/ui/listaOpciones'
 import {
   List, Plus, Minus, ArrowLeft, Pencil, Trash2, Copy, Share2, X, Check, Warehouse, ChevronRight, Undo2, Send,
 } from 'lucide-react'
@@ -1249,6 +1251,7 @@ export default function MisListasPage() {
               <ModalBody>
                 <div className="space-y-4">
                   <Autocomplete
+                    {...LISTA_DOS_LINEAS}
                     label="Repuesto"
                     placeholder="Buscar por nombre o part number..."
                     defaultItems={editItemRepuestos}
@@ -1261,9 +1264,8 @@ export default function MisListasPage() {
                     autoFocus
                   >
                     {r => (
-                      <AutocompleteItem key={r.id} textValue={`${r.nombre} ${r.part_number}`}>
-                        <span>{r.nombre}</span>
-                        <span className="text-default-400 ml-2 font-mono text-xs">{r.part_number}</span>
+                      <AutocompleteItem key={r.id} className={CLASE_DOS_LINEAS} textValue={`${r.nombre} ${r.part_number}`}>
+                        <OpcionDosLineas principal={r.nombre} derecha={r.part_number} derechaMono />
                       </AutocompleteItem>
                     )}
                   </Autocomplete>
@@ -1297,6 +1299,7 @@ export default function MisListasPage() {
             <ModalBody>
               <div className="space-y-4">
                 <Autocomplete
+                  {...LISTA_DOS_LINEAS}
                   label="Repuesto"
                   placeholder="Buscar por nombre o part number..."
                   defaultItems={agregarItemRepuestos}
@@ -1309,9 +1312,8 @@ export default function MisListasPage() {
                   autoFocus
                 >
                   {r => (
-                    <AutocompleteItem key={r.id} textValue={`${r.nombre} ${r.part_number}`}>
-                      <span>{r.nombre}</span>
-                      <span className="text-default-400 ml-2 font-mono text-xs">{r.part_number}</span>
+                    <AutocompleteItem key={r.id} className={CLASE_DOS_LINEAS} textValue={`${r.nombre} ${r.part_number}`}>
+                      <OpcionDosLineas principal={r.nombre} derecha={r.part_number} derechaMono />
                     </AutocompleteItem>
                   )}
                 </Autocomplete>

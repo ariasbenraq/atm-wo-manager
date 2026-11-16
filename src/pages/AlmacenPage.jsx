@@ -12,6 +12,8 @@ import {
   Select, SelectItem,
   Autocomplete, AutocompleteItem,
 } from '@heroui/react'
+import OpcionDosLineas from '../components/ui/OpcionDosLineas'
+import { LISTA_DOS_LINEAS, CLASE_DOS_LINEAS } from '../components/ui/listaOpciones'
 import { Search, Plus, Minus, Warehouse, History, RotateCcw, Pencil, Trash2, Clock } from 'lucide-react'
 
 // Por debajo o igual a este número, el repuesto se marca como «stock bajo»
@@ -641,6 +643,7 @@ export default function AlmacenPage() {
             <ModalHeader className="text-default-900">Ajustar inventario</ModalHeader>
             <ModalBody className="space-y-4">
               <Autocomplete
+                {...LISTA_DOS_LINEAS}
                 label="Part Number"
                 placeholder="Buscar por nombre o part number..."
                 defaultItems={ajusteRepuestos}
@@ -653,9 +656,8 @@ export default function AlmacenPage() {
                 autoFocus
               >
                 {r => (
-                  <AutocompleteItem key={r.part_number} textValue={`${r.nombre} ${r.part_number}`}>
-                    <span>{r.nombre}</span>
-                    <span className="text-default-400 ml-2 font-mono text-xs">{r.part_number}</span>
+                  <AutocompleteItem key={r.part_number} className={CLASE_DOS_LINEAS} textValue={`${r.nombre} ${r.part_number}`}>
+                    <OpcionDosLineas principal={r.nombre} derecha={r.part_number} derechaMono />
                   </AutocompleteItem>
                 )}
               </Autocomplete>

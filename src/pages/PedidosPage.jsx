@@ -8,6 +8,8 @@ import { useIsAdmin } from '../hooks/usePermissions'
 import { usaKit, KIT_POR_ATM, normalizarPartNumber } from '../lib/kitMantenimiento'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { formatearFecha, formatearFechaHora } from '../lib/date'
+import OpcionDosLineas from '../components/ui/OpcionDosLineas'
+import { LISTA_DOS_LINEAS, CLASE_DOS_LINEAS } from '../components/ui/listaOpciones'
 import PersonasPedidos from '../components/pedidos/PersonasPedidos'
 import {
   Card, CardBody, CardHeader, Divider,
@@ -665,6 +667,7 @@ export default function PedidosPage() {
             {paso === 1 && (
               <>
                 <Autocomplete
+                  {...LISTA_DOS_LINEAS}
                   label="Buscar WO"
                   placeholder="Busca por WO, ID o nombre de equipo"
                   selectedKey={woCatalogoKey}
@@ -673,14 +676,12 @@ export default function PedidosPage() {
                   emptyContent="Sin workorders. Puedes ingresar los datos manualmente."
                 >
                   {wosCatalogo.map(w => (
-                    <AutocompleteItem key={w.wo} textValue={`${w.wo} ${w.codigo_equipo || ''} ${w.nombre_equipo || ''}`}>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium">{w.wo}</span>
-                        {w.fecha && <span className="text-xs text-default-400">{formatearFecha(w.fecha)}</span>}
-                      </div>
-                      <span className="text-xs text-default-400">
-                        {[w.codigo_equipo, w.nombre_equipo].filter(Boolean).join(' · ')}
-                      </span>
+                    <AutocompleteItem key={w.wo} className={CLASE_DOS_LINEAS} textValue={`${w.wo} ${w.codigo_equipo || ''} ${siteDeWo(w)}`}>
+                      <OpcionDosLineas
+                        principal={w.wo}
+                        derecha={w.fecha ? formatearFecha(w.fecha) : ''}
+                        secundario={[w.codigo_equipo, siteDeWo(w)].filter(Boolean).join(' · ') || 'Sin ID ni site'}
+                      />
                     </AutocompleteItem>
                   ))}
                 </Autocomplete>
@@ -739,6 +740,7 @@ export default function PedidosPage() {
                 )}
 
                 <Autocomplete
+                  {...LISTA_DOS_LINEAS}
                   label="Repuesto"
                   placeholder="Busca por nombre o part number"
                   selectedKey={itemRepuestoId || null}
@@ -747,9 +749,8 @@ export default function PedidosPage() {
                   emptyContent="Sin repuestos disponibles."
                 >
                   {repuestos.map(r => (
-                    <AutocompleteItem key={r.id} textValue={`${r.nombre} ${r.part_number}`}>
-                      <span className="text-sm">{r.nombre}</span>
-                      <span className="text-xs text-default-400">{r.part_number}</span>
+                    <AutocompleteItem key={r.id} className={CLASE_DOS_LINEAS} textValue={`${r.nombre} ${r.part_number}`}>
+                      <OpcionDosLineas principal={r.nombre} derecha={r.part_number} derechaMono />
                     </AutocompleteItem>
                   ))}
                 </Autocomplete>
