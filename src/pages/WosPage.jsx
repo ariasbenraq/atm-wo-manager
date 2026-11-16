@@ -5,9 +5,9 @@ import { refrescarCacheWos, leerCacheWos, wosADexie } from '../lib/wosCache'
 import { db } from '../lib/db'
 import { formatearFecha } from '../lib/date'
 import { formatMes } from '../lib/excel'
-import { LEGAJO_ACTUAL } from '../lib/wosConfig'
+import { useLegajo } from '../hooks/useLegajo'
 import {
-  hoyLima, normalizarLegajo, cargarNombresTecnicos, coincideFiltros, hayFiltros,
+  hoyLima, normalizarLegajo, cargarNombresTecnicos, coincideFiltros, hayFiltros, nombreDeWo,
 } from '../lib/wosTecnicos'
 import ImportarWosExcel from '../components/ImportarWosExcel'
 import WosSkeleton from '../components/WosSkeleton'
@@ -51,6 +51,10 @@ const CAMPOS_DETALLE = [
   ['CE', 'ce'],
   ['DNI', 'dni'],
 ]
+
+const MESES_RETENCION = 6
+const DIAS_POSPONER = 7
+const CLAVE_LIMPIEZA = 'wos_limpieza_pospuesta'
 
 const CLIENTES_MANUALES = ['Banco de Crédito', 'Interbank', 'BBVA', 'Banco Nación']
 
@@ -109,6 +113,7 @@ function fechaEstado(fecha) {
 export default function WosPage() {
   const { session } = useApp()
   const userId = session?.user?.id
+  const legajoUsuario = useLegajo()
 
   const [wos, setWos] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -163,9 +168,57 @@ export default function WosPage() {
 
   useEffect(() => {
     let activo = true
-    cargarNombresTecnicos(wos.map(w => w.user_id)).then(n => { if (activo) setNombres(n) })
+    cargarNombresTecnicos().then(n => { if (activo) setNombres(n) })
     return () => { activo = false }
   }, [wos])
+
+  // WOs propias importadas hace más de 6 meses (candidatas a limpieza)
+  const wosAntiguas = useMemo(() => {
+    const limite = new Date()
+    limite.setMonth(limite.getMonth() - MESES_RETENCION)
+    return wos.filter(w => w.user_id === userId && w.created_at && new Date(w.created_at) < limite)
+  }, [wos, userId])
+
+  const [limpiezaPospuesta, setLimpiezaPospuesta] = useState(() => {
+    try {
+      const t = Number(localStorage.getItem(CLAVE_LIMPIEZA) || 0)
+      return Date.now() - t < DIAS_POSPONER * 86400000
+    } catch { return false }
+  })
+  const [limpiezaAbierta, setLimpiezaAbierta] = useState(false)
+  const [limpiando, setLimpiando] = useState(false)
+
+  function posponerLimpieza() {
+    try { localStorage.setItem(CLAVE_LIMPIEZA, String(Date.now())) } catch { /* sin almacenamiento */ }
+    setLimpiezaPospuesta(true)
+  }
+
+  async function eliminarAntiguas() {
+    if (!wosAntiguas.length || !userId) return
+    setLimpiando(true)
+    try {
+      const ids = wosAntiguas.map(w => w.id)
+      for (let i = 0; i < ids.length; i += 100) {
+        const { error } = await supabase
+          .from('workorders')
+          .delete()
+          .in('id', ids.slice(i, i + 100))
+          .eq('user_id', userId)
+        if (error) throw error
+      }
+      const set = new Set(ids)
+      setWos(prev => prev.filter(w => !set.has(w.id)))
+      try {
+        await db.workorders.filter(w => set.has(w.idRemoto)).delete()
+      } catch { /* silent */ }
+      setMensaje({ color: 'success', texto: `${ids.length} WO${ids.length === 1 ? '' : 's'} antigua${ids.length === 1 ? '' : 's'} eliminada${ids.length === 1 ? '' : 's'}.` })
+      setLimpiezaAbierta(false)
+    } catch (e) {
+      setMensaje({ color: 'danger', texto: e.message || 'No se pudieron eliminar las WOs antiguas.' })
+    } finally {
+      setLimpiando(false)
+    }
+  }
 
   const wosFiltradas = useMemo(() => {
     let resultado = wos
@@ -181,7 +234,7 @@ export default function WosPage() {
       resultado = resultado.filter(w => coincideFiltros(w, filtrosBusqueda, nombres))
     }
     if (soloMios) {
-      const mio = normalizarLegajo(LEGAJO_ACTUAL)
+      const mio = normalizarLegajo(legajoUsuario)
       resultado = resultado.filter(w => normalizarLegajo(w.legajo) === mio)
     }
     // Hoy y lo más próximo hacia el futuro (fecha y hora ascendente); las pasadas al final, de la más reciente a la más antigua
@@ -197,7 +250,7 @@ export default function WosPage() {
       if (cmpHora !== 0) return cmpHora
       return String(a.wo || '').localeCompare(String(b.wo || ''))
     })
-  }, [wos, seleccion, filtroHoy, soloMios, filtrosBusqueda, nombres])
+  }, [wos, seleccion, filtroHoy, soloMios, filtrosBusqueda, nombres, legajoUsuario])
 
   const totalPaginas = Math.max(1, Math.ceil(wosFiltradas.length / tamanoPagina))
   const paginaSegura = Math.min(pagina, totalPaginas)
@@ -237,6 +290,10 @@ export default function WosPage() {
       return
     }
     if (!userId) return
+    if (!legajoUsuario) {
+      setErrorForm('Tu perfil no tiene legajo. Pide al administrador que te lo asigne.')
+      return
+    }
 
     setGuardando(true)
     setErrorForm(null)
@@ -250,7 +307,7 @@ export default function WosPage() {
         serie: formSerie.trim(),
         modelo: formModelo.trim(),
         nombre_equipo: formNombreEquipo.trim(),
-        legajo: LEGAJO_ACTUAL,
+        legajo: legajoUsuario,
         updated_at: new Date().toISOString(),
       }
 
@@ -329,6 +386,30 @@ export default function WosPage() {
         />
       )}
 
+      {!legajoUsuario && (
+        <HeroAlert
+          color="warning"
+          title="Sin legajo asignado"
+          description="Tu perfil no tiene legajo todavía. Pide al administrador que lo asigne para importar o crear WOs."
+          className="mb-3"
+        />
+      )}
+
+      {wosAntiguas.length > 0 && !limpiezaPospuesta && (
+        <HeroAlert
+          color="warning"
+          title="WOs antiguas"
+          description={`Tienes ${wosAntiguas.length} WO${wosAntiguas.length === 1 ? '' : 's'} importada${wosAntiguas.length === 1 ? '' : 's'} hace más de ${MESES_RETENCION} meses.`}
+          className="mb-3"
+          endContent={
+            <div className="flex gap-1">
+              <Button size="sm" variant="light" onPress={posponerLimpieza}>Más tarde</Button>
+              <Button size="sm" color="warning" variant="flat" onPress={() => setLimpiezaAbierta(true)}>Revisar</Button>
+            </div>
+          }
+        />
+      )}
+
       <div className="sticky top-0 z-20 -mx-4 bg-md-light-surface px-6 pb-2 pt-1 dark:bg-md-dark-surface">
         <div className="flex items-center gap-1.5 pb-1">
           {seleccion && (
@@ -374,7 +455,7 @@ export default function WosPage() {
               key={wo.id}
               wo={wo}
               estadoFecha={fechaEstado(wo.fecha)}
-              tecnico={nombres[wo.user_id] || ''}
+              tecnico={nombreDeWo(wo, nombres)}
               onClick={() => setDetalle(wo)}
             />
           ))}
@@ -560,7 +641,7 @@ export default function WosPage() {
               isRequired
             />
             <p className="text-xs text-default-400">
-              Legajo asociado: <strong>{LEGAJO_ACTUAL}</strong>. El resto de los datos se completa en una edición futura.
+              Legajo asociado: <strong>{legajoUsuario || 'sin asignar'}</strong>. El resto de los datos se completa en una edición futura.
             </p>
             {errorForm && (
               <HeroAlert color="danger" title="No se pudo guardar" description={errorForm} />
@@ -573,6 +654,28 @@ export default function WosPage() {
             <Button color="primary" onPress={guardarManual} isLoading={guardando} startContent={<Check size={16} />}>
               Guardar
             </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Modal: limpieza de WOs antiguas */}
+      <Modal isOpen={limpiezaAbierta} onOpenChange={setLimpiezaAbierta} placement="center" size="sm" scrollBehavior="inside">
+        <ModalContent>
+          <ModalHeader>Eliminar WOs antiguas</ModalHeader>
+          <ModalBody>
+            <p className="text-sm">
+              Se eliminarán <strong>{wosAntiguas.length}</strong> WO{wosAntiguas.length === 1 ? '' : 's'} propia{wosAntiguas.length === 1 ? '' : 's'} importada{wosAntiguas.length === 1 ? '' : 's'} hace más de {MESES_RETENCION} meses. No se puede deshacer.
+            </p>
+            <ul className="max-h-40 space-y-0.5 overflow-y-auto text-xs text-default-500">
+              {wosAntiguas.slice(0, 50).map(w => (
+                <li key={w.id}>{w.wo} · {formatearFecha(w.fecha)}</li>
+              ))}
+              {wosAntiguas.length > 50 && <li>… y {wosAntiguas.length - 50} más</li>}
+            </ul>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="flat" onPress={() => setLimpiezaAbierta(false)}>Cancelar</Button>
+            <Button color="danger" onPress={eliminarAntiguas} isLoading={limpiando}>Eliminar</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

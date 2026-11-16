@@ -8,7 +8,7 @@ import {
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
   Alert as HeroAlert,
 } from '@heroui/react'
-import { Shield, ShieldOff, Search, ArrowLeft } from 'lucide-react'
+import { Shield, ShieldOff, Search, ArrowLeft, Pencil } from 'lucide-react'
 
 export default function AdminUsuariosPage() {
   const { session } = useApp()
@@ -23,6 +23,11 @@ export default function AdminUsuariosPage() {
   const [editandoUsuario, setEditandoUsuario] = useState(null)
   const [nuevoRol, setNuevoRol] = useState(null)
   const [guardando, setGuardando] = useState(false)
+
+  const [perfilEditando, setPerfilEditando] = useState(null)
+  const [formNombre, setFormNombre] = useState('')
+  const [formLegajo, setFormLegajo] = useState('')
+  const [errorPerfil, setErrorPerfil] = useState(null)
 
   async function cargarUsuarios() {
     setCargando(true)
@@ -86,10 +91,53 @@ export default function AdminUsuariosPage() {
     cerrarCambioRol()
   }
 
+  function abrirEditarPerfil(usuario) {
+    setPerfilEditando(usuario)
+    setFormNombre(usuario.full_name || '')
+    setFormLegajo(usuario.legajo || '')
+    setErrorPerfil(null)
+    setGuardando(false)
+  }
+
+  async function guardarPerfil() {
+    if (!perfilEditando) return
+    const nombre = formNombre.trim()
+    const legajo = formLegajo.replace(/\s+/g, '').toUpperCase()
+    if (!nombre) {
+      setErrorPerfil('El nombre es obligatorio.')
+      return
+    }
+    setGuardando(true)
+    setErrorPerfil(null)
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ full_name: nombre, legajo })
+      .eq('id', perfilEditando.id)
+
+    if (error) {
+      setErrorPerfil(
+        error.code === '23505'
+          ? 'Ese legajo ya está asignado a otro usuario.'
+          : error.message
+      )
+      setGuardando(false)
+      return
+    }
+
+    setUsuarios(prev => prev.map(u =>
+      u.id === perfilEditando.id ? { ...u, full_name: nombre, legajo } : u
+    ))
+    setMensaje({ color: 'success', texto: `Perfil de ${nombre} actualizado.` })
+    setPerfilEditando(null)
+    setGuardando(false)
+  }
+
   const filtroNormalizado = filtro.toLowerCase().trim()
   const usuariosFiltrados = filtroNormalizado
     ? usuarios.filter(u =>
         (u.full_name || '').toLowerCase().includes(filtroNormalizado) ||
+        (u.legajo || '').toLowerCase().includes(filtroNormalizado) ||
         (u.email || '').toLowerCase().includes(filtroNormalizado)
       )
     : usuarios
@@ -140,7 +188,7 @@ export default function AdminUsuariosPage() {
           <div className="mt-4">
             <Input
               label=""
-              placeholder="Buscar por nombre o email..."
+              placeholder="Buscar por nombre, legajo o email..."
               value={filtro}
               onValueChange={setFiltro}
               variant="bordered"
@@ -181,6 +229,11 @@ export default function AdminUsuariosPage() {
                       <p className="truncate text-[13px] text-default-500">
                         {usuario.email || '—'}
                       </p>
+                      {usuario.legajo ? (
+                        <p className="font-mono text-[12px] text-default-600">{usuario.legajo}</p>
+                      ) : (
+                        <p className="text-[12px] text-warning-600">Sin legajo</p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <Chip
@@ -191,6 +244,16 @@ export default function AdminUsuariosPage() {
                       >
                         {usuario.role === 'admin' ? 'Admin' : 'Usuario'}
                       </Chip>
+                      <Button
+                        size="sm"
+                        variant="light"
+                        radius="lg"
+                        className="h-8 min-w-8 p-0 text-default-400 hover:text-default-700"
+                        aria-label="Editar nombre y legajo"
+                        onPress={() => abrirEditarPerfil(usuario)}
+                      >
+                        <Pencil size={15} />
+                      </Button>
                       {session?.user?.id !== usuario.id && (
                         <Button
                           size="sm"
@@ -211,6 +274,43 @@ export default function AdminUsuariosPage() {
           </div>
         )}
       </div>
+
+      <Modal isOpen={Boolean(perfilEditando)} onOpenChange={abierto => !abierto && setPerfilEditando(null)}>
+        <ModalContent>
+          <>
+            <ModalHeader className="text-default-900">Editar técnico</ModalHeader>
+            <ModalBody className="space-y-3">
+              <Input
+                label="Nombre"
+                value={formNombre}
+                onValueChange={setFormNombre}
+                variant="bordered"
+                radius="lg"
+              />
+              <Input
+                label="Legajo"
+                placeholder="PE101L84"
+                value={formLegajo}
+                onValueChange={v => setFormLegajo(v.toUpperCase())}
+                variant="bordered"
+                radius="lg"
+              />
+              <p className="text-xs text-default-400">
+                El legajo determina qué filas importa este usuario del Excel y se usa en el formulario de consumo.
+              </p>
+              {errorPerfil && <p className="text-sm text-danger">{errorPerfil}</p>}
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" radius="lg" onPress={() => setPerfilEditando(null)}>
+                Cancelar
+              </Button>
+              <Button color="primary" radius="lg" onPress={guardarPerfil} isLoading={guardando}>
+                Guardar
+              </Button>
+            </ModalFooter>
+          </>
+        </ModalContent>
+      </Modal>
 
       <Modal isOpen={Boolean(editandoUsuario)} onOpenChange={abierto => !abierto && cerrarCambioRol()}>
         <ModalContent>

@@ -7,7 +7,7 @@ import { Search, X, Clock } from 'lucide-react'
 import { db } from '../lib/db'
 import { formatearFecha } from '../lib/date'
 import {
-  coincideFiltros, hayFiltros, hoyLima, normalizarLegajo, rangoSemana,
+  coincideFiltros, hayFiltros, hoyLima, normalizarLegajo, rangoSemana, nombreDeWo,
 } from '../lib/wosTecnicos'
 
 const DEBOUNCE_MS = 300
@@ -50,7 +50,7 @@ async function buscarLocal(filtros, nombres) {
         site: w.site || w.nombreEquipo || '',
         legajo: w.legajo,
         distrito: w.distrito,
-        tecnico: nombres?.[w.userId] || '',
+        tecnico: nombreDeWo(w, nombres),
       })
     }
   }
@@ -79,7 +79,7 @@ export default function BuscarWoModal({ isOpen, onClose, onSeleccionar, onAplica
         const clave = normalizarLegajo(w.legajo)
         if (!clave) continue
         const actual = porLegajo.get(clave) || { legajo: w.legajo, nombres: new Set() }
-        const nombre = nombres[w.userId]
+        const nombre = nombreDeWo(w, nombres)
         if (nombre) actual.nombres.add(nombre)
         porLegajo.set(clave, actual)
       }

@@ -3,7 +3,8 @@ import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
 import { excelFechaAString, excelHoraAString, mesAISO } from '../lib/excel'
-import { LEGAJO_ACTUAL } from '../lib/wosConfig'
+import { useLegajo } from '../hooks/useLegajo'
+import { useIsAdmin } from '../hooks/usePermissions'
 import { mapearFila, resolverSite, fusionarVacios, texto } from '../lib/wosImport'
 import WosSkeleton from './WosSkeleton'
 import {
@@ -22,7 +23,12 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
   const [hojas, setHojas] = useState([])
   const [hojasSeleccionadas, setHojasSeleccionadas] = useState([])
   const [dragging, setDragging] = useState(false)
-  const [todosLegajos, setTodosLegajos] = useState(true)
+  const legajoUsuario = useLegajo()
+  const esAdmin = useIsAdmin()
+  const [importarTodos, setImportarTodos] = useState(false)
+  // Solo el administrador puede importar filas de otros legajos
+  const todosLegajos = importarTodos && esAdmin
+  const sinLegajo = !todosLegajos && !legajoUsuario
   const [estado, setEstado] = useState(null)
   const [mensaje, setMensaje] = useState('')
 
@@ -75,7 +81,7 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
   }
 
   async function importar() {
-    if (!archivo || !hojasSeleccionadas.length || !userId) return
+    if (!archivo || !hojasSeleccionadas.length || !userId || sinLegajo) return
     setCargando(true)
     setEstado('loading')
     setMensaje('Procesando pestañas...')
@@ -87,7 +93,7 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
       let duplicadasArchivo = 0
       const vistas = new Map()
       const legajosVistos = new Map()
-      const objetivo = normalizarLegajo(LEGAJO_ACTUAL)
+      const objetivo = normalizarLegajo(legajoUsuario)
 
       for (const nombreHoja of hojasSeleccionadas) {
         const hoja = archivo.workbook.Sheets[nombreHoja]
@@ -163,7 +169,7 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
           .join(', ')
         setEstado('warning')
         setMensaje(
-          `No se encontraron filas para importar${todosLegajos ? '' : ` (legajo ${LEGAJO_ACTUAL})`}. ` +
+          `No se encontraron filas para importar${todosLegajos ? '' : ` (legajo ${legajoUsuario})`}. ` +
           `Leídas: ${leidas}, sin WO: ${sinWo}, otras legajos: ${otrasLegajos}. ` +
           `Legajos encontrados en el archivo: ${topLegajos || 'ninguno'}.`
         )
@@ -363,13 +369,25 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
                 </div>
               )}
 
-              {hojas.length > 0 && (
-                <Switch size="sm" isSelected={todosLegajos} onValueChange={setTodosLegajos}>
+              {hojas.length > 0 && esAdmin && (
+                <Switch size="sm" isSelected={importarTodos} onValueChange={setImportarTodos}>
                   <span className="text-sm">
                     Importar todos los legajos
-                    {!todosLegajos && <span className="text-default-400"> (solo {LEGAJO_ACTUAL})</span>}
+                    {!todosLegajos && legajoUsuario && <span className="text-default-400"> (solo {legajoUsuario})</span>}
                   </span>
                 </Switch>
+              )}
+
+              {hojas.length > 0 && !todosLegajos && legajoUsuario && !esAdmin && (
+                <p className="text-xs text-default-400">Se importan solo las filas de tu legajo ({legajoUsuario}).</p>
+              )}
+
+              {sinLegajo && (
+                <HeroAlert
+                  color="warning"
+                  title="Sin legajo asignado"
+                  description="Tu perfil no tiene legajo. Pide al administrador que te lo asigne para poder importar."
+                />
               )}
 
               {mensaje && (
@@ -391,7 +409,7 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
               color="primary"
               onPress={importar}
               isLoading={importando}
-              isDisabled={!archivo || !hojasSeleccionadas.length || cargando}
+              isDisabled={!archivo || !hojasSeleccionadas.length || cargando || sinLegajo}
               startContent={!importando ? <Check size={16} /> : undefined}
             >
               Importar

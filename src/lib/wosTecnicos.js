@@ -33,28 +33,34 @@ function guardarCacheNombres(obj) {
   } catch { /* sin almacenamiento disponible */ }
 }
 
-// Devuelve { [userId]: nombre } para los usuarios dados.
+// Devuelve un mapa de nombres: { [userId]: nombre, ['legajo:PE101L84']: nombre }.
+// Los perfiles son legibles por todos, así que se leen todos de una vez.
 // Si no hay conexión, usa el último resultado guardado.
-export async function cargarNombresTecnicos(userIds) {
-  const ids = [...new Set((userIds || []).filter(Boolean))]
-  const cache = leerCacheNombres()
-  if (!ids.length) return cache
-
+export async function cargarNombresTecnicos() {
   try {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, full_name, username')
-      .in('id', ids)
+      .select('id, full_name, username, legajo')
     if (error) throw error
-    const nuevo = { ...cache }
+    const nuevo = {}
     for (const p of data || []) {
-      nuevo[p.id] = (p.full_name || '').trim() || p.username || ''
+      const nombre = (p.full_name || '').trim() || p.username || ''
+      nuevo[p.id] = nombre
+      const leg = normalizarLegajo(p.legajo)
+      if (leg && nombre) nuevo[`legajo:${leg}`] = nombre
     }
     guardarCacheNombres(nuevo)
     return nuevo
   } catch {
-    return cache
+    return leerCacheNombres()
   }
+}
+
+// Nombre del técnico de una WO: primero por su legajo, luego por el usuario dueño.
+export function nombreDeWo(w, nombres) {
+  if (!w || !nombres) return ''
+  const leg = normalizarLegajo(w.legajo)
+  return (leg && nombres[`legajo:${leg}`]) || nombres[w.userId ?? w.user_id] || ''
 }
 
 // Lunes y domingo de la semana de la fecha dada (AAAA-MM-DD)
@@ -78,7 +84,7 @@ export function coincideFiltros(w, filtros, nombres) {
 
   const tokens = normalizarTexto(filtros.texto).split(/\s+/).filter(Boolean)
   if (tokens.length) {
-    const nombre = nombres?.[w.userId ?? w.user_id] || ''
+    const nombre = nombreDeWo(w, nombres)
     const campos = [
       w.wo,
       w.codigoEquipo ?? w.codigo_equipo,
