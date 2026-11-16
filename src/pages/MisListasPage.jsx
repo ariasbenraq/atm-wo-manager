@@ -20,7 +20,7 @@ import {
 import PageHeader from '../components/ui/PageHeader'
 
 // Dos procesos independientes (en cualquier orden): descontar del almacén y enviar al Google Form
-function EstadoChips({ lista, className = 'ml-2' }) {
+function EstadoChips({ lista, className = 'ml-2', mostrarForm = true }) {
   const sincronizada = Boolean(lista.inventory_synced)
   const enviada = Boolean(lista.form_enviado_en)
   return (
@@ -28,11 +28,16 @@ function EstadoChips({ lista, className = 'ml-2' }) {
       <Chip size="sm" variant="flat" radius="lg" color={sincronizada ? 'success' : 'warning'} className="h-5 text-xs">
         {sincronizada ? 'Almacén: descontada' : 'Almacén: pendiente'}
       </Chip>
-      <Chip size="sm" variant="flat" radius="lg" color={enviada ? 'primary' : 'default'} className="h-5 text-xs">
+      {mostrarForm && <Chip size="sm" variant="flat" radius="lg" color={enviada ? 'primary' : 'default'} className="h-5 text-xs">
         {enviada ? 'Formulario: enviado' : 'Formulario: pendiente'}
-      </Chip>
+      </Chip>}
     </span>
   )
+}
+
+function contrataDe(lista, userId, profile) {
+  const esDeOtro = Boolean(lista?.user_id && lista.user_id !== userId)
+  return String((esDeOtro ? lista?.usuario?.contrata : profile?.contrata) || '').toUpperCase()
 }
 
 function tiempoRelativo(iso) {
@@ -100,6 +105,8 @@ export default function MisListasPage() {
   const legajoDeLista = esDeOtro
     ? String(listaActiva.usuario?.legajo || '').replace(/\s+/g, '').toUpperCase()
     : legajoUsuario
+  // Solo los técnicos de la contrata IDERKA pueden usar el formulario de consumo
+  const puedeEnviarForm = contrataDe(listaActiva, userId, profile) === 'IDERKA'
   const [confirmarSync, setConfirmarSync] = useState(false)
   // Correo registrado del técnico dueño de la lista (el formulario lo pide)
   const emailDeLista = esDeOtro
@@ -173,7 +180,7 @@ export default function MisListasPage() {
       if (esAdmin) {
         const { data: perfiles } = await supabase
           .from('profiles')
-          .select('id, email, full_name, legajo')
+          .select('id, email, full_name, legajo, contrata')
         if (perfiles) {
           usuariosMap = Object.fromEntries(perfiles.map(p => [p.id, p]))
         }
@@ -756,7 +763,7 @@ export default function MisListasPage() {
                         {lista.updated_at ? <span className="text-default-400">· {tiempoRelativo(lista.updated_at)}</span> : null}
                         {esAdmin && lista.usuario ? <span className="text-default-400">· {lista.usuario.email || lista.usuario.full_name || lista.user_id?.slice(0, 8)}</span> : null}
                       </div>
-                      <EstadoChips lista={lista} className="" />
+                      <EstadoChips lista={lista} className="" mostrarForm={contrataDe(lista, userId, profile) === 'IDERKA'} />
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span aria-hidden="true" className="px-2.5 text-xs font-medium text-default-500 md:hidden">Ver</span>
@@ -789,7 +796,7 @@ export default function MisListasPage() {
                 {items.length} repuesto{items.length === 1 ? '' : 's'}
                 {listaActiva.site ? <span className="ml-2">· {listaActiva.site}</span> : null}
                 {listaActiva.work_order || listaActiva.workOrder ? <span className="ml-2">· {listaActiva.work_order || listaActiva.workOrder}</span> : null}
-                <EstadoChips lista={listaActiva} />
+                <EstadoChips lista={listaActiva} mostrarForm={puedeEnviarForm} />
               </div>
             </div>
             <div className="flex w-full flex-wrap justify-start gap-1 md:w-auto md:shrink-0 md:justify-end">
@@ -835,7 +842,7 @@ export default function MisListasPage() {
               >
                 {listaSincronizada ? 'Revertir sinc.' : 'Sinc. Inventario'}
               </Button>
-              <Button
+              {puedeEnviarForm && <Button
                 size="sm"
                 variant="light"
                 radius="lg"
@@ -846,7 +853,7 @@ export default function MisListasPage() {
                 onPress={() => setEnviandoForm(true)}
               >
                 Enviar al form.
-              </Button>
+              </Button>}
               <Button
                 isIconOnly
                 size="sm"
@@ -1341,7 +1348,7 @@ export default function MisListasPage() {
       </Modal>
 
       <EnviarFormularioModal
-        isOpen={enviandoForm}
+        isOpen={enviandoForm && puedeEnviarForm}
         onClose={() => setEnviandoForm(false)}
         lista={listaActiva}
         items={items}
