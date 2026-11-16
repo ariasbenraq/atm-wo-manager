@@ -25,7 +25,8 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
   const [dragging, setDragging] = useState(false)
   const legajoUsuario = useLegajo()
   const esAdmin = useIsAdmin()
-  const [importarTodos, setImportarTodos] = useState(false)
+  // El administrador importa por defecto todos los legajos (los técnicos solo leen)
+  const [importarTodos, setImportarTodos] = useState(true)
   // Solo el administrador puede importar filas de otros legajos
   const todosLegajos = importarTodos && esAdmin
   const sinLegajo = !todosLegajos && !legajoUsuario
@@ -81,7 +82,7 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
   }
 
   async function importar() {
-    if (!archivo || !hojasSeleccionadas.length || !userId || sinLegajo) return
+    if (!esAdmin || !archivo || !hojasSeleccionadas.length || !userId || sinLegajo) return
     setCargando(true)
     setEstado('loading')
     setMensaje('Procesando pestañas...')
@@ -282,7 +283,7 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
 
   return (
     <Modal
-      isOpen={isOpen}
+      isOpen={isOpen && esAdmin}
       onOpenChange={open => { if (!open) cerrar() }}
       isDismissable={!importando}
       hideCloseButton={importando}
@@ -376,10 +377,6 @@ export default function ImportarWosExcel({ isOpen, onClose, userId, onImportado 
                     {!todosLegajos && legajoUsuario && <span className="text-default-400"> (solo {legajoUsuario})</span>}
                   </span>
                 </Switch>
-              )}
-
-              {hojas.length > 0 && !todosLegajos && legajoUsuario && !esAdmin && (
-                <p className="text-xs text-default-400">Se importan solo las filas de tu legajo ({legajoUsuario}).</p>
               )}
 
               {sinLegajo && (

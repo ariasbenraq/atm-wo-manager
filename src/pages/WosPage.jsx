@@ -7,6 +7,7 @@ import { db } from '../lib/db'
 import { formatearFecha } from '../lib/date'
 import { formatMes } from '../lib/excel'
 import { useLegajo } from '../hooks/useLegajo'
+import { useIsAdmin } from '../hooks/usePermissions'
 import {
   hoyLima, normalizarLegajo, cargarNombresTecnicos, coincideFiltros, hayFiltros, nombreDeWo,
 } from '../lib/wosTecnicos'
@@ -117,6 +118,8 @@ export default function WosPage() {
   const { session } = useApp()
   const userId = session?.user?.id
   const legajoUsuario = useLegajo()
+  // Solo los administradores importan, crean, modifican o eliminan WOs; el resto solo lee
+  const esAdmin = useIsAdmin()
   const { colores, cambiar: cambiarColor, restablecer: restablecerColores } = useColoresLegajo()
 
   const [wos, setWos] = useState([])
@@ -182,8 +185,9 @@ export default function WosPage() {
   const wosAntiguas = useMemo(() => {
     const limite = new Date()
     limite.setMonth(limite.getMonth() - MESES_RETENCION)
+    if (!esAdmin) return []
     return wos.filter(w => w.user_id === userId && w.created_at && new Date(w.created_at) < limite)
-  }, [wos, userId])
+  }, [wos, userId, esAdmin])
 
   const [limpiezaPospuesta, setLimpiezaPospuesta] = useState(() => {
     try {
@@ -200,7 +204,7 @@ export default function WosPage() {
   }
 
   async function eliminarAntiguas() {
-    if (!wosAntiguas.length || !userId) return
+    if (!esAdmin || !wosAntiguas.length || !userId) return
     setLimpiando(true)
     try {
       const ids = wosAntiguas.map(w => w.id)
@@ -295,7 +299,7 @@ export default function WosPage() {
       setErrorForm('La fecha es obligatoria (distingue repeticiones de la misma WO).')
       return
     }
-    if (!userId) return
+    if (!userId || !esAdmin) return
     if (!legajoUsuario) {
       setErrorForm('Tu perfil no tiene legajo. Pide al administrador que te lo asigne.')
       return
@@ -355,7 +359,7 @@ export default function WosPage() {
   }
 
   async function eliminarWo() {
-    if (!eliminando) return
+    if (!esAdmin || !eliminando) return
     setEliminandoConfirmado(true)
     try {
       const { error } = await supabase
@@ -394,7 +398,7 @@ export default function WosPage() {
         />
       )}
 
-      {!legajoUsuario && (
+      {esAdmin && !legajoUsuario && (
         <HeroAlert
           color="warning"
           title="Sin legajo asignado"
@@ -451,7 +455,7 @@ export default function WosPage() {
         <EmptyState icon={Headset}>
           {seleccion || filtroHoy || soloMios || hayFiltros(filtrosBusqueda)
             ? 'Sin WOs para este filtro.'
-            : 'No hay workorders. Toca + para importar un Excel o crear una.'}
+            : (esAdmin ? 'No hay workorders. Toca + para importar un Excel o crear una.' : 'No hay workorders disponibles para tu legajo.')}
         </EmptyState>
       ) : (
         <div className="lg:grid lg:grid-cols-2 lg:gap-x-3">
@@ -510,20 +514,24 @@ export default function WosPage() {
             >
               Buscar WO
             </Button>
-            <Button
-              radius="full" className="bg-content1 font-medium text-foreground shadow-lg"
-              startContent={<FileSpreadsheet size={18} />}
-              onPress={() => { setFabAbierto(false); setImportarAbierto(true) }}
-            >
-              Importar Excel
-            </Button>
-            <Button
-              radius="full" className="bg-content1 font-medium text-foreground shadow-lg"
-              startContent={<FilePlus2 size={18} />}
-              onPress={() => { setFabAbierto(false); abrirNuevo() }}
-            >
-              Nueva WO
-            </Button>
+            {esAdmin && (
+              <>
+                <Button
+                  radius="full" className="bg-content1 font-medium text-foreground shadow-lg"
+                  startContent={<FileSpreadsheet size={18} />}
+                  onPress={() => { setFabAbierto(false); setImportarAbierto(true) }}
+                >
+                  Importar Excel
+                </Button>
+                <Button
+                  radius="full" className="bg-content1 font-medium text-foreground shadow-lg"
+                  startContent={<FilePlus2 size={18} />}
+                  onPress={() => { setFabAbierto(false); abrirNuevo() }}
+                >
+                  Nueva WO
+                </Button>
+              </>
+            )}
           </>
         )}
         <Button
@@ -594,7 +602,9 @@ export default function WosPage() {
           </ModalBody>
           <ModalFooter>
             <Button variant="flat" onPress={() => setDetalle(null)}>Cerrar</Button>
-            <Button color="danger" onPress={() => { setEliminando(detalle); setDetalle(null) }}>Eliminar</Button>
+            {esAdmin && (
+              <Button color="danger" onPress={() => { setEliminando(detalle); setDetalle(null) }}>Eliminar</Button>
+            )}
           </ModalFooter>
         </ModalContent>
       </Modal>
