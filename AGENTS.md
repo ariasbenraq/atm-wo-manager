@@ -76,7 +76,8 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 | `src/components/ImportarExcel.jsx` | Task Excel (.xlsx) import via SheetJS |
 | `src/components/ImportarWosExcel.jsx` | Wo's Excel import: sheet picker, legajo filter, upsert by (user, wo, fecha) |
 | `src/components/FormularioCierre.jsx` | Task closure / timesheet form |
-| `src/pages/MisListasPage.jsx` | Lists CRUD + warehouse sync |
+| `src/pages/MisListasPage.jsx` | Lists CRUD + warehouse sync (confirmation shows stock before → after and blocks if insufficient); two independent states per list: warehouse (`inventory_synced`) and Google Form (`form_enviado_en`) |
+| `src/lib/googleForm.js`, `src/components/EnviarFormularioModal.jsx` | Prefilled link to the «Consumo de repuestos» Google Form (field ids, 1–7 parts per submission, zona LIMA, legajo from profile, cliente from the WO, N° presupuesto per item). Google gives no confirmation, so the user marks «Ya lo envié» |
 | `src/pages/WosPage.jsx` | Work orders list (10/20 per page, combo search WO/id/distrito/serie) + manual WO |
 | `src/pages/PedidosPage.jsx` | Orders: create (WO from Wo's), receive (inventory IN + usage list), admin personas tab |
 | `src/pages/AlmacenPage.jsx` | Warehouse inventory + transactions |

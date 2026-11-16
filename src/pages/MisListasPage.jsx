@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
 import { useIsAdmin } from '../hooks/usePermissions'
+import { useLegajo } from '../hooks/useLegajo'
+import EnviarFormularioModal from '../components/EnviarFormularioModal'
 import { consumirLista, revertirConsumoLista, mensajeErrorInventario } from '../lib/inventario'
 import {
   Input, Button, Chip,
@@ -11,8 +13,24 @@ import {
   Autocomplete, AutocompleteItem,
 } from '@heroui/react'
 import {
-  List, Plus, Minus, ArrowLeft, Pencil, Trash2, Copy, Share2, X, Check, Warehouse, ChevronRight, Undo2,
+  List, Plus, Minus, ArrowLeft, Pencil, Trash2, Copy, Share2, X, Check, Warehouse, ChevronRight, Undo2, Send,
 } from 'lucide-react'
+
+// Dos procesos independientes (en cualquier orden): descontar del almacén y enviar al Google Form
+function EstadoChips({ lista }) {
+  const sincronizada = Boolean(lista.inventory_synced)
+  const enviada = Boolean(lista.form_enviado_en)
+  return (
+    <span className="ml-2 inline-flex flex-wrap items-center gap-1 align-middle">
+      <Chip size="sm" variant="flat" radius="lg" color={sincronizada ? 'success' : 'warning'} className="h-5 text-[10px]">
+        {sincronizada ? 'Almacén: descontada' : 'Almacén: pendiente'}
+      </Chip>
+      <Chip size="sm" variant="flat" radius="lg" color={enviada ? 'primary' : 'default'} className="h-5 text-[10px]">
+        {enviada ? 'Formulario: enviado' : 'Formulario: pendiente'}
+      </Chip>
+    </span>
+  )
+}
 
 function tiempoRelativo(iso) {
   if (!iso) return ''
@@ -72,7 +90,15 @@ export default function MisListasPage() {
   const [guardandoAgregarItem, setGuardandoAgregarItem] = useState(false)
 
   const [sincronizando, setSincronizando] = useState(false)
+  const legajoUsuario = useLegajo()
+  const [enviandoForm, setEnviandoForm] = useState(false)
+  // Un admin puede abrir la lista de otro técnico: el formulario lleva el legajo del dueño
+  const esDeOtro = Boolean(listaActiva?.user_id && listaActiva.user_id !== userId)
+  const legajoDeLista = esDeOtro
+    ? String(listaActiva.usuario?.legajo || '').replace(/\s+/g, '').toUpperCase()
+    : legajoUsuario
   const [confirmarSync, setConfirmarSync] = useState(false)
+  const [stockSync, setStockSync] = useState(null) // Map(part_number -> stock) | 'error' | null
   const [erroresSync, setErroresSync] = useState([])
   const [revirtiendo, setRevirtiendo] = useState(false)
   const [motivoReversion, setMotivoReversion] = useState('')
@@ -81,6 +107,46 @@ export default function MisListasPage() {
   // Una lista ya descontada del almacén no se edita: hay que revertir primero
   const listaSincronizada = Boolean(listaActiva?.inventory_synced)
   const AVISO_SINCRONIZADA = 'Lista sincronizada con el almacén. Revierte la sincronización para modificarla.'
+
+  // Al abrir la confirmación, lee el stock actual para mostrar «antes → después»
+  useEffect(() => {
+    if (!confirmarSync || !listaActiva) {
+      setStockSync(null)
+      return
+    }
+    let activo = true
+    const pns = [...new Set(items.map(i => i.repuesto?.part_number).filter(Boolean))]
+    supabase
+      .from('warehouse_items')
+      .select('part_number, quantity')
+      .eq('user_id', listaActiva.user_id || userId)
+      .in('part_number', pns)
+      .then(({ data, error }) => {
+        if (!activo) return
+        if (error) { setStockSync('error'); return }
+        setStockSync(new Map((data || []).map(r => [r.part_number, r.quantity ?? 0])))
+      })
+    return () => { activo = false }
+    // Solo al abrir/cerrar la confirmación
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmarSync])
+
+  const previewSync = useMemo(() => {
+    const necesario = new Map()
+    for (const i of items) {
+      const pn = i.repuesto?.part_number
+      if (!pn) continue
+      const previo = necesario.get(pn) || { pn, nombre: i.repuesto?.nombre || '', cantidad: 0 }
+      previo.cantidad += i.quantity ?? 1
+      necesario.set(pn, previo)
+    }
+    return [...necesario.values()].map(r => {
+      const stock = stockSync instanceof Map ? (stockSync.get(r.pn) ?? 0) : null
+      return { ...r, stock, despues: stock === null ? null : stock - r.cantidad, falta: stock !== null && stock < r.cantidad }
+    })
+  }, [items, stockSync])
+  const stockCargado = stockSync instanceof Map
+  const hayFaltantes = previewSync.some(r => r.falta)
 
   const cargarListas = useCallback(async () => {
     if (!esAdmin && !userId) return
@@ -100,7 +166,7 @@ export default function MisListasPage() {
       if (esAdmin) {
         const { data: perfiles } = await supabase
           .from('profiles')
-          .select('id, email, full_name')
+          .select('id, email, full_name, legajo')
         if (perfiles) {
           usuariosMap = Object.fromEntries(perfiles.map(p => [p.id, p]))
         }
@@ -126,6 +192,7 @@ export default function MisListasPage() {
           workOrder: l.work_order || '',
           inventorySynced: l.inventory_synced || false,
           inventorySyncedAt: l.inventory_synced_at || null,
+          formEnviadoEn: l.form_enviado_en || null,
           createdAt: l.created_at,
           updatedAt: l.updated_at,
         })))
@@ -139,6 +206,7 @@ export default function MisListasPage() {
         workOrder: l.workOrder || '',
         inventory_synced: l.inventorySynced || false,
         inventory_synced_at: l.inventorySyncedAt || null,
+        form_enviado_en: l.formEnviadoEn || null,
         itemCount: 0,
         updated_at: l.updatedAt,
       })))
@@ -562,6 +630,17 @@ export default function MisListasPage() {
     })
   }
 
+  function actualizarEstadoFormulario(valor) {
+    const cambios = { form_enviado_en: valor }
+    setListas(prev => prev.map(l => (l.id === listaActiva.id ? { ...l, ...cambios } : l)))
+    setListaActiva(prev => ({ ...prev, ...cambios }))
+    db.sparePartLists.filter(l => l.idRemoto === listaActiva.id).modify({ formEnviadoEn: valor }).catch(() => {})
+    setMensaje({
+      color: 'success',
+      texto: valor ? 'Lista marcada como enviada al formulario.' : 'Se quitó la marca de envío al formulario.',
+    })
+  }
+
   async function sincronizarConAlmacen() {
     if (!listaActiva || !items.length) return
     setSincronizando(true)
@@ -674,7 +753,7 @@ export default function MisListasPage() {
                         {lista.site ? <span className="text-default-400">· {lista.site}</span> : null}
                         {lista.work_order || lista.workOrder ? <span className="text-default-400">· {lista.work_order || lista.workOrder}</span> : null}
                         {lista.updated_at ? <span className="text-default-400">· {tiempoRelativo(lista.updated_at)}</span> : null}
-                        {lista.inventory_synced ? <Chip color="success" variant="flat" size="sm" radius="lg" className="text-[10px] h-5">Sinc.</Chip> : null}
+                        <EstadoChips lista={lista} />
                         {esAdmin && lista.usuario ? <span className="text-default-400">· {lista.usuario.email || lista.usuario.full_name || lista.user_id?.slice(0, 8)}</span> : null}
                       </div>
                     </div>
@@ -698,7 +777,7 @@ export default function MisListasPage() {
         </>
       ) : (
         <>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <Button
               isIconOnly
               size="sm"
@@ -709,7 +788,7 @@ export default function MisListasPage() {
             >
               <ArrowLeft size={18} />
             </Button>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 basis-40">
               <h2 className="text-sm font-semibold text-default-900 truncate">
                 {listaActiva.name}
               </h2>
@@ -717,10 +796,10 @@ export default function MisListasPage() {
                 {items.length} repuesto{items.length === 1 ? '' : 's'}
                 {listaActiva.site ? <span className="ml-2">· {listaActiva.site}</span> : null}
                 {listaActiva.work_order || listaActiva.workOrder ? <span className="ml-2">· {listaActiva.work_order || listaActiva.workOrder}</span> : null}
-                {listaActiva.inventory_synced ? <Chip color="success" variant="flat" size="sm" radius="lg" className="ml-2 text-[10px] h-5">Sinc. {listaActiva.inventory_synced_at ? new Date(listaActiva.inventory_synced_at).toLocaleDateString('es-ES') : ''}</Chip> : null}
+                <EstadoChips lista={listaActiva} />
               </div>
             </div>
-            <div className="flex flex-wrap gap-1 shrink-0 justify-end">
+            <div className="flex w-full flex-wrap justify-start gap-1 md:w-auto md:shrink-0 md:justify-end">
               <Button
                 size="sm"
                 variant="light"
@@ -762,6 +841,18 @@ export default function MisListasPage() {
                 }}
               >
                 {listaSincronizada ? 'Revertir sinc.' : 'Sinc. Inventario'}
+              </Button>
+              <Button
+                size="sm"
+                variant="light"
+                radius="lg"
+                startContent={<Send size={14} />}
+                className="text-[13px] font-medium h-8 px-2.5"
+                aria-label="Enviar al formulario"
+                isDisabled={!items.length}
+                onPress={() => setEnviandoForm(true)}
+              >
+                Enviar al form.
               </Button>
               <Button
                 isIconOnly
@@ -1256,6 +1347,16 @@ export default function MisListasPage() {
         </ModalContent>
       </Modal>
 
+      <EnviarFormularioModal
+        isOpen={enviandoForm}
+        onClose={() => setEnviandoForm(false)}
+        lista={listaActiva}
+        items={items}
+        legajo={legajoDeLista}
+        onEstadoCambiado={actualizarEstadoFormulario}
+        onPresupuestoGuardado={(id, valor) => setItems(prev => prev.map(i => (i.id === id ? { ...i, presupuesto: valor } : i)))}
+      />
+
       <Modal isOpen={confirmarSync} onOpenChange={abierto => !abierto && setConfirmarSync(false)}>
         <ModalContent>
           <ModalHeader className="text-default-900">Sincronizar con almacén</ModalHeader>
@@ -1269,18 +1370,36 @@ export default function MisListasPage() {
             <p className="text-xs text-warning font-medium mt-2">
               Esta acción afectará tu stock disponible.
             </p>
-            <div className="rounded-xl border border-default-200 bg-default-50 p-3 mt-3 space-y-1.5">
-              {items.map(item => (
-                <div key={item.id} className="flex justify-between text-sm">
-                  <span className="text-default-700 truncate mr-2">{item.repuesto?.part_number || '—'}</span>
-                  <span className="font-mono text-default-500 tabular-nums shrink-0">-{item.quantity ?? 1}</span>
+            <div className="rounded-xl border border-default-200 bg-default-50 p-3 mt-3 space-y-2">
+              {previewSync.map(r => (
+                <div key={r.pn} className={`text-sm ${r.falta ? 'text-danger' : ''}`}>
+                  <div className="flex justify-between gap-2">
+                    <span className="truncate font-mono">{r.pn}</span>
+                    <span className="shrink-0 font-mono tabular-nums">-{r.cantidad}</span>
+                  </div>
+                  <div className="flex justify-between gap-2 text-xs text-default-500">
+                    <span className="truncate">{r.nombre}</span>
+                    <span className="shrink-0 tabular-nums">
+                      {r.stock === null ? 'Stock…' : r.falta
+                        ? `Stock ${r.stock}: faltan ${r.cantidad - r.stock}`
+                        : `Stock ${r.stock} → ${r.despues}`}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
+            {stockSync === 'error' && (
+              <p className="mt-2 text-xs text-danger">No se pudo leer el stock. Revisa tu conexión e inténtalo de nuevo.</p>
+            )}
+            {hayFaltantes && (
+              <p className="mt-2 text-xs font-medium text-danger">
+                No hay stock suficiente para sincronizar. Ajusta la lista o ingresa los repuestos al almacén.
+              </p>
+            )}
           </ModalBody>
           <ModalFooter>
             <Button variant="light" onPress={() => setConfirmarSync(false)}>Cancelar</Button>
-            <Button color="primary" onPress={sincronizarConAlmacen} isLoading={sincronizando} isDisabled={sincronizando}>
+            <Button color="primary" onPress={sincronizarConAlmacen} isLoading={sincronizando} isDisabled={sincronizando || !stockCargado || hayFaltantes}>
               Confirmar sincronización
             </Button>
           </ModalFooter>
