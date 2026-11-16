@@ -1,25 +1,31 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { refrescarCacheWos, leerCacheWos, wosADexie } from '../lib/wosCache'
 import { db } from '../lib/db'
 import { formatearFecha } from '../lib/date'
 import { formatMes } from '../lib/excel'
-import { LEGAJO_ACTUAL } from '../lib/wosConfig'
+import { useLegajo } from '../hooks/useLegajo'
+import {
+  hoyLima, normalizarLegajo, cargarNombresTecnicos, coincideFiltros, hayFiltros, nombreDeWo,
+} from '../lib/wosTecnicos'
 import ImportarWosExcel from '../components/ImportarWosExcel'
 import WosSkeleton from '../components/WosSkeleton'
 import WoCard from '../components/WoCard'
 import BuscarWoModal from '../components/BuscarWoModal'
-import AppShell from '../components/AppShell'
+import PageHeader from '../components/ui/PageHeader'
+import PaletaColores from '../components/PaletaColores'
+import { useColoresLegajo } from '../hooks/useColoresLegajo'
+import { clasesDeColor, grupoDeLegajo, GRUPOS } from '../lib/coloresTarjeta'
+import EmptyState from '../components/ui/EmptyState'
+import useMediaQuery from '@mui/material/useMediaQuery'
 import {
-  Chip, Fab, Sheet, Button as KonstaButton,
-} from 'konsta/react'
-import {
-  Input, Button, Switch, Select, SelectItem, Pagination,
+  Input, Button, Chip, Switch, Select, SelectItem, Pagination,
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
   Alert as HeroAlert,
 } from '@heroui/react'
-import { Plus, X, Check, FileSpreadsheet, FilePlus2, Search } from 'lucide-react'
+import { Plus, X, Check, FileSpreadsheet, FilePlus2, Search, Headset } from 'lucide-react'
 
 const CAMPOS_DETALLE = [
   ['Año', 'anio'],
@@ -48,6 +54,10 @@ const CAMPOS_DETALLE = [
   ['CE', 'ce'],
   ['DNI', 'dni'],
 ]
+
+const MESES_RETENCION = 6
+const DIAS_POSPONER = 7
+const CLAVE_LIMPIEZA = 'wos_limpieza_pospuesta'
 
 const CLIENTES_MANUALES = ['Banco de Crédito', 'Interbank', 'BBVA', 'Banco Nación']
 
@@ -83,6 +93,19 @@ function compararHora(a, b) {
   return ma - mb
 }
 
+function resumenFiltros(f, nombres, wos) {
+  const partes = []
+  if (f.texto?.trim()) partes.push(`«${f.texto.trim()}»`)
+  if (f.desde || f.hasta) {
+    partes.push(f.desde === f.hasta ? formatearFecha(f.desde) : `${f.desde ? formatearFecha(f.desde) : '…'} – ${f.hasta ? formatearFecha(f.hasta) : '…'}`)
+  }
+  if (f.legajo) {
+    const w = wos.find(x => normalizarLegajo(x.legajo) === f.legajo)
+    partes.push([w?.legajo, w && nombres[w.user_id]].filter(Boolean).join(' · ') || f.legajo)
+  }
+  return partes.join(' · ')
+}
+
 function fechaEstado(fecha) {
   if (!fecha) return null
   const hoy = hoyLima()
@@ -90,17 +113,11 @@ function fechaEstado(fecha) {
   return fecha < hoy ? 'pasado' : 'futuro'
 }
 
-function hoyLima() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(new Date())
-}
-
-function normalizarLegajo(texto) {
-  return String(texto || '').replace(/[^a-z0-9]/gi, '').toUpperCase()
-}
-
 export default function WosPage() {
   const { session } = useApp()
   const userId = session?.user?.id
+  const legajoUsuario = useLegajo()
+  const { colores, cambiar: cambiarColor, restablecer: restablecerColores } = useColoresLegajo()
 
   const [wos, setWos] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -111,8 +128,12 @@ export default function WosPage() {
   const [pagina, setPagina] = useState(1)
   const [tamanoPagina, setTamanoPagina] = useState(10)
   const [soloMios, setSoloMios] = useState(false)
-  const [filtroHoy, setFiltroHoy] = useState(false)
+  const [searchParams] = useSearchParams()
+  const [filtroHoy, setFiltroHoy] = useState(() => searchParams.get('filtro') === 'hoy')
+  const [filtrosBusqueda, setFiltrosBusqueda] = useState(null)
+  const [nombres, setNombres] = useState({})
 
+  const movil = useMediaQuery('(max-width:639px)')
   const [fabAbierto, setFabAbierto] = useState(false)
   const [importarAbierto, setImportarAbierto] = useState(false)
   const [nuevoAbierto, setNuevoAbierto] = useState(false)
@@ -151,6 +172,60 @@ export default function WosPage() {
 
   useEffect(() => { cargar() }, [cargar])
 
+  useEffect(() => {
+    let activo = true
+    cargarNombresTecnicos().then(n => { if (activo) setNombres(n) })
+    return () => { activo = false }
+  }, [wos])
+
+  // WOs propias importadas hace más de 6 meses (candidatas a limpieza)
+  const wosAntiguas = useMemo(() => {
+    const limite = new Date()
+    limite.setMonth(limite.getMonth() - MESES_RETENCION)
+    return wos.filter(w => w.user_id === userId && w.created_at && new Date(w.created_at) < limite)
+  }, [wos, userId])
+
+  const [limpiezaPospuesta, setLimpiezaPospuesta] = useState(() => {
+    try {
+      const t = Number(localStorage.getItem(CLAVE_LIMPIEZA) || 0)
+      return Date.now() - t < DIAS_POSPONER * 86400000
+    } catch { return false }
+  })
+  const [limpiezaAbierta, setLimpiezaAbierta] = useState(false)
+  const [limpiando, setLimpiando] = useState(false)
+
+  function posponerLimpieza() {
+    try { localStorage.setItem(CLAVE_LIMPIEZA, String(Date.now())) } catch { /* sin almacenamiento */ }
+    setLimpiezaPospuesta(true)
+  }
+
+  async function eliminarAntiguas() {
+    if (!wosAntiguas.length || !userId) return
+    setLimpiando(true)
+    try {
+      const ids = wosAntiguas.map(w => w.id)
+      for (let i = 0; i < ids.length; i += 100) {
+        const { error } = await supabase
+          .from('workorders')
+          .delete()
+          .in('id', ids.slice(i, i + 100))
+          .eq('user_id', userId)
+        if (error) throw error
+      }
+      const set = new Set(ids)
+      setWos(prev => prev.filter(w => !set.has(w.id)))
+      try {
+        await db.workorders.filter(w => set.has(w.idRemoto)).delete()
+      } catch { /* silent */ }
+      setMensaje({ color: 'success', texto: `${ids.length} WO${ids.length === 1 ? '' : 's'} antigua${ids.length === 1 ? '' : 's'} eliminada${ids.length === 1 ? '' : 's'}.` })
+      setLimpiezaAbierta(false)
+    } catch (e) {
+      setMensaje({ color: 'danger', texto: e.message || 'No se pudieron eliminar las WOs antiguas.' })
+    } finally {
+      setLimpiando(false)
+    }
+  }
+
   const wosFiltradas = useMemo(() => {
     let resultado = wos
     if (seleccion) {
@@ -161,8 +236,11 @@ export default function WosPage() {
     if (fechaFiltro) {
       resultado = resultado.filter(w => w.fecha === fechaFiltro)
     }
+    if (hayFiltros(filtrosBusqueda)) {
+      resultado = resultado.filter(w => coincideFiltros(w, filtrosBusqueda, nombres))
+    }
     if (soloMios) {
-      const mio = normalizarLegajo(LEGAJO_ACTUAL)
+      const mio = normalizarLegajo(legajoUsuario)
       resultado = resultado.filter(w => normalizarLegajo(w.legajo) === mio)
     }
     // Hoy y lo más próximo hacia el futuro (fecha y hora ascendente); las pasadas al final, de la más reciente a la más antigua
@@ -178,7 +256,7 @@ export default function WosPage() {
       if (cmpHora !== 0) return cmpHora
       return String(a.wo || '').localeCompare(String(b.wo || ''))
     })
-  }, [wos, seleccion, filtroHoy, soloMios])
+  }, [wos, seleccion, filtroHoy, soloMios, filtrosBusqueda, nombres, legajoUsuario])
 
   const totalPaginas = Math.max(1, Math.ceil(wosFiltradas.length / tamanoPagina))
   const paginaSegura = Math.min(pagina, totalPaginas)
@@ -187,7 +265,7 @@ export default function WosPage() {
     paginaSegura * tamanoPagina
   )
 
-  useEffect(() => { setPagina(1) }, [seleccion, tamanoPagina, filtroHoy, soloMios])
+  useEffect(() => { setPagina(1) }, [seleccion, tamanoPagina, filtroHoy, soloMios, filtrosBusqueda])
 
   function alternarFiltroHoy() {
     setFiltroHoy(v => !v)
@@ -218,6 +296,10 @@ export default function WosPage() {
       return
     }
     if (!userId) return
+    if (!legajoUsuario) {
+      setErrorForm('Tu perfil no tiene legajo. Pide al administrador que te lo asigne.')
+      return
+    }
 
     setGuardando(true)
     setErrorForm(null)
@@ -231,7 +313,7 @@ export default function WosPage() {
         serie: formSerie.trim(),
         modelo: formModelo.trim(),
         nombre_equipo: formNombreEquipo.trim(),
-        legajo: LEGAJO_ACTUAL,
+        legajo: legajoUsuario,
         updated_at: new Date().toISOString(),
       }
 
@@ -299,7 +381,9 @@ export default function WosPage() {
   }
 
   return (
-    <AppShell title="Wo's">
+    <div className="space-y-3">
+      <PageHeader icon={Headset} title="Wo's" subtitle="Órdenes de trabajo asignadas" />
+
       {mensaje && (
         <HeroAlert
           color={mensaje.color}
@@ -310,17 +394,43 @@ export default function WosPage() {
         />
       )}
 
-      <div className="sticky top-0 z-20 -mx-4 bg-md-light-surface px-6 pb-2 pt-1 dark:bg-md-dark-surface">
+      {!legajoUsuario && (
+        <HeroAlert
+          color="warning"
+          title="Sin legajo asignado"
+          description="Tu perfil no tiene legajo todavía. Pide al administrador que lo asigne para importar o crear WOs."
+          className="mb-3"
+        />
+      )}
+
+      {wosAntiguas.length > 0 && !limpiezaPospuesta && (
+        <HeroAlert
+          color="warning"
+          title="WOs antiguas"
+          description={`Tienes ${wosAntiguas.length} WO${wosAntiguas.length === 1 ? '' : 's'} importada${wosAntiguas.length === 1 ? '' : 's'} hace más de ${MESES_RETENCION} meses.`}
+          className="mb-3"
+          endContent={
+            <div className="flex gap-1">
+              <Button size="sm" variant="light" onPress={posponerLimpieza}>Más tarde</Button>
+              <Button size="sm" color="warning" variant="flat" onPress={() => setLimpiezaAbierta(true)}>Revisar</Button>
+            </div>
+          }
+        />
+      )}
+
+      <div className="sticky top-14 z-20 -mx-4 bg-background px-4 pb-2 pt-1 md:-mx-6 md:px-6">
         <div className="flex items-center gap-1.5 pb-1">
           {seleccion && (
-            <Chip
-              className="shrink-0 cursor-pointer bg-primary text-white"
-              onClick={() => setSeleccion(null)}
-            >
-              {seleccion.wo} ✕
+            <Chip color="primary" className="shrink-0" onClose={() => setSeleccion(null)}>
+              {seleccion.wo}
             </Chip>
           )}
-          <span className="ml-auto shrink-0 text-xs text-gray-500">{wosFiltradas.length} resultados</span>
+          {hayFiltros(filtrosBusqueda) && (
+            <Chip color="primary" className="min-w-0" onClose={() => setFiltrosBusqueda(null)}>
+              {resumenFiltros(filtrosBusqueda, nombres, wos)}
+            </Chip>
+          )}
+          <span className="ml-auto shrink-0 text-xs text-default-500">{wosFiltradas.length} resultados</span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <Switch size="sm" isSelected={soloMios} onValueChange={setSoloMios}>
@@ -329,27 +439,36 @@ export default function WosPage() {
           <Switch size="sm" isSelected={filtroHoy} onValueChange={alternarFiltroHoy}>
             Work orders de hoy
           </Switch>
+          <div className="ml-auto">
+            <PaletaColores colores={colores} onCambiar={cambiarColor} onRestablecer={restablecerColores} />
+          </div>
         </div>
       </div>
 
       {cargando ? (
         <WosSkeleton filas={6} className="pt-3" />
       ) : wosPagina.length === 0 ? (
-        <p className="py-6 text-center text-sm text-gray-500">
-          {seleccion || filtroHoy || soloMios
+        <EmptyState icon={Headset}>
+          {seleccion || filtroHoy || soloMios || hayFiltros(filtrosBusqueda)
             ? 'Sin WOs para este filtro.'
             : 'No hay workorders. Toca + para importar un Excel o crear una.'}
-        </p>
+        </EmptyState>
       ) : (
-        <div>
-          {wosPagina.map(wo => (
-            <WoCard
-              key={wo.id}
-              wo={wo}
-              estadoFecha={fechaEstado(wo.fecha)}
-              onClick={() => setDetalle(wo)}
-            />
-          ))}
+        <div className="lg:grid lg:grid-cols-2 lg:gap-x-3">
+          {wosPagina.map(wo => {
+            const grupo = grupoDeLegajo(wo.legajo)
+            return (
+              <WoCard
+                key={wo.id}
+                wo={wo}
+                estadoFecha={fechaEstado(wo.fecha)}
+                tecnico={nombreDeWo(wo, nombres)}
+                fondo={grupo ? clasesDeColor(colores[grupo]) : undefined}
+                grupo={grupo ? GRUPOS.find(g => g.clave === grupo).etiqueta : ''}
+                onClick={() => setDetalle(wo)}
+              />
+            )
+          })}
         </div>
       )}
 
@@ -366,7 +485,7 @@ export default function WosPage() {
       )}
 
       <div className="mt-3 flex items-center justify-end gap-2">
-        <span className="text-xs text-gray-500">Por página</span>
+        <span className="text-xs text-default-500">Por página</span>
         <Select
           className="w-24"
           aria-label="Resultados por página"
@@ -381,46 +500,58 @@ export default function WosPage() {
       {fabAbierto && (
         <div className="fixed inset-0 z-20" onClick={() => setFabAbierto(false)} aria-hidden="true" />
       )}
-      <div className="fixed right-4 bottom-4 z-30 flex flex-col items-end gap-3">
+      <div className="fixed bottom-20 right-4 z-30 flex flex-col items-end gap-3 lg:bottom-4">
         {fabAbierto && (
           <>
-            <button
-              type="button"
-              onClick={() => { setFabAbierto(false); setBuscarAbierto(true) }}
-              className="flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-medium text-gray-900 shadow-lg dark:bg-gray-800 dark:text-white"
+            <Button
+              radius="full" className="bg-content1 font-medium text-foreground shadow-lg"
+              startContent={<Search size={18} />}
+              onPress={() => { setFabAbierto(false); setBuscarAbierto(true) }}
             >
-              <Search size={18} /> Buscar WO
-            </button>
-            <button
-              type="button"
-              onClick={() => { setFabAbierto(false); setImportarAbierto(true) }}
-              className="flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-medium text-gray-900 shadow-lg dark:bg-gray-800 dark:text-white"
+              Buscar WO
+            </Button>
+            <Button
+              radius="full" className="bg-content1 font-medium text-foreground shadow-lg"
+              startContent={<FileSpreadsheet size={18} />}
+              onPress={() => { setFabAbierto(false); setImportarAbierto(true) }}
             >
-              <FileSpreadsheet size={18} /> Importar Excel
-            </button>
-            <button
-              type="button"
-              onClick={() => { setFabAbierto(false); abrirNuevo() }}
-              className="flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-medium text-gray-900 shadow-lg dark:bg-gray-800 dark:text-white"
+              Importar Excel
+            </Button>
+            <Button
+              radius="full" className="bg-content1 font-medium text-foreground shadow-lg"
+              startContent={<FilePlus2 size={18} />}
+              onPress={() => { setFabAbierto(false); abrirNuevo() }}
             >
-              <FilePlus2 size={18} /> Nueva WO
-            </button>
+              Nueva WO
+            </Button>
           </>
         )}
-        <Fab
-          onClick={() => setFabAbierto(v => !v)}
+        <Button
+          isIconOnly color="primary" radius="full" className="h-14 w-14 shadow-lg"
           aria-label={fabAbierto ? 'Cerrar acciones' : 'Abrir acciones'}
-          icon={<Plus size={24} className={`transition-transform ${fabAbierto ? 'rotate-45' : ''}`} />}
-        />
+          aria-expanded={fabAbierto}
+          onPress={() => setFabAbierto(v => !v)}
+        >
+          <Plus size={24} className={`transition-transform ${fabAbierto ? 'rotate-45' : ''}`} />
+        </Button>
       </div>
 
       <BuscarWoModal
         isOpen={buscarAbierto}
         onClose={() => setBuscarAbierto(false)}
+        nombres={nombres}
+        filtrosIniciales={filtrosBusqueda}
         onSeleccionar={item => {
           setSeleccion(item)
+          setFiltrosBusqueda(null)
           setFiltroHoy(false)
           setSoloMios(false)
+        }}
+        onAplicar={filtros => {
+          setSeleccion(null)
+          setFiltroHoy(false)
+          setSoloMios(false)
+          setFiltrosBusqueda(filtros)
         }}
       />
 
@@ -431,45 +562,42 @@ export default function WosPage() {
         onImportado={cargar}
       />
 
-      {/* Sheet: detalle + acciones */}
-      <Sheet opened={Boolean(detalle)} onBackdropClick={() => setDetalle(null)}>
-        <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-black/20" />
-        <div className="max-h-[70vh] overflow-y-auto px-5 pb-6">
-          <div className="mb-3">
-            <p className="text-lg font-semibold text-gray-900">{detalle?.wo}</p>
-            <p className="text-xs text-gray-500">
+      {/* Detalle de la WO */}
+      <Modal
+        isOpen={Boolean(detalle)}
+        onOpenChange={abierto => !abierto && setDetalle(null)}
+        placement={movil ? 'bottom' : 'center'}
+        size="lg"
+        scrollBehavior="inside"
+      >
+        <ModalContent>
+          <ModalHeader className="flex flex-col gap-0.5">
+            <span className="text-lg">{detalle?.wo}</span>
+            <span className="text-xs font-normal text-default-500">
               {formatearFecha(detalle?.fecha)}
               {detalle?.tipo_pm ? ` · ${detalle.tipo_pm}` : ''}
-            </p>
-          </div>
-          <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
-            {detalle && CAMPOS_DETALLE.map(([etiqueta, campo]) => {
-              const valor = campo === '__fecha' ? formatearFecha(detalle?.fecha) : campo === 'mes' ? formatMes(detalle?.mes) : detalle?.[campo]
-              if (!valor) return null
-              return (
-                <div key={campo}>
-                  <dt className="text-xs text-gray-400">{etiqueta}</dt>
-                  <dd className="text-sm text-gray-900">{valor}</dd>
-                </div>
-              )
-            })}
-          </dl>
-          <div className="mt-5 flex gap-2">
-            <KonstaButton
-              className="w-full bg-red-500 text-white"
-              onClick={() => { setEliminando(detalle); setDetalle(null) }}
-            >
-              Eliminar
-            </KonstaButton>
-            <KonstaButton
-              className="border border-gray-300 bg-white text-gray-900 dark:border-gray-600 dark:bg-transparent"
-              onClick={() => setDetalle(null)}
-            >
-              Cerrar
-            </KonstaButton>
-          </div>
-        </div>
-      </Sheet>
+            </span>
+          </ModalHeader>
+          <ModalBody>
+            <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+              {detalle && CAMPOS_DETALLE.map(([etiqueta, campo]) => {
+                const valor = campo === '__fecha' ? formatearFecha(detalle?.fecha) : campo === 'mes' ? formatMes(detalle?.mes) : detalle?.[campo]
+                if (!valor) return null
+                return (
+                  <div key={campo}>
+                    <dt className="text-xs text-default-500">{etiqueta}</dt>
+                    <dd className="text-sm text-foreground">{valor}</dd>
+                  </div>
+                )
+              })}
+            </dl>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="flat" onPress={() => setDetalle(null)}>Cerrar</Button>
+            <Button color="danger" onPress={() => { setEliminando(detalle); setDetalle(null) }}>Eliminar</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
       {/* Modal: nueva WO manual (mínimo) */}
       <Modal isOpen={nuevoAbierto} onOpenChange={setNuevoAbierto} placement="center" size="md">
@@ -523,7 +651,7 @@ export default function WosPage() {
               isRequired
             />
             <p className="text-xs text-default-400">
-              Legajo asociado: <strong>{LEGAJO_ACTUAL}</strong>. El resto de los datos se completa en una edición futura.
+              Legajo asociado: <strong>{legajoUsuario || 'sin asignar'}</strong>. El resto de los datos se completa en una edición futura.
             </p>
             {errorForm && (
               <HeroAlert color="danger" title="No se pudo guardar" description={errorForm} />
@@ -536,6 +664,28 @@ export default function WosPage() {
             <Button color="primary" onPress={guardarManual} isLoading={guardando} startContent={<Check size={16} />}>
               Guardar
             </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Modal: limpieza de WOs antiguas */}
+      <Modal isOpen={limpiezaAbierta} onOpenChange={setLimpiezaAbierta} placement="center" size="sm" scrollBehavior="inside">
+        <ModalContent>
+          <ModalHeader>Eliminar WOs antiguas</ModalHeader>
+          <ModalBody>
+            <p className="text-sm">
+              Se eliminarán <strong>{wosAntiguas.length}</strong> WO{wosAntiguas.length === 1 ? '' : 's'} propia{wosAntiguas.length === 1 ? '' : 's'} importada{wosAntiguas.length === 1 ? '' : 's'} hace más de {MESES_RETENCION} meses. No se puede deshacer.
+            </p>
+            <ul className="max-h-40 space-y-0.5 overflow-y-auto text-xs text-default-500">
+              {wosAntiguas.slice(0, 50).map(w => (
+                <li key={w.id}>{w.wo} · {formatearFecha(w.fecha)}</li>
+              ))}
+              {wosAntiguas.length > 50 && <li>… y {wosAntiguas.length - 50} más</li>}
+            </ul>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="flat" onPress={() => setLimpiezaAbierta(false)}>Cancelar</Button>
+            <Button color="danger" onPress={eliminarAntiguas} isLoading={limpiando}>Eliminar</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
@@ -559,6 +709,6 @@ export default function WosPage() {
           </ModalFooter>
         </ModalContent>
       </Modal>
-    </AppShell>
+    </div>
   )
 }

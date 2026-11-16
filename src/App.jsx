@@ -2,8 +2,9 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { AppProvider } from './context/AppContext'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
-import TareasPage from './pages/TareasPage'
-import MisTareasPage from './pages/MisTareasPage'
+import RegistroPage from './pages/RegistroPage'
+import RestablecerClavePage from './pages/RestablecerClavePage'
+import InicioPage from './pages/InicioPage'
 import WosPage from './pages/WosPage'
 import RepuestosPage from './pages/RepuestosPage'
 import MisListasPage from './pages/MisListasPage'
@@ -16,9 +17,10 @@ export default function App() {
     <AppProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/registro" element={<RegistroPage />} />
+        <Route path="/restablecer-clave" element={<RestablecerClavePage />} />
         <Route element={<Layout />}>
-          <Route path="/tareas" element={<TareasPage />} />
-          <Route path="/mis-tareas" element={<MisTareasPage />} />
+          <Route path="/inicio" element={<InicioPage />} />
           <Route path="/wos" element={<WosPage />} />
           <Route path="/repuestos" element={<RepuestosPage />} />
           <Route path="/mis-listas" element={<MisListasPage />} />
@@ -26,7 +28,7 @@ export default function App() {
           <Route path="/pedidos" element={<PedidosPage />} />
           <Route path="/admin/usuarios" element={<AdminUsuariosPage />} />
         </Route>
-        <Route path="*" element={<Navigate to="/tareas" replace />} />
+        <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>
     </AppProvider>
   )

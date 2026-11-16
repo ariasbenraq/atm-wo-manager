@@ -3,9 +3,13 @@ import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { leerCacheWos, siteDeWo } from '../lib/wosCache'
 import { db } from '../lib/db'
-import { recepcionarPedido, mensajeErrorInventario, codigoErrorInventario } from '../lib/inventario'
+import { recepcionarPedido, actualizarPedido, mensajeErrorInventario, codigoErrorInventario } from '../lib/inventario'
 import { useIsAdmin } from '../hooks/usePermissions'
+import { usaKit, KIT_POR_ATM, normalizarPartNumber } from '../lib/kitMantenimiento'
+import useMediaQuery from '@mui/material/useMediaQuery'
 import { formatearFecha, formatearFechaHora } from '../lib/date'
+import OpcionDosLineas from '../components/ui/OpcionDosLineas'
+import { LISTA_DOS_LINEAS, CLASE_DOS_LINEAS } from '../components/ui/listaOpciones'
 import PersonasPedidos from '../components/pedidos/PersonasPedidos'
 import {
   Card, CardBody, CardHeader, Divider,
@@ -15,8 +19,9 @@ import {
   Alert as HeroAlert,
 } from '@heroui/react'
 import {
-  ShoppingCart, Plus, Trash2, X, Check, Package, ClipboardCheck, ChevronRight,
+  ShoppingCart, Plus, Minus, Trash2, X, Check, Package, ClipboardCheck, ChevronRight, ArrowLeft, ArrowRight, PackagePlus, Pencil,
 } from 'lucide-react'
+import PageHeader from '../components/ui/PageHeader'
 
 function agruparItemsPorPedido(items) {
   const porPedido = new Map()
@@ -61,6 +66,8 @@ function ordenarWosCatalogo(lista) {
   return unicas
 }
 
+const PASOS = ['WO', 'Repuestos', 'Confirmar']
+
 export default function PedidosPage() {
   const { session } = useApp()
   const userId = session?.user?.id
@@ -75,7 +82,11 @@ export default function PedidosPage() {
   const [wosCatalogo, setWosCatalogo] = useState([])
   const [personas, setPersonas] = useState([])
 
+  const movil = useMediaQuery('(max-width:639px)')
   const [nuevoAbierto, setNuevoAbierto] = useState(false)
+  const [paso, setPaso] = useState(1)
+  const [pedidoEditando, setPedidoEditando] = useState(null) // pedido en edición (null = pedido nuevo)
+  const [datosManuales, setDatosManuales] = useState(false)
   const [woCatalogoKey, setWoCatalogoKey] = useState(null)
   const [formWo, setFormWo] = useState('')
   const [formIdAtm, setFormIdAtm] = useState('')
@@ -239,6 +250,9 @@ export default function PedidosPage() {
   }
 
   function abrirNuevo() {
+    setPedidoEditando(null)
+    setPaso(1)
+    setDatosManuales(false)
     setWoCatalogoKey(null)
     setFormWo('')
     setFormIdAtm('')
@@ -251,6 +265,56 @@ export default function PedidosPage() {
     setGuardandoPedido(false)
     setNuevoAbierto(true)
     cargarCatalogosNuevo()
+  }
+
+  // Solo pedidos «guardado»: empieza en el paso de repuestos (lo que más se edita)
+  function abrirEditar(pedido) {
+    if (pedido.estado !== 'guardado') return
+    setPedidoDetalle(null)
+    setPedidoEditando(pedido)
+    setPaso(2)
+    setDatosManuales(false)
+    setWoCatalogoKey(null)
+    setFormWo(pedido.wo || '')
+    setFormIdAtm(pedido.id_atm || '')
+    setFormSite(pedido.site || '')
+    setFormModelo(pedido.modelo || '')
+    setFormDireccion(pedido.direccion || '')
+    setItemsForm((pedido.items || []).map(i => ({
+      spare_part_id: i.spare_part_id,
+      nombre: i.repuesto?.nombre || 'Repuesto',
+      part_number: i.repuesto?.part_number || '',
+      quantity: i.quantity ?? 1,
+    })))
+    setItemRepuestoId('')
+    setItemCantidadStr('1')
+    setGuardandoPedido(false)
+    setNuevoAbierto(true)
+    cargarCatalogosNuevo()
+  }
+
+  async function guardarEdicion() {
+    if (!pedidoEditando || !itemsForm.length) return
+    setGuardandoPedido(true)
+    try {
+      await actualizarPedido({
+        pedidoId: pedidoEditando.id,
+        wo: formWo, idAtm: formIdAtm, site: formSite, modelo: formModelo, direccion: formDireccion,
+        items: itemsForm.map(i => ({ spare_part_id: i.spare_part_id, quantity: i.quantity })),
+      })
+      setNuevoAbierto(false)
+      setMensaje({ color: 'success', texto: 'Pedido actualizado.' })
+      await cargarPedidos()
+    } catch (e) {
+      const noEditable = codigoErrorInventario(e) === 'PEDIDO_NO_EDITABLE'
+      setMensaje({ color: noEditable ? 'warning' : 'danger', texto: mensajeErrorInventario(e, 'No se pudieron guardar los cambios.') })
+      if (noEditable) {
+        setNuevoAbierto(false)
+        await cargarPedidos()
+      }
+    } finally {
+      setGuardandoPedido(false)
+    }
   }
 
   function seleccionarWoCatalogo(woKey) {
@@ -285,6 +349,32 @@ export default function PedidosPage() {
     }
     setItemRepuestoId('')
     setItemCantidadStr('1')
+  }
+
+  function cambiarCantidadItem(sparePartId, delta) {
+    setItemsForm(prev => prev.map(i =>
+      i.spare_part_id === sparePartId ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i
+    ))
+  }
+
+  // Kit de un ATM de los modelos 6623/6627/6628/6612: 1 filtro + 8 ventosas
+  const kitDisponible = KIT_POR_ATM.map(k => ({
+    ...k,
+    repuesto: repuestos.find(r => normalizarPartNumber(r.part_number) === normalizarPartNumber(k.part_number)) || null,
+  }))
+  const kitCompleto = kitDisponible.every(k => k.repuesto)
+
+  function agregarKit() {
+    setItemsForm(prev => {
+      const lista = [...prev]
+      for (const k of kitDisponible) {
+        if (!k.repuesto) continue
+        const idx = lista.findIndex(i => i.spare_part_id === k.repuesto.id)
+        if (idx >= 0) lista[idx] = { ...lista[idx], quantity: Math.max(lista[idx].quantity, k.porAtm) }
+        else lista.push({ spare_part_id: k.repuesto.id, nombre: k.repuesto.nombre, part_number: k.repuesto.part_number, quantity: k.porAtm })
+      }
+      return lista
+    })
   }
 
   function quitarItemForm(sparePartId) {
@@ -498,6 +588,8 @@ export default function PedidosPage() {
         />
       )}
 
+      <PageHeader icon={ShoppingCart} title="Pedidos" subtitle="Pedidos de repuestos por WO: crea, edita y recepciona" />
+
       <Tabs selectedKey={pestana} onSelectionChange={setPestana} aria-label="Secciones de pedidos">
         <Tab key="pedidos" title="Pedidos">
           <div className="pt-3">
@@ -524,7 +616,7 @@ export default function PedidosPage() {
                   <ul className="divide-y divide-default-100">
                     {pedidos.map(pedido => (
                       <li key={pedido.id} className="py-3">
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                           <button
                             type="button"
                             className="min-w-0 flex-1 text-left"
@@ -560,7 +652,17 @@ export default function PedidosPage() {
                               </p>
                             )}
                           </button>
-                          <div className="flex shrink-0 flex-col gap-1 sm:flex-row">
+                          <div className="flex shrink-0 flex-wrap items-center gap-1 sm:justify-end">
+                            {pedido.estado === 'guardado' && (
+                              <Button
+                                size="sm"
+                                variant="flat"
+                                startContent={<Pencil size={15} />}
+                                onPress={() => abrirEditar(pedido)}
+                              >
+                                Editar
+                              </Button>
+                            )}
                             {pedido.estado === 'guardado' && (
                               <Button
                                 size="sm"
@@ -605,114 +707,212 @@ export default function PedidosPage() {
       </Tabs>
 
       {/* Modal: nuevo pedido */}
-      <Modal isOpen={nuevoAbierto} onOpenChange={setNuevoAbierto} placement="center" size="lg" scrollBehavior="inside">
+      <Modal
+        isOpen={nuevoAbierto}
+        onOpenChange={setNuevoAbierto}
+        placement={movil ? 'top' : 'center'}
+        size={movil ? 'full' : 'lg'}
+        scrollBehavior="inside"
+      >
         <ModalContent>
-          <ModalHeader>Nuevo pedido</ModalHeader>
-          <ModalBody className="gap-3">
-            <Autocomplete
-              label="Cargar desde Wo's (opcional)"
-              placeholder="Busca por WO, ID o nombre de equipo"
-              selectedKey={woCatalogoKey}
-              onSelectionChange={seleccionarWoCatalogo}
-              isLoading={catalogosCargando}
-              emptyContent="Sin workorders. Puedes ingresar los datos manualmente."
-            >
-              {wosCatalogo.map(w => (
-                <AutocompleteItem key={w.wo} textValue={`${w.wo} ${w.codigo_equipo || ''} ${w.nombre_equipo || ''}`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium">{w.wo}</span>
-                    {w.fecha && <span className="text-xs text-default-400">{formatearFecha(w.fecha)}</span>}
-                  </div>
-                  <span className="text-xs text-default-400">
-                    {[w.codigo_equipo, w.nombre_equipo].filter(Boolean).join(' · ')}
+          <ModalHeader className="flex flex-col gap-2">
+            <span>{pedidoEditando ? `Editar pedido${pedidoEditando.wo ? ` — ${pedidoEditando.wo}` : ''}` : 'Nuevo pedido'}</span>
+            <div className="flex items-center gap-2" role="group" aria-label={`Paso ${paso} de ${PASOS.length}: ${PASOS[paso - 1]}`}>
+              {PASOS.map((nombre, idx) => (
+                <div key={nombre} className="flex flex-1 flex-col gap-1">
+                  <span className={`h-1.5 rounded-full ${idx + 1 <= paso ? 'bg-primary' : 'bg-default-200'}`} />
+                  <span className={`text-xs font-medium ${idx + 1 === paso ? 'text-primary' : 'text-default-400'}`}>
+                    {idx + 1}. {nombre}
                   </span>
-                </AutocompleteItem>
+                </div>
               ))}
-            </Autocomplete>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Input label="WO" placeholder="Manual o desde catálogo" value={formWo} onValueChange={setFormWo} />
-              <Input label="ID ATM" placeholder="ID del cajero" value={formIdAtm} onValueChange={setFormIdAtm} />
-              <Input label="Site" placeholder="Nombre del equipo" value={formSite} onValueChange={setFormSite} />
-              <Input label="Modelo" placeholder="Modelo del equipo" value={formModelo} onValueChange={setFormModelo} />
-              <Input label="Dirección" placeholder="Dirección del ATM" value={formDireccion} onValueChange={setFormDireccion} />
             </div>
+          </ModalHeader>
+          <ModalBody className="gap-3">
+            {paso === 1 && (
+              <>
+                <Autocomplete
+                  {...LISTA_DOS_LINEAS}
+                  label="Buscar WO"
+                  placeholder="Busca por WO, ID o nombre de equipo"
+                  selectedKey={woCatalogoKey}
+                  onSelectionChange={key => { seleccionarWoCatalogo(key); setDatosManuales(false) }}
+                  isLoading={catalogosCargando}
+                  emptyContent="Sin workorders. Puedes ingresar los datos manualmente."
+                >
+                  {wosCatalogo.map(w => (
+                    <AutocompleteItem key={w.wo} className={CLASE_DOS_LINEAS} textValue={`${w.wo} ${w.codigo_equipo || ''} ${siteDeWo(w)}`}>
+                      <OpcionDosLineas
+                        principal={w.wo}
+                        derecha={w.fecha ? formatearFecha(w.fecha) : ''}
+                        secundario={[w.codigo_equipo, siteDeWo(w)].filter(Boolean).join(' · ') || 'Sin ID ni site'}
+                      />
+                    </AutocompleteItem>
+                  ))}
+                </Autocomplete>
 
-            <Divider />
-
-            <p className="text-xs font-semibold uppercase tracking-wide text-default-400">Repuestos del pedido</p>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <Autocomplete
-                className="flex-1"
-                label="Repuesto"
-                placeholder="Busca por nombre o part number"
-                selectedKey={itemRepuestoId || null}
-                onSelectionChange={key => setItemRepuestoId(key || '')}
-                isLoading={catalogosCargando}
-                emptyContent="Sin repuestos disponibles."
-              >
-                {repuestos.map(r => (
-                  <AutocompleteItem key={r.id} textValue={`${r.nombre} ${r.part_number}`}>
-                    <span className="text-sm">{r.nombre}</span>
-                    <span className="text-xs text-default-400">{r.part_number}</span>
-                  </AutocompleteItem>
-                ))}
-              </Autocomplete>
-              <Input
-                className="w-full sm:w-24"
-                label="Cant."
-                type="number"
-                min={1}
-                value={itemCantidadStr}
-                onValueChange={setItemCantidadStr}
-              />
-              <Button
-                color="primary"
-                variant="flat"
-                startContent={<Plus size={16} />}
-                onPress={agregarItemForm}
-                isDisabled={!itemRepuestoId}
-              >
-                Agregar
-              </Button>
-            </div>
-
-            {itemsForm.length > 0 && (
-              <ul className="divide-y divide-default-100 rounded-lg border border-default-200">
-                {itemsForm.map(item => (
-                  <li key={item.spare_part_id} className="flex items-center justify-between gap-2 px-3 py-2">
-                    <div className="min-w-0">
-                      <p className="text-sm text-default-900 truncate">{item.nombre}</p>
-                      <p className="text-xs text-default-400">{item.part_number} · {item.quantity} uds.</p>
-                    </div>
-                    <Button
-                      isIconOnly
-                      size="sm"
-                      variant="light"
-                      color="danger"
-                      aria-label="Quitar repuesto"
-                      onPress={() => quitarItemForm(item.spare_part_id)}
-                    >
-                      <X size={15} />
+                {datosManuales ? (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Input label="WO" placeholder="W23456789" value={formWo} onValueChange={setFormWo} />
+                    <Input label="ID ATM" placeholder="ID del cajero" value={formIdAtm} onValueChange={setFormIdAtm} />
+                    <Input label="Site" placeholder="Nombre del equipo" value={formSite} onValueChange={setFormSite} />
+                    <Input label="Modelo" placeholder="Modelo del equipo" value={formModelo} onValueChange={setFormModelo} />
+                    <Input label="Dirección" placeholder="Dirección del ATM" value={formDireccion} onValueChange={setFormDireccion} className="sm:col-span-2" />
+                  </div>
+                ) : formWo || formIdAtm || formSite ? (
+                  <div className="rounded-xl border border-default-200 bg-default-50 p-3">
+                    <p className="text-base font-semibold text-foreground">{formWo || 'Sin WO'}</p>
+                    <dl className="mt-1 space-y-0.5 text-sm text-default-600">
+                      {formIdAtm && <div className="flex gap-2"><dt className="w-16 shrink-0 text-default-400">ID</dt><dd>{formIdAtm}</dd></div>}
+                      {formSite && <div className="flex gap-2"><dt className="w-16 shrink-0 text-default-400">Site</dt><dd>{formSite}</dd></div>}
+                      {formModelo && <div className="flex gap-2"><dt className="w-16 shrink-0 text-default-400">Modelo</dt><dd>{formModelo}</dd></div>}
+                      {formDireccion && <div className="flex gap-2"><dt className="w-16 shrink-0 text-default-400">Dirección</dt><dd>{formDireccion}</dd></div>}
+                    </dl>
+                    <Button size="sm" variant="light" className="mt-2 -ml-2" startContent={<Pencil size={14} />} onPress={() => setDatosManuales(true)}>
+                      Editar datos
                     </Button>
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                ) : (
+                  <Button variant="flat" startContent={<Pencil size={16} />} onPress={() => setDatosManuales(true)}>
+                    Ingresar datos manualmente
+                  </Button>
+                )}
+                {!formWo.trim() && (
+                  <p className="text-xs text-default-400">Sin WO el pedido no se vincula a una visita (no cuenta en el resumen de Inicio).</p>
+                )}
+              </>
+            )}
+
+            {paso === 2 && (
+              <>
+                {formWo && <p className="text-xs text-default-500">Pedido para <strong className="text-foreground">{formWo}</strong>{formModelo ? ` · ${formModelo}` : ''}</p>}
+
+                {usaKit(formModelo) && (
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-primary-200 bg-primary-50 p-3">
+                    <p className="text-xs text-primary-800">Este modelo usa <strong>1 filtro + 8 ventosas</strong> por visita.</p>
+                    <Button
+                      size="sm" color="primary" startContent={<PackagePlus size={15} />}
+                      onPress={agregarKit} isDisabled={!kitCompleto && !kitDisponible.some(k => k.repuesto)}
+                    >
+                      Agregar kit
+                    </Button>
+                  </div>
+                )}
+                {usaKit(formModelo) && !kitCompleto && (
+                  <p className="text-xs text-warning-700">
+                    {kitDisponible.filter(k => !k.repuesto).map(k => k.nombre).join(' y ')} no está en el catálogo de repuestos; agrégalo allí o búscalo abajo.
+                  </p>
+                )}
+
+                <Autocomplete
+                  {...LISTA_DOS_LINEAS}
+                  label="Repuesto"
+                  placeholder="Busca por nombre o part number"
+                  selectedKey={itemRepuestoId || null}
+                  onSelectionChange={key => setItemRepuestoId(key || '')}
+                  isLoading={catalogosCargando}
+                  emptyContent="Sin repuestos disponibles."
+                >
+                  {repuestos.map(r => (
+                    <AutocompleteItem key={r.id} className={CLASE_DOS_LINEAS} textValue={`${r.nombre} ${r.part_number}`}>
+                      <OpcionDosLineas principal={r.nombre} derecha={r.part_number} derechaMono />
+                    </AutocompleteItem>
+                  ))}
+                </Autocomplete>
+                <div className="flex items-center gap-2">
+                  <Button isIconOnly variant="flat" aria-label="Menos" className="h-11 w-11 min-w-11"
+                    onPress={() => setItemCantidadStr(String(Math.max(1, (parseInt(itemCantidadStr, 10) || 1) - 1)))}>
+                    <Minus size={16} />
+                  </Button>
+                  <Input
+                    className="w-20" aria-label="Cantidad" type="number" min={1} inputMode="numeric"
+                    classNames={{ input: 'text-center' }}
+                    value={itemCantidadStr} onValueChange={setItemCantidadStr}
+                  />
+                  <Button isIconOnly variant="flat" aria-label="Más" className="h-11 w-11 min-w-11"
+                    onPress={() => setItemCantidadStr(String((parseInt(itemCantidadStr, 10) || 0) + 1))}>
+                    <Plus size={16} />
+                  </Button>
+                  <Button color="primary" className="ml-auto h-11" startContent={<Plus size={16} />} onPress={agregarItemForm} isDisabled={!itemRepuestoId}>
+                    Agregar
+                  </Button>
+                </div>
+
+                {itemsForm.length > 0 ? (
+                  <ul className="divide-y divide-default-100 rounded-lg border border-default-200">
+                    {itemsForm.map(item => (
+                      <li key={item.spare_part_id} className="flex items-center gap-2 px-3 py-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm text-default-900">{item.nombre}</p>
+                          <p className="font-mono text-xs text-default-400">{item.part_number}</p>
+                        </div>
+                        <Button isIconOnly size="sm" variant="light" aria-label={`Quitar una unidad de ${item.nombre}`} className="h-9 w-9 min-w-9"
+                          isDisabled={item.quantity <= 1} onPress={() => cambiarCantidadItem(item.spare_part_id, -1)}>
+                          <Minus size={14} />
+                        </Button>
+                        <span className="w-6 text-center font-mono text-sm font-semibold tabular-nums">{item.quantity}</span>
+                        <Button isIconOnly size="sm" variant="light" aria-label={`Agregar una unidad de ${item.nombre}`} className="h-9 w-9 min-w-9"
+                          onPress={() => cambiarCantidadItem(item.spare_part_id, 1)}>
+                          <Plus size={14} />
+                        </Button>
+                        <Button isIconOnly size="sm" variant="light" color="danger" aria-label="Quitar repuesto" className="h-9 w-9 min-w-9"
+                          onPress={() => quitarItemForm(item.spare_part_id)}>
+                          <X size={15} />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="py-2 text-center text-sm text-default-400">Aún no agregaste repuestos.</p>
+                )}
+              </>
+            )}
+
+            {paso === 3 && (
+              <>
+                <div className="rounded-xl border border-default-200 bg-default-50 p-3 text-sm">
+                  <p className="font-semibold text-foreground">{formWo || 'Sin WO'}</p>
+                  <p className="text-default-500">{[formIdAtm, formSite, formModelo].filter(Boolean).join(' · ') || 'Sin datos del equipo'}</p>
+                  {formDireccion && <p className="text-xs text-default-400">{formDireccion}</p>}
+                </div>
+                <ul className="divide-y divide-default-100 rounded-lg border border-default-200">
+                  {itemsForm.map(item => (
+                    <li key={item.spare_part_id} className="flex items-center justify-between gap-3 px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-default-900">{item.nombre}</p>
+                        <p className="font-mono text-xs text-default-400">{item.part_number}</p>
+                      </div>
+                      <span className="shrink-0 font-mono text-sm font-semibold tabular-nums">× {item.quantity}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-right text-xs text-default-500">
+                  {itemsForm.length} repuesto{itemsForm.length === 1 ? '' : 's'} · {itemsForm.reduce((n, i) => n + i.quantity, 0)} unidades
+                </p>
+              </>
             )}
           </ModalBody>
           <ModalFooter>
-            <Button variant="flat" onPress={() => setNuevoAbierto(false)} startContent={<X size={16} />}>
-              Cancelar
-            </Button>
-            <Button
-              color="primary"
-              onPress={guardarPedido}
-              isLoading={guardandoPedido}
-              isDisabled={!itemsForm.length}
-              startContent={<Check size={16} />}
-            >
-              Guardar pedido
-            </Button>
+            {paso === 1 ? (
+              <Button variant="flat" onPress={() => setNuevoAbierto(false)} startContent={<X size={16} />}>Cancelar</Button>
+            ) : (
+              <Button variant="flat" onPress={() => setPaso(p => p - 1)} startContent={<ArrowLeft size={16} />}>Atrás</Button>
+            )}
+            {paso < 3 ? (
+              <Button color="primary" onPress={() => setPaso(p => p + 1)} isDisabled={paso === 2 && !itemsForm.length} endContent={<ArrowRight size={16} />}>
+                Continuar
+              </Button>
+            ) : (
+              <Button
+                color="primary"
+                onPress={pedidoEditando ? guardarEdicion : guardarPedido}
+                isLoading={guardandoPedido}
+                isDisabled={!itemsForm.length}
+                startContent={<Check size={16} />}
+              >
+                {pedidoEditando ? 'Guardar cambios' : 'Guardar pedido'}
+              </Button>
+            )}
           </ModalFooter>
         </ModalContent>
       </Modal>
@@ -847,9 +1047,17 @@ export default function PedidosPage() {
             </ul>
           </ModalBody>
           <ModalFooter>
+            {pedidoDetalle?.estado === 'recepcionado' && (
+              <p className="mr-auto text-xs text-default-500">Recepcionado: solo lectura.</p>
+            )}
             <Button variant="flat" onPress={() => setPedidoDetalle(null)}>
               Cerrar
             </Button>
+            {pedidoDetalle?.estado === 'guardado' && (
+              <Button color="primary" startContent={<Pencil size={16} />} onPress={() => abrirEditar(pedidoDetalle)}>
+                Editar pedido
+              </Button>
+            )}
           </ModalFooter>
         </ModalContent>
       </Modal>

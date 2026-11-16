@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { traducirErrorAuth } from '../lib/registro'
 import { useApp } from '../context/AppContext'
 import {
   Card,
@@ -13,6 +14,7 @@ import {
 export default function LoginPage() {
   const { setSession } = useApp()
   const navigate = useNavigate()
+  const aviso = useLocation().state?.aviso
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [errores, setErrores] = useState({})
@@ -61,12 +63,23 @@ export default function LoginPage() {
       })
 
       if (error) {
-        setMensaje({ color: 'danger', texto: error.message })
+        // Si el admin reinició la clave, la anterior ya no sirve: explicarlo
+        const { data: perfil } = await supabase
+          .from('profiles')
+          .select('clave_reiniciada_en')
+          .eq('email', email)
+          .maybeSingle()
+        setMensaje({
+          color: 'danger',
+          texto: perfil?.clave_reiniciada_en
+            ? 'Tu clave fue reiniciada por el administrador. Usa el enlace que te enviaron para crear una nueva contraseña, o pídelo de nuevo.'
+            : traducirErrorAuth(error),
+        })
         return
       }
 
       setSession(data.session ?? null)
-      navigate('/tareas', { replace: true })
+      navigate('/inicio', { replace: true })
     } catch {
       setMensaje({ color: 'danger', texto: 'Error al conectar con el servidor.' })
     } finally {
@@ -75,13 +88,16 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-default-100 via-default-50 to-white px-4 py-10">
+    <div className="min-h-screen bg-nav px-4 py-16">
       <div className="mx-auto max-w-md">
-        <Card shadow="sm" className="border border-default-200/70 bg-white/90">
+        <div className="mb-6 text-center text-white">
+          <p className="text-2xl font-bold tracking-[0.25em]">ATM·WO</p>
+          <p className="mt-1 text-sm text-white/60">Órdenes de trabajo y almacén</p>
+        </div>
+        <Card shadow="lg" className="border border-default-200/70 bg-content1">
           <CardBody className="space-y-5 p-6">
             <div className="space-y-2 text-center">
-              <p className="text-xs uppercase tracking-[0.2em] text-default-400">ATM·WO</p>
-              <h1 className="text-xl font-semibold text-default-800">Acceso técnico</h1>
+              <h1 className="text-xl font-semibold text-foreground">Acceso técnico</h1>
               <p className="text-sm text-default-500">
                 Ingresa con tu usuario o correo electrónico.
               </p>
@@ -127,6 +143,13 @@ export default function LoginPage() {
                 description={mensaje.texto}
               />
             )}
+
+            {aviso && !mensaje && <HeroAlert color="success" title="Listo" description={aviso} />}
+
+            <p className="text-center text-sm text-default-500">
+              ¿Primera vez?{' '}
+              <Link to="/registro" className="font-medium text-primary hover:underline">Crear cuenta</Link>
+            </p>
           </CardBody>
         </Card>
       </div>

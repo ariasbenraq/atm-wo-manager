@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import { Card } from 'konsta/react'
-import { Copy, Check } from 'lucide-react'
+import SectionCard from './ui/SectionCard'
+import { Copy, Check, User, ChevronRight } from 'lucide-react'
 import { formatearFecha } from '../lib/date'
 
 const CLASES_ESTADO = {
-  hoy: 'bg-amber-100 text-amber-800',
-  pasado: 'bg-gray-200 text-gray-600',
-  futuro: 'bg-green-100 text-green-800',
+  hoy: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200',
+  pasado: 'bg-default-200 text-default-600',
+  futuro: 'bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-200',
 }
 
 async function copiarTexto(texto) {
@@ -35,8 +35,8 @@ async function copiarTexto(texto) {
 // Color del ID según el banco (campo `cliente`, comparado sin tildes ni mayúsculas)
 const COLORES_BANCO = [
   { patron: /credito|bcp/, clases: 'bg-blue-700 text-white' },
-  { patron: /interbank|ibk/, clases: 'bg-green-600 text-white' },
-  { patron: /bbva|continental/, clases: 'bg-sky-500 text-white' },
+  { patron: /interbank|ibk/, clases: 'bg-green-700 text-white' },
+  { patron: /bbva|continental/, clases: 'bg-sky-700 text-white' },
   { patron: /nacion|bn\b/, clases: 'bg-red-600 text-white' },
 ]
 
@@ -71,13 +71,13 @@ function CampoCopiable({ etiqueta, valor, destacado = false, clasesValor = null 
   return (
     <div className="min-w-0">
       <div className="flex items-center gap-0.5">
-        <p className="text-[10px] uppercase tracking-wide text-gray-400">{etiqueta}</p>
+        <p className="text-xs uppercase tracking-wide text-default-500">{etiqueta}</p>
         {valor && (
           <button
             type="button"
             onClick={copiar}
             aria-label={copiado ? `${etiqueta} copiado` : `Copiar ${etiqueta}`}
-            className="cursor-pointer rounded-full p-1 text-gray-400 hover:bg-black/5 active:bg-black/10 dark:hover:bg-white/10"
+            className="cursor-pointer rounded-full p-1 text-default-400 hover:bg-black/5 active:bg-black/10 dark:hover:bg-white/10"
           >
             {copiado ? <Check size={13} className="text-green-600" /> : <Copy size={13} />}
           </button>
@@ -94,13 +94,14 @@ function CampoCopiable({ etiqueta, valor, destacado = false, clasesValor = null 
   )
 }
 
-export default function WoCard({ wo, estadoFecha, onClick }) {
+export default function WoCard({ wo, estadoFecha, tecnico = '', fondo, grupo = '', onClick }) {
   const site = wo.site || wo.nombre_equipo
 
   return (
-    <Card
-      className="!mx-0 !my-2 cursor-pointer"
-      contentWrapPadding="p-3"
+    <SectionCard
+      padding="sm"
+      fondo={fondo}
+      className="my-2 cursor-pointer transition-shadow hover:shadow-md"
       onClick={onClick}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
@@ -109,12 +110,12 @@ export default function WoCard({ wo, estadoFecha, onClick }) {
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
           {wo.fecha && (
-            <span className={`${CHIP_FECHA_HORA} ${CLASES_ESTADO[estadoFecha] || 'bg-gray-100 text-gray-700'}`}>
+            <span className={`${CHIP_FECHA_HORA} ${CLASES_ESTADO[estadoFecha] || 'bg-default-100 text-default-700'}`}>
               {formatearFecha(wo.fecha)}
             </span>
           )}
           {wo.hora && (
-            <span className={`${CHIP_FECHA_HORA} ${CLASES_ESTADO[estadoFecha] || 'bg-gray-100 text-gray-700'}`}>
+            <span className={`${CHIP_FECHA_HORA} ${CLASES_ESTADO[estadoFecha] || 'bg-default-100 text-default-700'}`}>
               {wo.hora}
             </span>
           )}
@@ -127,7 +128,35 @@ export default function WoCard({ wo, estadoFecha, onClick }) {
           <CampoCopiable etiqueta="Modelo" valor={wo.modelo} />
           <CampoCopiable etiqueta="Serie" valor={wo.serie} />
         </div>
+        {(tecnico || wo.legajo) && (
+          <div className="mt-0.5 space-y-1.5 border-t border-default-100 pt-2 text-xs text-default-500">
+            <div className="flex items-center gap-1.5">
+              <User size={14} className="shrink-0 text-default-500" aria-hidden="true" />
+              <span className="min-w-0 truncate text-sm font-medium text-foreground" title={tecnico || undefined}>
+                {tecnico || 'Sin nombre'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {grupo && (
+                <span className="shrink-0 rounded-md border border-default-300 px-1.5 py-0.5 text-xs font-medium text-default-700">{grupo}</span>
+              )}
+              {wo.legajo && (
+                <span className="shrink-0 rounded-md bg-default-100 px-1.5 py-0.5 font-mono text-xs text-default-700 dark:bg-white/10">
+                  {wo.legajo}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onClick?.() }}
+                className="ml-auto flex shrink-0 cursor-pointer items-center gap-0.5 rounded-md px-1.5 py-1 text-xs font-medium text-primary-700 hover:bg-default-100"
+                aria-label={`Ver detalle de la WO ${wo.wo}`}
+              >
+                Detalle <ChevronRight size={14} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-    </Card>
+    </SectionCard>
   )
 }
