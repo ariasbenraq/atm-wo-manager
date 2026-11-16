@@ -439,7 +439,7 @@ export default function RepuestosPage() {
         )}
       </div>
 
-      <div className="rounded-xl border border-default-200 bg-white overflow-hidden">
+      <div className="rounded-xl border border-default-200 bg-content1 overflow-hidden">
         <div className="px-5 pt-5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold text-default-900">Inventario</p>

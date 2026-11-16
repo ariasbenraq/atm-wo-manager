@@ -25,7 +25,8 @@ import {
 } from '@heroui/react'
 import MuiAlert from '@mui/material/Alert'
 import Fade from '@mui/material/Fade'
-import { ClipboardList, Headset, Home, List, LogOut, Menu, Package, Shield, ShoppingCart, Warehouse } from 'lucide-react'
+import { useTema, ETIQUETA_TEMA } from '../hooks/useTema'
+import { ClipboardList, Headset, Home, Moon, Sun, SunMoon, List, LogOut, Menu, Package, Shield, ShoppingCart, Warehouse } from 'lucide-react'
 
 const vistas = [
   { key: 'inicio', label: 'Inicio', icon: Home, path: '/inicio' },
@@ -98,6 +99,8 @@ export default function Layout() {
   const esAdmin = useIsAdmin()
   const navigate = useNavigate()
   const location = useLocation()
+  const { tema, alternar: alternarTema } = useTema()
+  const IconoTema = tema === 'oscuro' ? Moon : tema === 'claro' ? Sun : SunMoon
   const [ahoraMs, setAhoraMs] = useState(() => Date.now())
   const [indiceAlertaProximaTarea, setIndiceAlertaProximaTarea] = useState(0)
   const [modalProximaTareaAbierto, setModalProximaTareaAbierto] = useState(false)
@@ -214,7 +217,7 @@ export default function Layout() {
           {vistas.map(item => <EnlaceLateral key={item.key} item={item} activa={item.key === vistaActiva.key} onIr={ir} />)}
           {esAdmin && (
             <>
-              <p className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-white/40">Administración</p>
+              <p className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-white/65">Administración</p>
               {vistasAdmin.map(item => <EnlaceLateral key={item.key} item={item} activa={item.key === vistaActiva.key} onIr={ir} />)}
             </>
           )}
@@ -224,6 +227,14 @@ export default function Layout() {
             <p className="truncate text-sm font-medium">{profile?.full_name || profile?.username || 'Técnico'}</p>
             <p className="truncate font-mono text-xs text-white/50">{profile?.legajo || 'Sin legajo'}</p>
           </div>
+          <button
+            type="button"
+            onClick={alternarTema}
+            aria-label={`Tema: ${ETIQUETA_TEMA[tema]}. Cambiar`}
+            className="mb-1 flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white"
+          >
+            <IconoTema size={16} /> Tema: {ETIQUETA_TEMA[tema]}
+          </button>
           <button
             type="button"
             onClick={salir}
@@ -244,7 +255,7 @@ export default function Layout() {
           justify="center"
           className="min-w-0 flex-1 px-1"
         >
-          <div className="w-full min-w-0 max-w-full sm:mx-auto sm:max-w-lg">
+          <NavbarItem className="w-full min-w-0 max-w-full sm:mx-auto sm:max-w-lg">
             {proximaTarea && detalleActivoAlerta ? (
               <MuiAlert
                 severity="info"
@@ -290,7 +301,7 @@ export default function Layout() {
                 </div>
               </MuiAlert>
             ) : <div />}
-          </div>
+          </NavbarItem>
         </NavbarContent>
         <NavbarContent justify="end" className="shrink-0 grow-0 basis-auto">
           {syncing && (
@@ -359,7 +370,11 @@ export default function Layout() {
           </DropdownTrigger>
           <DropdownMenu
             aria-label="Más opciones"
-            onAction={key => (String(key) === 'salir' ? salir() : ir(String(key)))}
+            onAction={key => {
+              if (String(key) === 'salir') salir()
+              else if (String(key) === 'tema') alternarTema()
+              else ir(String(key))
+            }}
           >
             {[...vistasMas, ...(esAdmin ? vistasAdmin : [])].map(item => {
               const Icon = item.icon
@@ -369,6 +384,9 @@ export default function Layout() {
                 </DropdownItem>
               )
             })}
+            <DropdownItem key="tema" startContent={<IconoTema size={16} />}>
+              Tema: {ETIQUETA_TEMA[tema]}
+            </DropdownItem>
             <DropdownItem key="salir" color="danger" startContent={<LogOut size={16} />}>
               Salir
             </DropdownItem>

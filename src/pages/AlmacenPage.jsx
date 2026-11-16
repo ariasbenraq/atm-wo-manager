@@ -424,11 +424,11 @@ export default function AlmacenPage() {
       </div>
 
       {cargando ? (
-        <div className="rounded-xl border border-default-200 bg-white px-5 py-4 text-sm text-default-400">
+        <div className="rounded-xl border border-default-200 bg-content1 px-5 py-4 text-sm text-default-400">
           Cargando inventario...
         </div>
       ) : itemsFiltrados.length === 0 ? (
-        <div className="rounded-xl border border-default-200 bg-white px-5 py-6 text-sm text-default-400 flex flex-col items-center gap-3">
+        <div className="rounded-xl border border-default-200 bg-content1 px-5 py-6 text-sm text-default-400 flex flex-col items-center gap-3">
           <RotateCcw size={24} className="text-default-300" />
           <span>{filtro ? 'No se encontraron repuestos.' : vista !== 'todos' && items.length > 0 ? 'No hay repuestos en esta vista.' : 'El almacén está vacío. Agrega repuestos usando "Ajustar inventario".'}</span>
         </div>
@@ -438,7 +438,7 @@ export default function AlmacenPage() {
             {itemsFiltrados.map(item => (
               <div
                 key={item.id}
-                className="rounded-xl border border-default-200 bg-white px-4 py-3 shadow-sm"
+                className="rounded-xl border border-default-200 bg-content1 px-4 py-3 shadow-sm"
               >
                 <div
                   className="flex cursor-pointer items-start justify-between gap-2"
@@ -473,6 +473,7 @@ export default function AlmacenPage() {
                   <div className="flex gap-1">
                     <Button
                       isIconOnly
+                      aria-label={`Editar ${item.nombre || item.part_number}`}
                       size="sm"
                       variant="light"
                       radius="lg"
@@ -483,6 +484,7 @@ export default function AlmacenPage() {
                     </Button>
                     <Button
                       isIconOnly
+                      aria-label={`Ver historial de ${item.nombre || item.part_number}`}
                       size="sm"
                       variant="light"
                       radius="lg"
@@ -493,6 +495,7 @@ export default function AlmacenPage() {
                     </Button>
                     <Button
                       isIconOnly
+                      aria-label={`Eliminar ${item.nombre || item.part_number}`}
                       size="sm"
                       variant="light"
                       radius="lg"
@@ -506,6 +509,7 @@ export default function AlmacenPage() {
                   <div className="flex items-center gap-1">
                     <Button
                       isIconOnly
+                      aria-label={`Quitar una unidad de ${item.nombre || item.part_number}`}
                       size="sm"
                       variant="light"
                       radius="lg"
@@ -517,6 +521,7 @@ export default function AlmacenPage() {
                     </Button>
                     <Button
                       isIconOnly
+                      aria-label={`Agregar una unidad a ${item.nombre || item.part_number}`}
                       size="sm"
                       variant="light"
                       radius="lg"
@@ -531,7 +536,7 @@ export default function AlmacenPage() {
               </div>
             ))}
           </div>
-          <div className="hidden md:block overflow-x-auto rounded-xl border border-default-200 bg-white shadow-sm">
+          <div className="hidden md:block overflow-x-auto rounded-xl border border-default-200 bg-content1 shadow-sm">
             <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 border-b border-default-100 bg-default-50/80 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400 items-center">
               <span>Repuesto</span>
               <span className="text-center">Cantidad</span>
@@ -563,6 +568,7 @@ export default function AlmacenPage() {
                     <div className="flex items-center justify-center gap-1">
                       <Button
                         isIconOnly
+                        aria-label={`Quitar una unidad de ${item.nombre || item.part_number}`}
                         size="sm"
                         variant="light"
                         radius="lg"
@@ -574,6 +580,7 @@ export default function AlmacenPage() {
                       </Button>
                       <Button
                         isIconOnly
+                        aria-label={`Agregar una unidad a ${item.nombre || item.part_number}`}
                         size="sm"
                         variant="light"
                         radius="lg"
@@ -587,6 +594,7 @@ export default function AlmacenPage() {
                     <div className="flex items-center justify-center gap-1">
                       <Button
                         isIconOnly
+                        aria-label={`Editar ${item.nombre || item.part_number}`}
                         size="sm"
                         variant="light"
                         radius="lg"
@@ -597,6 +605,7 @@ export default function AlmacenPage() {
                       </Button>
                       <Button
                         isIconOnly
+                        aria-label={`Ver historial de ${item.nombre || item.part_number}`}
                         size="sm"
                         variant="light"
                         radius="lg"
@@ -607,6 +616,7 @@ export default function AlmacenPage() {
                       </Button>
                       <Button
                         isIconOnly
+                        aria-label={`Eliminar ${item.nombre || item.part_number}`}
                         size="sm"
                         variant="light"
                         radius="lg"
@@ -777,6 +787,7 @@ export default function AlmacenPage() {
               <div className="flex items-center gap-2">
                 <Button
                   isIconOnly
+                  aria-label="Menos"
                   size="sm"
                   variant="flat"
                   radius="lg"
@@ -798,6 +809,7 @@ export default function AlmacenPage() {
                 />
                 <Button
                   isIconOnly
+                  aria-label="Más"
                   size="sm"
                   variant="flat"
                   radius="lg"

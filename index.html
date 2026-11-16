@@ -5,6 +5,13 @@
     <link rel="icon" type="image/svg+xml" href="/src/assets/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ATM WO Manager</title>
+    <script>
+      try {
+        var t = localStorage.getItem('tema')
+        var oscuro = t === 'oscuro' || ((t === 'sistema' || !t) && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        if (oscuro) { document.documentElement.classList.add('dark'); document.documentElement.style.colorScheme = 'dark' }
+      } catch (e) { /* sin almacenamiento */ }
+    </script>
   </head>
   <body>
     <div id="root"></div>

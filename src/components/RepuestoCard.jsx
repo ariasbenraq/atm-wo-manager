@@ -8,7 +8,7 @@ export default function RepuestoCard({ repuesto, session, onCopy, onAddToList, o
   const fueCopiado = copiandoId === key
 
   return (
-    <div className="group rounded-xl border border-default-200 bg-white px-4 py-3.5 shadow-sm transition-all duration-150 hover:shadow-[0_4px_12px_0_rgb(0_0_0/0.06)] hover:border-default-300">
+    <div className="group rounded-xl border border-default-200 bg-content1 px-4 py-3.5 shadow-sm transition-all duration-150 hover:shadow-[0_4px_12px_0_rgb(0_0_0/0.06)] hover:border-default-300">
       <div className="flex items-start gap-3">
         <div className="mt-0.5 rounded-lg bg-default-50 p-2 text-default-400">
           <Package size={16} />

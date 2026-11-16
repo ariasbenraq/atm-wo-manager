@@ -412,7 +412,7 @@ export default function WosPage() {
         />
       )}
 
-      <div className="sticky top-0 z-20 -mx-4 bg-md-light-surface px-6 pb-2 pt-1 dark:bg-md-dark-surface">
+      <div className="sticky top-14 z-20 -mx-4 bg-background px-6 pb-2 pt-1">
         <div className="flex items-center gap-1.5 pb-1">
           {seleccion && (
             <Chip
@@ -430,7 +430,7 @@ export default function WosPage() {
               {resumenFiltros(filtrosBusqueda, nombres, wos)} ✕
             </Chip>
           )}
-          <span className="ml-auto shrink-0 text-xs text-gray-500">{wosFiltradas.length} resultados</span>
+          <span className="ml-auto shrink-0 text-xs text-default-500">{wosFiltradas.length} resultados</span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <Switch size="sm" isSelected={soloMios} onValueChange={setSoloMios}>
@@ -445,13 +445,13 @@ export default function WosPage() {
       {cargando ? (
         <WosSkeleton filas={6} className="pt-3" />
       ) : wosPagina.length === 0 ? (
-        <p className="py-6 text-center text-sm text-gray-500">
+        <p className="py-6 text-center text-sm text-default-500">
           {seleccion || filtroHoy || soloMios || hayFiltros(filtrosBusqueda)
             ? 'Sin WOs para este filtro.'
             : 'No hay workorders. Toca + para importar un Excel o crear una.'}
         </p>
       ) : (
-        <div>
+        <div className="lg:grid lg:grid-cols-2 lg:gap-x-3">
           {wosPagina.map(wo => (
             <WoCard
               key={wo.id}
@@ -477,7 +477,7 @@ export default function WosPage() {
       )}
 
       <div className="mt-3 flex items-center justify-end gap-2">
-        <span className="text-xs text-gray-500">Por página</span>
+        <span className="text-xs text-default-500">Por página</span>
         <Select
           className="w-24"
           aria-label="Resultados por página"
@@ -498,21 +498,21 @@ export default function WosPage() {
             <button
               type="button"
               onClick={() => { setFabAbierto(false); setBuscarAbierto(true) }}
-              className="flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-medium text-gray-900 shadow-lg dark:bg-gray-800 dark:text-white"
+              className="flex items-center gap-2 rounded-full bg-content1 px-4 py-2.5 text-sm font-medium text-foreground shadow-lg dark:bg-gray-800 dark:text-white"
             >
               <Search size={18} /> Buscar WO
             </button>
             <button
               type="button"
               onClick={() => { setFabAbierto(false); setImportarAbierto(true) }}
-              className="flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-medium text-gray-900 shadow-lg dark:bg-gray-800 dark:text-white"
+              className="flex items-center gap-2 rounded-full bg-content1 px-4 py-2.5 text-sm font-medium text-foreground shadow-lg dark:bg-gray-800 dark:text-white"
             >
               <FileSpreadsheet size={18} /> Importar Excel
             </button>
             <button
               type="button"
               onClick={() => { setFabAbierto(false); abrirNuevo() }}
-              className="flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-medium text-gray-900 shadow-lg dark:bg-gray-800 dark:text-white"
+              className="flex items-center gap-2 rounded-full bg-content1 px-4 py-2.5 text-sm font-medium text-foreground shadow-lg dark:bg-gray-800 dark:text-white"
             >
               <FilePlus2 size={18} /> Nueva WO
             </button>
@@ -556,8 +556,8 @@ export default function WosPage() {
         <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-black/20" />
         <div className="max-h-[70vh] overflow-y-auto px-5 pb-6">
           <div className="mb-3">
-            <p className="text-lg font-semibold text-gray-900">{detalle?.wo}</p>
-            <p className="text-xs text-gray-500">
+            <p className="text-lg font-semibold text-foreground">{detalle?.wo}</p>
+            <p className="text-xs text-default-500">
               {formatearFecha(detalle?.fecha)}
               {detalle?.tipo_pm ? ` · ${detalle.tipo_pm}` : ''}
             </p>
@@ -568,8 +568,8 @@ export default function WosPage() {
               if (!valor) return null
               return (
                 <div key={campo}>
-                  <dt className="text-xs text-gray-400">{etiqueta}</dt>
-                  <dd className="text-sm text-gray-900">{valor}</dd>
+                  <dt className="text-xs text-default-400">{etiqueta}</dt>
+                  <dd className="text-sm text-foreground">{valor}</dd>
                 </div>
               )
             })}
@@ -582,7 +582,7 @@ export default function WosPage() {
               Eliminar
             </KonstaButton>
             <KonstaButton
-              className="border border-gray-300 bg-white text-gray-900 dark:border-gray-600 dark:bg-transparent"
+              className="border border-gray-300 bg-content1 text-foreground dark:border-gray-600 dark:bg-transparent"
               onClick={() => setDetalle(null)}
             >
               Cerrar

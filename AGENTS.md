@@ -55,6 +55,8 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 - **Tailwind CSS v4** (CSS-first via `src/index.css` + `@tailwindcss/vite` plugin) with custom `src/hero.ts` HeroUI plugin. `darkMode: "class"`
 - **Icons:** `lucide-react`
 - **Locale:** Spanish everywhere — component names, labels, error messages
+- **Theme:** `claro | oscuro | sistema`, toggled from the sidebar / «Más» menu (`src/lib/tema.js`, `src/hooks/useTema.js`, saved in `localStorage.tema`, early script in `index.html` avoids flash). Dark mode = `dark` class on `<html>`. Use HeroUI semantic tokens (`bg-content1`, `bg-background`, `text-default-*`, `text-foreground`) — never `bg-white`/`text-gray-*`. HeroUI colors are HSL channels (`hsl(var(--heroui-background))`). Konsta (`konsta/react`) owns Tailwind's `bg-primary`/`text-primary`: override via `--k-color-primary` in `src/index.css`, not in `hero.ts`.
+- **Accessibility:** icon-only buttons need `aria-label`; muted text uses `default-400/500` (darkened in `hero.ts` for WCAG AA contrast). Audited with axe-core (wcag2a/aa) on the main pages in light and dark.
 - `framer-motion` is a required peer dependency of HeroUI — do not remove
 
 ## Key files

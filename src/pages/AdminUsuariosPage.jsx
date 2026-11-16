@@ -11,7 +11,7 @@ import {
 import { Shield, ShieldOff, Search, ArrowLeft, Pencil } from 'lucide-react'
 
 export default function AdminUsuariosPage() {
-  const { session } = useApp()
+  const { session, profile } = useApp()
   const esAdmin = useIsAdmin()
   const navigate = useNavigate()
 
@@ -47,12 +47,14 @@ export default function AdminUsuariosPage() {
   }
 
   useEffect(() => {
+    // Mientras el perfil no cargó no se sabe si es admin: no redirigir todavía
+    if (!profile) return
     if (!esAdmin) {
       navigate('/repuestos', { replace: true })
       return
     }
     cargarUsuarios()
-  }, [esAdmin, navigate])
+  }, [esAdmin, profile, navigate])
 
   function abrirCambioRol(usuario) {
     setEditandoUsuario(usuario)
@@ -177,7 +179,7 @@ export default function AdminUsuariosPage() {
         </Button>
       </div>
 
-      <div className="rounded-xl border border-default-200 bg-white overflow-hidden">
+      <div className="rounded-xl border border-default-200 bg-content1 overflow-hidden">
         <div className="px-5 pt-5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold text-default-900">Todos los usuarios</p>
@@ -232,7 +234,7 @@ export default function AdminUsuariosPage() {
                       {usuario.legajo ? (
                         <p className="font-mono text-[12px] text-default-600">{usuario.legajo}</p>
                       ) : (
-                        <p className="text-[12px] text-warning-600">Sin legajo</p>
+                        <p className="text-[12px] text-warning-700">Sin legajo</p>
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
