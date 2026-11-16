@@ -1,20 +1,24 @@
 import { supabase } from './supabase'
-import { hoyLima, rangoSemana } from './wosTecnicos'
+import { hoyLima, rangoSemana, normalizarLegajo } from './wosTecnicos'
 import { normalizarPartNumber } from './kitMantenimiento'
 
 function sumarCantidades(items) {
   return (items || []).reduce((s, i) => s + (Number(i.quantity) || 0), 0)
 }
 
-// Resumen de WOs a partir de la lista ya cargada (filas con user_id, wo, fecha, hora, site…)
-export function resumirWos(wos, userId) {
+// Resumen de WOs a partir de la lista ya cargada, solo las del legajo de la sesión.
+// Sin legajo asignado no se considera ninguna WO (un admin ve todas en el caché).
+export function resumirWos(wos, legajo) {
   const hoy = hoyLima()
   const fin = rangoSemana(hoy).hasta
-  const propias = (wos || []).filter(w => !userId || w.user_id === userId)
+  const mio = normalizarLegajo(legajo)
+  const propias = mio ? (wos || []).filter(w => normalizarLegajo(w.legajo) === mio) : []
   const deHoy = propias
     .filter(w => w.fecha === hoy)
     .sort((a, b) => String(a.hora || '').localeCompare(String(b.hora || '')))
-  const semana = propias.filter(w => w.fecha >= hoy && w.fecha <= fin)
+  const semana = propias
+    .filter(w => w.fecha >= hoy && w.fecha <= fin)
+    .sort((a, b) => `${a.fecha} ${a.hora || ''}`.localeCompare(`${b.fecha} ${b.hora || ''}`))
   return { hoy, fin, deHoy, semana, propias }
 }
 

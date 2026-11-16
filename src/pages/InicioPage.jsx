@@ -7,6 +7,7 @@ import { refrescarCacheWos, leerCacheWos } from '../lib/wosCache'
 import { cargarResumenRemoto, resumirWos, resumirPartes } from '../lib/resumen'
 import { formatearFecha } from '../lib/date'
 import { calcularKit } from '../lib/kitMantenimiento'
+import { useLegajo } from '../hooks/useLegajo'
 
 const FORMATO_DIA = new Intl.DateTimeFormat('es-PE', {
   weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Lima',
@@ -127,6 +128,7 @@ export default function InicioPage() {
   const { session, profile } = useApp()
   const navigate = useNavigate()
   const userId = session?.user?.id
+  const legajo = useLegajo()
 
   const [wos, setWos] = useState(null)
   const [remoto, setRemoto] = useState(null)
@@ -158,7 +160,7 @@ export default function InicioPage() {
     return () => { activo = false }
   }, [userId])
 
-  const resumenWos = useMemo(() => (wos ? resumirWos(wos, userId) : null), [wos, userId])
+  const resumenWos = useMemo(() => (wos ? resumirWos(wos, legajo) : null), [wos, legajo])
   const partes = useMemo(() => (
     resumenWos && remoto?.pedidos
       ? resumirPartes(remoto.pedidos, resumenWos.propias, resumenWos.hoy, resumenWos.fin)
@@ -245,52 +247,68 @@ export default function InicioPage() {
 
       <PrevisionKit kit={kit} cargando={cargandoWos || cargandoRemoto} onPedir={() => navigate('/pedidos')} />
 
-      <Card shadow="sm" className="border border-default-200">
-        <CardBody className="p-0">
-          <div className="flex items-center justify-between px-4 pb-2 pt-4">
-            <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
-              <ClipboardCheck size={16} className="text-default-400" /> Agenda de hoy
-            </h2>
-            <button
-              type="button"
-              onClick={() => navigate('/wos?filtro=hoy')}
-              className="cursor-pointer text-xs font-medium text-primary hover:underline"
-            >
-              Ver todas
-            </button>
-          </div>
-          {cargandoWos ? (
-            <div className="space-y-2 px-4 pb-4">
-              <Skeleton className="h-10 rounded-lg" /><Skeleton className="h-10 rounded-lg" />
-            </div>
-          ) : resumenWos.deHoy.length === 0 ? (
-            <p className="px-4 pb-5 text-sm text-default-400">No tienes WOs para hoy.</p>
-          ) : (
-            <ul className="divide-y divide-default-100 pb-1">
-              {resumenWos.deHoy.slice(0, 6).map(w => (
-                <li key={w.id}>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/wos?filtro=hoy')}
-                    className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left hover:bg-default-50"
-                  >
-                    <Chip size="sm" variant="flat" color="primary" className="shrink-0 font-mono">{w.hora || '—'}</Chip>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold">{w.wo}</span>
-                      <span className="block truncate text-xs text-default-500">
-                        {[w.site || w.nombre_equipo, w.codigo_equipo].filter(Boolean).join(' · ') || formatearFecha(w.fecha)}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-              {resumenWos.deHoy.length > 6 && (
-                <li className="px-4 py-2 text-xs text-default-400">… y {resumenWos.deHoy.length - 6} más</li>
-              )}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
+      <AgendaCard
+        titulo="Agenda de hoy" vacio="No tienes WOs para hoy." filtro="hoy"
+        lista={resumenWos?.deHoy ?? []} cargando={cargandoWos} navigate={navigate}
+      />
+      <AgendaCard
+        titulo="WOs de la semana" vacio="No tienes WOs de hoy al domingo." filtro="semana"
+        lista={resumenWos?.semana ?? []} cargando={cargandoWos} navigate={navigate} conFecha
+      />
     </div>
+  )
+}
+
+function AgendaCard({ titulo, vacio, filtro, lista, cargando, navigate, conFecha }) {
+  const destino = filtro === 'hoy' ? '/wos?filtro=hoy' : '/wos'
+  return (
+    <Card shadow="sm" className="border border-default-200">
+      <CardBody className="p-0">
+        <div className="flex items-center justify-between px-4 pb-2 pt-4">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+            <ClipboardCheck size={16} className="text-default-400" /> {titulo}
+          </h2>
+          <button
+            type="button"
+            onClick={() => navigate(destino)}
+            className="cursor-pointer text-xs font-medium text-primary hover:underline"
+          >
+            Ver todas
+          </button>
+        </div>
+        {cargando ? (
+          <div className="space-y-2 px-4 pb-4">
+            <Skeleton className="h-10 rounded-lg" /><Skeleton className="h-10 rounded-lg" />
+          </div>
+        ) : lista.length === 0 ? (
+          <p className="px-4 pb-5 text-sm text-default-400">{vacio}</p>
+        ) : (
+          <ul className="divide-y divide-default-100 pb-1">
+            {lista.slice(0, 6).map(w => (
+              <li key={w.id}>
+                <button
+                  type="button"
+                  onClick={() => navigate(destino)}
+                  className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left hover:bg-default-50"
+                >
+                  <Chip size="sm" variant="flat" color="primary" className="shrink-0 font-mono">
+                    {conFecha ? `${formatearFecha(w.fecha).slice(0, 5)} ${w.hora || ''}`.trim() : (w.hora || '—')}
+                  </Chip>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">{w.wo}</span>
+                    <span className="block truncate text-xs text-default-500">
+                      {[w.site || w.nombre_equipo, w.codigo_equipo].filter(Boolean).join(' · ') || formatearFecha(w.fecha)}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+            {lista.length > 6 && (
+              <li className="px-4 py-2 text-xs text-default-400">… y {lista.length - 6} más</li>
+            )}
+          </ul>
+        )}
+      </CardBody>
+    </Card>
   )
 }
