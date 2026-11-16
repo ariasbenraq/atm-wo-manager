@@ -27,8 +27,7 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 **Entrypoint:** `src/main.jsx` — mounts React with `<HeroUIProvider>` + MUI `<LocalizationProvider>` (locale `es`).
 
 **App structure:** routes via react-router-dom v7:
-- `/tareas` — import Excel + manual task creation + global task list
-- `/mis-tareas` — assigned tasks + timesheet (`?wo=` param auto-selects a task)
+- `/inicio` — home summary (default route)
 - `/wos` — work orders (calls): Excel import (multi-sheet) + manual WO + paginated searchable list
 - `/repuestos` — spare parts CRUD + add to lists
 - `/mis-listas` — spare part lists lifecycle + warehouse inventory sync
@@ -37,14 +36,13 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 - `/admin/usuarios` — admin-only profile/role management
 - `/login` — email or username login
 
-`Layout.jsx` wraps authenticated pages with inline HeroUI Navbar + next-task alert. Shared state lives in `AppContext` (Dexie-read on mount, synced via `sync.js`). Auth gates in `Layout.jsx` — unauthenticated users redirect to `/login`. Session expiry keeps the app usable with local data + a re-login modal.
+`Layout.jsx` wraps authenticated pages (desktop sidebar, mobile bottom nav, top bar). Shared state lives in `AppContext` (Dexie-read on mount, synced via `sync.js`). Auth gates in `Layout.jsx` — unauthenticated users redirect to `/login`. Session expiry keeps the app usable with local data + a re-login modal.
 
 **Data flow:**
 - Dexie (IndexedDB) is the primary store — 18 schema versions in `src/lib/db.js`
 - `src/lib/sync.js` syncs from Supabase to Dexie on auth, clearing local tables first
-- `mis_tareas` has custom merge logic (local wins when `tiemposSyncPendiente` is true or local `tiemposUpdatedAt` is newer)
 - Offline graceful: Supabase errors fall back to cached local data; writes set pending flags for retry on next login
-- Excel import upserts to Supabase on `wo`, then merges into Dexie by `wo` (preserves `localId`)
+- The Tareas / Mis tareas feature was removed; its Supabase tables (`tareas`, `mis_tareas`, `personal_cmca`, `personal_cmpd`, `motivos_aqr`) and Dexie tables are kept untouched but unused
 
 **Auth:** Supabase email/password via `supabase.auth.signInWithPassword()`. Login accepts email or username (username looked up in `profiles` pre-auth). Roles (`admin`/`user`) live in `profiles`, enforced server-side by RLS (`is_admin()`) and client-side via `usePermissions.js`.
 
@@ -65,7 +63,7 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 |---|---|
 | `src/lib/db.js` | Dexie schema (18 versions, 16 tables; `cierres` is legacy/unused, `pedidosWos` is obsolete — WOs come from `workorders`) |
 | `src/lib/supabase.js` | Supabase client (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) |
-| `src/lib/sync.js` | Supabase → Dexie sync + merge logic |
+| `src/lib/sync.js` | On login, refreshes the local WO cache |
 | `src/lib/date.js` | Date formatting helpers (DD/MM/YYYY) |
 | `src/lib/excel.js` | Shared SheetJS helpers: fecha/hora parsing + header normalizer |
 | `src/lib/inventario.js` | Wrappers of the inventory RPCs (`ajustar_stock`, `fijar_stock`, `eliminar_item_almacen`, `recepcionar_pedido`, `consumir_lista`, `revertir_consumo_lista`) + Spanish error messages |
@@ -74,10 +72,8 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 | `src/hooks/useLegajo.js` | Legajo of the logged-in user (`profiles.legajo`, assigned by admin) |
 | `src/hooks/usePermissions.js` | Roles/permissions (`useIsAdmin`, `useCan`) |
 | `src/context/AppContext.jsx` | Shared state, auth, sync orchestration, CRUD |
-| `src/components/Layout.jsx` | Navbar, auth gate, next-task alert, re-login modal |
-| `src/components/ImportarExcel.jsx` | Task Excel (.xlsx) import via SheetJS |
+| `src/components/Layout.jsx` | Sidebar/bottom nav, top bar, auth gate, theme toggle, re-login modal |
 | `src/components/ImportarWosExcel.jsx` | Wo's Excel import: sheet picker, legajo filter, upsert by (user, wo, fecha) |
-| `src/components/FormularioCierre.jsx` | Task closure / timesheet form |
 | `src/pages/MisListasPage.jsx` | Lists CRUD + warehouse sync (confirmation shows stock before → after and blocks if insufficient); two independent states per list: warehouse (`inventory_synced`) and Google Form (`form_enviado_en`) |
 | `src/lib/googleForm.js`, `src/components/EnviarFormularioModal.jsx` | Prefilled link to the «Consumo de repuestos» Google Form (field ids, 1–7 parts per submission, zona LIMA, legajo (profile, picked from the form list) and email (registered profile email) prefilled, cliente from the WO, N° presupuesto per item). Google gives no confirmation, so the user marks «Ya lo envié» |
 | `src/pages/WosPage.jsx` | Work orders list (10/20 per page, combo search WO/id/distrito/serie) + manual WO |
@@ -91,9 +87,8 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 - **No TypeScript** — use `.jsx` only
 - **No testing infrastructure** — adding one requires setup from scratch
 - **`.env` is tracked in git** — contains live Supabase dev keys (public anon key)
-- **Supabase tables in use:** `tareas`, `mis_tareas`, `repuestos`, `personal_cmca`, `personal_cmpd`, `motivos_aqr`, `profiles`, `spare_part_lists`, `spare_part_list_items`, `warehouse_items`, `warehouse_transactions`, `pedidos`, `pedido_items`, `pedidos_personas`, `workorders`
+- **Supabase tables in use:** `repuestos`, `profiles`, `spare_part_lists`, `spare_part_list_items`, `warehouse_items`, `warehouse_transactions`, `pedidos`, `pedido_items`, `pedidos_personas`, `workorders`
 - **RLS:** `repuestos` write is admin-only; lists/items/pedidos/workorders are owner-or-admin; warehouse tables are read-only for clients (owner, or admin for reports); `pedidos_personas` is read-for-authenticated/write-admin-only; `profiles` is world-readable (pre-auth username lookup — username enumeration is a known tradeoff)
-- **Excel import** expects columns: `WO`, `MODELO`, `SERIE`, `ID`, `NOMBRE`, `DIRECCION`, `DISTRITO`, `FECHA`, `HORA`, `CE`. Duplicate WO values in the file are rejected without saving anything.
 - **Wo's Excel import** (`ImportarWosExcel`): headers matched after accent/space normalization; only rows matching the user's own `profiles.legajo` are stored (admins can switch to import all legajos; users without legajo cannot import) (comparison strips spaces/symbols and uppercases; on zero matches the report lists the legajo values found in the file); in-file duplicate key is **WO + Fecha** (a WO can be reprogrammed to another date); upserts to Supabase on `(user_id, wo, fecha)`. Multi-sheet workbooks: sheet picker with all tabs pre-selected. The Wo's page is the source of truth for WO selection when creating pedidos.
 - **Inventory:** never write `warehouse_items` / `warehouse_transactions` from the client — every stock change goes through the RPCs in `supabase/migrations/20261027_inventario_rpc.sql` (atomic, owner-or-admin, row locks). History is append-only: IN/OUT quantities are positive, ADJUSTMENT is signed; `v_stock_diferencias` must stay empty. A list with `inventory_synced` is locked until `revertir_consumo_lista`.
 - **Deploy:** push to `produccion` triggers Docker image build → GHCR → Portainer. `.env` values are injected as Docker build args / GH Actions secrets.

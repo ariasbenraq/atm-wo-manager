@@ -3,7 +3,6 @@ import { AppProvider } from './context/AppContext'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import InicioPage from './pages/InicioPage'
-import TareasPage from './pages/TareasPage'
 import WosPage from './pages/WosPage'
 import RepuestosPage from './pages/RepuestosPage'
 import MisListasPage from './pages/MisListasPage'
@@ -18,7 +17,6 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<Layout />}>
           <Route path="/inicio" element={<InicioPage />} />
-          <Route path="/tareas" element={<TareasPage />} />
           <Route path="/wos" element={<WosPage />} />
           <Route path="/repuestos" element={<RepuestosPage />} />
           <Route path="/mis-listas" element={<MisListasPage />} />

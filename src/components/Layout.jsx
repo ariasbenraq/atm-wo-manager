@@ -23,14 +23,11 @@ import {
   ModalFooter,
   Alert as HeroAlert,
 } from '@heroui/react'
-import MuiAlert from '@mui/material/Alert'
-import Fade from '@mui/material/Fade'
 import { useTema, ETIQUETA_TEMA } from '../hooks/useTema'
-import { ClipboardList, Headset, Home, Moon, Sun, SunMoon, List, LogOut, Menu, Package, Shield, ShoppingCart, Warehouse } from 'lucide-react'
+import { Headset, Home, Moon, Sun, SunMoon, List, LogOut, Menu, Package, Shield, ShoppingCart, Warehouse } from 'lucide-react'
 
 const vistas = [
   { key: 'inicio', label: 'Inicio', icon: Home, path: '/inicio' },
-  { key: 'tareas', label: 'Tareas', icon: ClipboardList, path: '/tareas' },
   { key: 'wos', label: "Wo's", icon: Headset, path: '/wos' },
   { key: 'repuestos', label: 'Repuestos', icon: Package, path: '/repuestos' },
   { key: 'mis-listas', label: 'Mis listas', icon: List, path: '/mis-listas' },
@@ -63,47 +60,13 @@ function EnlaceLateral({ item, activa, onIr }) {
   )
 }
 
-function obtenerMarcaTiempoProgramada(tarea) {
-  const fecha = String(tarea?.fecha || '').trim()
-  const hora = String(tarea?.hora || '').trim() || '00:00'
-
-  if (!fecha) return 0
-
-  const matchIso = fecha.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (!matchIso) return 0
-
-  const [, year, month, day] = matchIso
-  const marca = new Date(`${year}-${month}-${day}T${hora.length === 5 ? `${hora}:00` : hora}`)
-  return Number.isNaN(marca.getTime()) ? 0 : marca.getTime()
-}
-
-function obtenerProximaTareaEnVentana(tareas, ahoraMs) {
-  const limite = ahoraMs + (60 * 60 * 1000)
-
-  return tareas
-    .filter(tarea => tarea?.estado !== 'completada')
-    .map(tarea => ({ tarea, marca: obtenerMarcaTiempoProgramada(tarea) }))
-    .filter(item => item.marca >= ahoraMs && item.marca <= limite)
-    .sort((a, b) => a.marca - b.marca)[0] || null
-}
-
-function formatearTiempoRestanteCorto(ms) {
-  const minutos = Math.max(0, Math.ceil(ms / 60000))
-  if (minutos <= 1) return 'EN 1 MIN'
-  if (minutos < 60) return `EN ${minutos} MIN`
-  return 'EN 1 HORA'
-}
-
 export default function Layout() {
-  const { session, authLoading, misTareas, syncing, cerrarSesion, sesionExpirada, profile } = useApp()
+  const { session, authLoading, syncing, cerrarSesion, sesionExpirada, profile } = useApp()
   const esAdmin = useIsAdmin()
   const navigate = useNavigate()
   const location = useLocation()
   const { tema, alternar: alternarTema } = useTema()
   const IconoTema = tema === 'oscuro' ? Moon : tema === 'claro' ? Sun : SunMoon
-  const [ahoraMs, setAhoraMs] = useState(() => Date.now())
-  const [indiceAlertaProximaTarea, setIndiceAlertaProximaTarea] = useState(0)
-  const [modalProximaTareaAbierto, setModalProximaTareaAbierto] = useState(false)
   const [modalReLoginAbierto, setModalReLoginAbierto] = useState(false)
   const [emailReLogin, setEmailReLogin] = useState('')
   const [passwordReLogin, setPasswordReLogin] = useState('')
@@ -115,42 +78,6 @@ export default function Layout() {
       navigate('/login', { replace: true })
     }
   }, [session, authLoading, navigate])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setAhoraMs(Date.now())
-    }, 30000)
-
-    return () => window.clearInterval(timer)
-  }, [])
-
-  const proximaTarea = obtenerProximaTareaEnVentana(misTareas, ahoraMs)
-  const detallesAlerta = proximaTarea
-    ? [
-      { etiqueta: 'Agencia', valor: proximaTarea.tarea.nombre || 'Sin agencia' },
-      { etiqueta: 'Dirección', valor: proximaTarea.tarea.direccion || 'Sin dirección' },
-      { etiqueta: 'ID ATM', valor: proximaTarea.tarea.id_atm || 'Sin ID ATM' },
-      { etiqueta: 'Modelo', valor: proximaTarea.tarea.modelo || 'Sin modelo' },
-      { etiqueta: 'WO', valor: proximaTarea.tarea.wo || 'Sin WO' },
-    ]
-    : []
-  const proximaTareaWo = proximaTarea?.tarea?.wo || null
-  const totalDetallesAlerta = detallesAlerta.length
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIndiceAlertaProximaTarea(0)
-  }, [proximaTareaWo])
-
-  useEffect(() => {
-    if (!proximaTareaWo || totalDetallesAlerta <= 1) return
-
-    const timer = window.setInterval(() => {
-      setIndiceAlertaProximaTarea(prev => (prev + 1) % totalDetallesAlerta)
-    }, 10000)
-
-    return () => window.clearInterval(timer)
-  }, [proximaTareaWo, totalDetallesAlerta])
 
   if (authLoading) {
     return (
@@ -166,11 +93,6 @@ export default function Layout() {
   if (!session && !sesionExpirada) {
     return null
   }
-
-  const detalleActivoAlerta = detallesAlerta[indiceAlertaProximaTarea % (detallesAlerta.length || 1)] || null
-  const encabezadoAlerta = proximaTarea
-    ? `PROXIMA TAREA ${formatearTiempoRestanteCorto(proximaTarea.marca - ahoraMs)}`
-    : ''
 
   const path = location.pathname.replace(/^\//, '') || 'inicio'
   const vistaActiva = [...vistas, ...vistasAdmin].find(v => v.key === path) || vistas[0]
@@ -251,58 +173,7 @@ export default function Layout() {
           <span className="text-sm font-bold tracking-[0.2em] text-primary lg:hidden">ATM·WO</span>
           <h1 className="hidden text-base font-semibold text-foreground lg:block">{vistaActiva.label}</h1>
         </NavbarBrand>
-        <NavbarContent
-          justify="center"
-          className="min-w-0 flex-1 px-1"
-        >
-          <NavbarItem className="w-full min-w-0 max-w-full sm:mx-auto sm:max-w-lg">
-            {proximaTarea && detalleActivoAlerta ? (
-              <MuiAlert
-                severity="info"
-                variant="standard"
-                icon={false}
-                onClick={() => setModalProximaTareaAbierto(true)}
-                sx={{
-                  width: '100%',
-                  maxWidth: '100%',
-                  px: 0,
-                  py: 0,
-                  borderRadius: 0,
-                  backgroundColor: 'transparent',
-                  color: 'rgb(24, 24, 27)',
-                  boxShadow: 'none',
-                  alignItems: 'center',
-                  cursor: 'pointer',
-                  minWidth: 0,
-                  '&::before': {
-                    display: 'none',
-                  },
-                  '& .MuiAlert-message': {
-                    width: '100%',
-                    minWidth: 0,
-                    overflow: 'hidden',
-                    py: 0,
-                  },
-                }}
-              >
-                <div className="min-w-0 overflow-hidden text-center leading-tight">
-                  <p className="overflow-hidden whitespace-nowrap text-[10px] font-semibold text-default-600 sm:text-[11px]">
-                    {encabezadoAlerta}
-                  </p>
-                  <Fade
-                    in={Boolean(detalleActivoAlerta)}
-                    timeout={500}
-                    key={`${proximaTareaWo || 'sin-tarea'}-${indiceAlertaProximaTarea}`}
-                  >
-                    <p className="overflow-hidden whitespace-nowrap text-xs font-semibold text-default-900 sm:text-sm">
-                      {detalleActivoAlerta.etiqueta}: {detalleActivoAlerta.valor}
-                    </p>
-                  </Fade>
-                </div>
-              </MuiAlert>
-            ) : <div />}
-          </NavbarItem>
-        </NavbarContent>
+        <NavbarContent justify="center" className="min-w-0 flex-1 px-1" aria-hidden="true" />
         <NavbarContent justify="end" className="shrink-0 grow-0 basis-auto">
           {syncing && (
             <NavbarItem>
@@ -393,58 +264,6 @@ export default function Layout() {
           </DropdownMenu>
         </Dropdown>
       </nav>
-
-      <Modal
-        isOpen={modalProximaTareaAbierto}
-        onOpenChange={abierto => setModalProximaTareaAbierto(abierto)}
-      >
-        <ModalContent>
-          <>
-            <ModalHeader>Próxima tarea</ModalHeader>
-            <ModalBody>
-              {proximaTarea?.tarea ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl bg-default-50 px-3 py-2">
-                    <p className="text-[11px] uppercase tracking-wide text-default-400">Agencia</p>
-                    <p className="text-sm font-semibold text-default-800">{proximaTarea.tarea.nombre || '—'}</p>
-                  </div>
-                  <div className="rounded-xl bg-default-50 px-3 py-2">
-                    <p className="text-[11px] uppercase tracking-wide text-default-400">WO</p>
-                    <p className="text-sm font-mono font-semibold text-default-800">{proximaTarea.tarea.wo || '—'}</p>
-                  </div>
-                  <div className="rounded-xl bg-default-50 px-3 py-2">
-                    <p className="text-[11px] uppercase tracking-wide text-default-400">ID ATM</p>
-                    <p className="text-sm font-mono font-semibold text-default-800">{proximaTarea.tarea.id_atm || '—'}</p>
-                  </div>
-                  <div className="rounded-xl bg-default-50 px-3 py-2">
-                    <p className="text-[11px] uppercase tracking-wide text-default-400">Modelo</p>
-                    <p className="text-sm font-semibold text-default-800">{proximaTarea.tarea.modelo || '—'}</p>
-                  </div>
-                  <div className="rounded-xl bg-default-50 px-3 py-2">
-                    <p className="text-[11px] uppercase tracking-wide text-default-400">Fecha</p>
-                    <p className="text-sm font-semibold text-default-800">{proximaTarea.tarea.fecha || '—'}</p>
-                  </div>
-                  <div className="rounded-xl bg-default-50 px-3 py-2">
-                    <p className="text-[11px] uppercase tracking-wide text-default-400">Hora</p>
-                    <p className="text-sm font-mono font-semibold text-default-800">{proximaTarea.tarea.hora || '—'}</p>
-                  </div>
-                  <div className="col-span-2 rounded-xl bg-default-50 px-3 py-2">
-                    <p className="text-[11px] uppercase tracking-wide text-default-400">Dirección</p>
-                    <p className="text-sm font-semibold text-default-800">{proximaTarea.tarea.direccion || '—'}</p>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-default-500">No hay una tarea próxima disponible.</p>
-              )}
-            </ModalBody>
-            <ModalFooter>
-              <Button variant="light" onPress={() => setModalProximaTareaAbierto(false)}>
-                Cerrar
-              </Button>
-            </ModalFooter>
-          </>
-        </ModalContent>
-      </Modal>
 
       <Modal
         isOpen={modalReLoginAbierto}
