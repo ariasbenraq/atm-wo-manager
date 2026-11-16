@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { leerCacheWos, siteDeWo } from '../lib/wosCache'
+import { ordenarWosCatalogo, CAMPOS_CATALOGO_WO } from '../lib/wosCatalogo'
 import { db } from '../lib/db'
 import { recepcionarPedido, actualizarPedido, mensajeErrorInventario, codigoErrorInventario } from '../lib/inventario'
 import { useIsAdmin } from '../hooks/usePermissions'
@@ -33,39 +34,6 @@ function agruparItemsPorPedido(items) {
     porPedido.set(item.pedido_id, lista)
   }
   return porPedido
-}
-
-function hoyLima() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(new Date())
-}
-
-// 0 = hoy, 1 = días posteriores, 2 = días anteriores o sin fecha
-function rangoFecha(fecha, hoy) {
-  if (!fecha) return 2
-  if (fecha === hoy) return 0
-  return fecha > hoy ? 1 : 2
-}
-
-// Hoy primero, luego días posteriores (ascendente) y al final los anteriores (más reciente primero).
-// Una WO reprogramada aparece una sola vez, con su fecha más relevante.
-function ordenarWosCatalogo(lista) {
-  const hoy = hoyLima()
-  const ordenadas = [...lista].sort((a, b) => {
-    const ra = rangoFecha(a.fecha, hoy)
-    const rb = rangoFecha(b.fecha, hoy)
-    if (ra !== rb) return ra - rb
-    const cmp = String(a.fecha || '').localeCompare(String(b.fecha || ''))
-    return ra === 2 ? -cmp : cmp
-  })
-  const vistas = new Set()
-  const unicas = []
-  for (const w of ordenadas) {
-    const wo = String(w.wo || '').trim()
-    if (!wo || vistas.has(wo)) continue
-    vistas.add(wo)
-    unicas.push({ ...w, wo })
-  }
-  return unicas
 }
 
 const PASOS = ['WO', 'Repuestos', 'Confirmar']
@@ -219,7 +187,7 @@ export default function PedidosPage() {
         supabase.from('repuestos').select('id, nombre, part_number').order('nombre'),
         supabase
           .from('workorders')
-          .select('wo, legajo, codigo_equipo, nombre_equipo, modelo, site, direccion, serie, distrito, fecha'),
+          .select(CAMPOS_CATALOGO_WO),
       ])
       if (repRes.data) setRepuestos(repRes.data)
       if (woRes.data) setWosCatalogo(ordenarWosCatalogo(woRes.data))
