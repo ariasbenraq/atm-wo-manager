@@ -130,7 +130,7 @@ export default function Layout() {
 
   if (authLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-default-100 via-default-50 to-white">
+      <div className="flex min-h-screen items-center justify-center app-bg">
         <div className="flex items-center gap-3 text-sm text-default-500">
           <Spinner size="sm" />
           Verificando sesión...
@@ -180,9 +180,11 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-default-100 via-default-50 to-white">
-      <Navbar isBordered maxWidth="md" className="relative flex-wrap items-center bg-white/85 backdrop-blur-md">
-        <NavbarBrand className="hidden sm:flex min-w-[112px]" />
+    <div className="min-h-screen app-bg text-foreground">
+      <Navbar isBordered maxWidth="lg" className="relative flex-wrap items-center bg-background/80 backdrop-blur-md">
+        <NavbarBrand className="hidden sm:flex min-w-[112px]">
+          <span className="text-sm font-bold tracking-[0.2em] text-primary">ATM·WO</span>
+        </NavbarBrand>
         <NavbarContent
           justify="center"
           className="order-1 min-w-0 flex-1 px-3 py-2 sm:order-2 sm:basis-auto sm:px-2 sm:py-0"
@@ -239,6 +241,25 @@ export default function Layout() {
           justify="end"
           className="order-2 ml-auto shrink-0 basis-auto px-3 py-2 sm:order-3 sm:px-0 sm:py-0"
         >
+          <NavbarItem className="hidden lg:flex gap-1">
+            {vistas.map(item => {
+              const Icon = item.icon
+              const activa = item.key === vistaActiva.key
+              return (
+                <Button
+                  key={item.key}
+                  size="sm"
+                  radius="full"
+                  variant={activa ? 'flat' : 'light'}
+                  color={activa ? 'primary' : 'default'}
+                  startContent={<Icon size={14} />}
+                  onPress={() => navigate(`/${item.key}`)}
+                >
+                  {item.label}
+                </Button>
+              )
+            })}
+          </NavbarItem>
           <NavbarItem className="hidden sm:flex">
             <Chip size="sm" variant="flat" color={syncing ? 'warning' : 'success'}>
               {syncing ? 'Sincronizando...' : `${tareas.length} tareas`}

@@ -75,12 +75,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-default-100 via-default-50 to-white px-4 py-10">
+    <div className="min-h-screen app-bg px-4 py-16">
       <div className="mx-auto max-w-md">
-        <Card shadow="sm" className="border border-default-200/70 bg-white/90">
+        <Card shadow="lg" className="border border-default-200/70 bg-content1">
           <CardBody className="space-y-5 p-6">
             <div className="space-y-2 text-center">
-              <p className="text-xs uppercase tracking-[0.2em] text-default-400">ATM·WO</p>
+              <p className="text-sm font-bold uppercase tracking-[0.25em] text-primary">ATM·WO</p>
               <h1 className="text-xl font-semibold text-default-800">Acceso técnico</h1>
               <p className="text-sm text-default-500">
                 Ingresa con tu usuario o correo electrónico.
