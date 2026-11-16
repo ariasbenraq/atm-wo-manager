@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
+import { coincideBusqueda } from '../lib/busqueda'
 import { db } from '../lib/db'
 import {
   ajustarStock, fijarStock, eliminarItemAlmacen, mensajeErrorInventario, cantidadConSigno,
@@ -137,13 +138,7 @@ export default function AlmacenPage() {
   const itemsConStock = items.filter(i => coincideVista(i, vista))
   const conteoVista = Object.fromEntries(VISTAS.map(v => [v.key, items.filter(i => coincideVista(i, v.key)).length]))
 
-  const filtroNormalizado = filtro.trim().toLowerCase()
-  const itemsFiltrados = filtroNormalizado
-    ? itemsConStock.filter(i =>
-        String(i.part_number || '').toLowerCase().includes(filtroNormalizado) ||
-        String(i.nombre || '').toLowerCase().includes(filtroNormalizado)
-      )
-    : itemsConStock
+  const itemsFiltrados = itemsConStock.filter(i => coincideBusqueda([i.part_number, i.nombre], filtro))
 
   // Refleja en pantalla y en Dexie el saldo que devolvió el servidor
   async function aplicarResultado(partNumber, quantity) {

@@ -71,6 +71,7 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 | `src/lib/date.js` | Date formatting helpers (DD/MM/YYYY) |
 | `src/lib/excel.js` | Shared SheetJS helpers: fecha/hora parsing + header normalizer |
 | `src/lib/inventario.js` | Wrappers of the inventory RPCs (`ajustar_stock`, `fijar_stock`, `eliminar_item_almacen`, `recepcionar_pedido`, `actualizar_pedido`, `consumir_lista`, `revertir_consumo_lista`) + Spanish error messages |
+| `src/lib/busqueda.js` | Shared search: `coincideBusqueda(campos, texto)` — case/accent-insensitive, multi-word (all words must match some field). Used by Repuestos (part number + nombre), Almacén, Usuarios and Wo's (`coincideFiltros`) |
 | `src/lib/wosTecnicos.js` | Technician names (profiles), WO search filters (date/legajo/text), legajo helpers |
 | `src/lib/resumen.js`, `src/lib/kitMantenimiento.js` | Home summary (`/inicio`): WOs/parts/lists; weekly kit forecast (each ATM of models 6623/6627/6628/6612 uses 1 filter `4450773447` + 8 suction cups `0090035910`) compared with `warehouse_items` stock and pending pedidos |
 | `src/hooks/useLegajo.js` | Legajo of the logged-in user (`profiles.legajo`, assigned by admin) |

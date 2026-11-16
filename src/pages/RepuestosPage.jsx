@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
+import { coincideBusqueda } from '../lib/busqueda'
 import { db } from '../lib/db'
 import { useCan } from '../hooks/usePermissions'
 import {
@@ -400,10 +401,7 @@ export default function RepuestosPage() {
     }
   }
 
-  const filtroNormalizado = filtroNombre.trim().toLowerCase()
-  const repuestosFiltrados = filtroNormalizado
-    ? repuestos.filter(r => String(r.nombre || '').toLowerCase().includes(filtroNormalizado))
-    : repuestos
+  const repuestosFiltrados = repuestos.filter(r => coincideBusqueda([r.part_number, r.nombre], filtroNombre))
 
   return (
     <div className="space-y-5">
@@ -443,7 +441,8 @@ export default function RepuestosPage() {
           <div className="mt-4">
             <Input
               label=""
-              placeholder="Buscar por nombre..."
+              aria-label="Buscar repuestos"
+              placeholder="Buscar por part number o nombre..."
               value={filtroNombre}
               onValueChange={setFiltroNombre}
               variant="bordered"
@@ -466,7 +465,7 @@ export default function RepuestosPage() {
           </div>
         ) : repuestosFiltrados.length === 0 ? (
           <div className="p-4 text-sm text-default-400">
-            No se encontraron repuestos con ese nombre.
+            No se encontraron repuestos con ese part number o nombre.
           </div>
         ) : (
           <ScrollShadow className="max-h-[55vh] px-5 pb-5">

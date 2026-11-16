@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { normalizarTexto, coincideBusqueda } from './busqueda'
 
 const CLAVE_NOMBRES = 'wos_nombres_tecnicos'
 
@@ -10,13 +11,7 @@ export function normalizarLegajo(texto) {
   return String(texto || '').replace(/[^a-z0-9]/gi, '').toUpperCase()
 }
 
-export function normalizarTexto(texto) {
-  return String(texto || '')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .trim()
-}
+export { normalizarTexto }
 
 function leerCacheNombres() {
   try {
@@ -86,21 +81,15 @@ export function coincideFiltros(w, filtros, nombres) {
   if (filtros.hasta && String(w.fecha || '') > filtros.hasta) return false
   if (filtros.legajo && normalizarLegajo(w.legajo) !== filtros.legajo) return false
 
-  const tokens = normalizarTexto(filtros.texto).split(/\s+/).filter(Boolean)
-  if (tokens.length) {
-    const nombre = nombreDeWo(w, nombres)
-    const campos = [
-      w.wo,
-      w.codigoEquipo ?? w.codigo_equipo,
-      w.site || w.nombreEquipo || w.nombre_equipo,
-      w.legajo,
-      w.distrito,
-      w.serie,
-      nombre,
-    ].map(normalizarTexto)
-    if (!tokens.every(t => campos.some(c => c.includes(t)))) return false
-  }
-  return true
+  return coincideBusqueda([
+    w.wo,
+    w.codigoEquipo ?? w.codigo_equipo,
+    w.site || w.nombreEquipo || w.nombre_equipo,
+    w.legajo,
+    w.distrito,
+    w.serie,
+    nombreDeWo(w, nombres),
+  ], filtros.texto)
 }
 
 export function hayFiltros(f) {

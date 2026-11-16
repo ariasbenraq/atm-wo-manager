@@ -21,6 +21,7 @@ import {
   Trash2, TriangleAlert,
 } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
+import { coincideBusqueda } from '../lib/busqueda'
 
 const ESTADOS = {
   pendiente: { etiqueta: 'Pendiente', color: 'warning' },
@@ -285,15 +286,10 @@ export default function AdminUsuariosPage() {
     }
   }
 
-  const filtroNormalizado = filtro.toLowerCase().trim()
+  const hayBusqueda = Boolean(filtro.trim())
   const usuariosFiltrados = usuarios.filter(u => {
     if (filtroEstado !== 'todos' && (u.estado || 'activo') !== filtroEstado) return false
-    if (!filtroNormalizado) return true
-    return (
-      (u.full_name || '').toLowerCase().includes(filtroNormalizado) ||
-      (u.legajo || '').toLowerCase().includes(filtroNormalizado) ||
-      (u.email || '').toLowerCase().includes(filtroNormalizado)
-    )
+    return coincideBusqueda([u.full_name, u.legajo, u.email, u.username, u.contrata], filtro)
   })
   const pendientes = usuarios.filter(u => u.estado === 'pendiente').length
 
@@ -333,7 +329,7 @@ export default function AdminUsuariosPage() {
 
           <Input
             aria-label="Buscar usuarios"
-            placeholder="Buscar por nombre, legajo o email..."
+            placeholder="Buscar por nombre, legajo, email o contrata..."
             value={filtro}
             onValueChange={setFiltro}
             variant="bordered"
@@ -365,7 +361,7 @@ export default function AdminUsuariosPage() {
           <div className="p-4 text-sm text-default-500">Cargando usuarios...</div>
         ) : usuariosFiltrados.length === 0 ? (
           <div className="p-4 text-sm text-default-500">
-            {filtroNormalizado || filtroEstado !== 'todos'
+            {hayBusqueda || filtroEstado !== 'todos'
               ? 'No se encontraron usuarios con ese criterio.'
               : 'No hay usuarios registrados.'}
           </div>
