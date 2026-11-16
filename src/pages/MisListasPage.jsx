@@ -13,12 +13,13 @@ import {
   Autocomplete, AutocompleteItem,
 } from '@heroui/react'
 import { cargarWosDeLegajo } from '../lib/wosCatalogo'
+import { coincideBusqueda } from '../lib/busqueda'
 import { siteDeWo } from '../lib/wosCache'
 import { formatearFecha } from '../lib/date'
 import OpcionDosLineas from '../components/ui/OpcionDosLineas'
 import { LISTA_DOS_LINEAS, CLASE_DOS_LINEAS } from '../components/ui/listaOpciones'
 import {
-  List, Plus, Minus, ArrowLeft, Pencil, Trash2, Copy, Share2, X, Check, Warehouse, ChevronRight, Undo2, Send,
+  List, Plus, Minus, ArrowLeft, Search, Pencil, Trash2, Copy, Share2, X, Check, Warehouse, ChevronRight, Undo2, Send,
 } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
 
@@ -67,6 +68,7 @@ export default function MisListasPage() {
 
   const [creando, setCreando] = useState(false)
   const [busquedaWo, setBusquedaWo] = useState('')
+  const [pasoCrear, setPasoCrear] = useState('elegir') // 'elegir' | 'confirmar'
   // WOs del legajo del usuario para elegir al crear una lista
   const [wosLegajo, setWosLegajo] = useState([])
   const [wosCargando, setWosCargando] = useState(false)
@@ -279,12 +281,15 @@ export default function MisListasPage() {
     if (editandoItem) cerrarEditarItem()
   }
 
-  const textoWo = w => `${w.wo} ${w.codigo_equipo || ''} ${siteDeWo(w)}`
   const woNueva = wosLegajo.find(w => w.wo === woClaveNueva) || null
   // El nombre se genera solo: ID del equipo · site · WO
+  const wosFiltradasNueva = wosLegajo
+    .filter(w => coincideBusqueda([w.wo, w.codigo_equipo, siteDeWo(w), w.fecha ? formatearFecha(w.fecha) : ''], busquedaWo))
+    .slice(0, 100)
   const nombreAutomatico = w => [w.codigo_equipo, siteDeWo(w), w.wo].filter(Boolean).join(' · ')
 
   async function abrirCrearLista() {
+    setPasoCrear('elegir')
     setBusquedaWo('')
     setWoClaveNueva(null)
     setErrorNombre(null)
@@ -1155,60 +1160,111 @@ export default function MisListasPage() {
         </>
       )}
 
-      <Modal isOpen={creando} onOpenChange={abierto => !abierto && setCreando(false)}>
+      <Modal
+        isOpen={creando}
+        onOpenChange={abierto => !abierto && setCreando(false)}
+        placement="center"
+        scrollBehavior="inside"
+      >
         <ModalContent>
           <>
-            <ModalHeader className="text-default-900">Crear nueva lista</ModalHeader>
+            <ModalHeader className="text-default-900">
+              {pasoCrear === 'elegir' ? 'Crear nueva lista' : 'Confirmar nueva lista'}
+            </ModalHeader>
             <ModalBody>
-              <Autocomplete
-                {...LISTA_DOS_LINEAS}
-                label="Workorder"
-                placeholder="Busca por WO, ID o site"
-                inputValue={busquedaWo}
-                selectedKey={woClaveNueva}
-                onInputChange={v => {
-                  // Al elegir una opción el componente devuelve su texto completo: se muestra solo la WO
-                  const w = wosLegajo.find(x => textoWo(x) === v)
-                  setBusquedaWo(w ? w.wo : v)
-                  if (!w && woClaveNueva && v !== woClaveNueva) setWoClaveNueva(null)
-                  if (errorNombre) setErrorNombre(null)
-                }}
-                onSelectionChange={key => { setWoClaveNueva(key ? String(key) : null); setErrorNombre(null) }}
-                isLoading={wosCargando}
-                isInvalid={Boolean(errorNombre)}
-                errorMessage={errorNombre}
-                variant="bordered"
-                radius="lg"
-                autoFocus
-                emptyContent={legajoUsuario ? 'No hay workorders asignadas a tu legajo.' : 'Tu perfil no tiene legajo asignado.'}
-              >
-                {wosLegajo.map(w => (
-                  <AutocompleteItem key={w.wo} className={CLASE_DOS_LINEAS} textValue={textoWo(w)}>
-                    <OpcionDosLineas
-                      principal={w.wo}
-                      derecha={w.fecha ? formatearFecha(w.fecha) : ''}
-                      secundario={[w.codigo_equipo, siteDeWo(w)].filter(Boolean).join(' · ') || 'Sin ID ni site'}
-                    />
-                  </AutocompleteItem>
-                ))}
-              </Autocomplete>
-              {woNueva ? (
-                <p className="mt-3 text-xs text-default-500">
-                  Nombre de la lista: <strong className="text-foreground">{nombreAutomatico(woNueva)}</strong>
-                </p>
-              ) : (
-                <p className="mt-3 text-xs text-default-500">
-                  El nombre de la lista se crea solo con el ID, el site y la workorder que elijas.
-                </p>
-              )}
+              {pasoCrear === 'elegir' ? (
+                <>
+                  <Input
+                    aria-label="Buscar workorder"
+                    placeholder="Busca por WO, ID, site o fecha"
+                    value={busquedaWo}
+                    onValueChange={v => { setBusquedaWo(v); setErrorNombre(null) }}
+                    variant="bordered"
+                    radius="lg"
+                    size="sm"
+                    startContent={<Search size={15} className="text-default-400" />}
+                    isClearable
+                    onClear={() => setBusquedaWo('')}
+                  />
+                  {wosCargando ? (
+                    <p className="text-sm text-default-500">Cargando workorders...</p>
+                  ) : wosFiltradasNueva.length === 0 ? (
+                    <p className="text-sm text-default-500">
+                      {!legajoUsuario
+                        ? 'Tu perfil no tiene legajo asignado.'
+                        : wosLegajo.length === 0
+                          ? 'No hay workorders asignadas a tu legajo.'
+                          : 'Ninguna workorder coincide con la búsqueda.'}
+                    </p>
+                  ) : (
+                    <ul role="listbox" aria-label="Workorders de tu legajo" className="max-h-[45vh] space-y-1.5 overflow-y-auto pr-1">
+                      {wosFiltradasNueva.map(w => {
+                        const activa = w.wo === woClaveNueva
+                        return (
+                          <li key={w.wo} role="option" aria-selected={activa}>
+                            <button
+                              type="button"
+                              onClick={() => { setWoClaveNueva(w.wo); setErrorNombre(null) }}
+                              className={`w-full rounded-xl border px-3 py-2 text-left transition-colors ${
+                                activa
+                                  ? 'border-primary bg-primary-50'
+                                  : 'border-default-200 bg-content1 hover:bg-default-100'
+                              }`}
+                            >
+                              <OpcionDosLineas
+                                principal={w.wo}
+                                derecha={w.fecha ? formatearFecha(w.fecha) : ''}
+                                secundario={[w.codigo_equipo, siteDeWo(w)].filter(Boolean).join(' · ') || 'Sin ID ni site'}
+                              />
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                  {errorNombre && <p className="text-xs text-danger" role="alert">{errorNombre}</p>}
+                </>
+              ) : woNueva ? (
+                <>
+                  <p className="text-sm text-default-600">Revisa los datos antes de crear la lista:</p>
+                  <dl className="space-y-2 rounded-xl border border-default-200 bg-default-50 p-3 text-sm">
+                    {[
+                      ['Workorder', woNueva.wo],
+                      ['ID', woNueva.codigo_equipo || '—'],
+                      ['Site', siteDeWo(woNueva) || '—'],
+                      ['Fecha', woNueva.fecha ? formatearFecha(woNueva.fecha) : '—'],
+                      ['Nombre de la lista', nombreAutomatico(woNueva)],
+                    ].map(([etiqueta, valor]) => (
+                      <div key={etiqueta} className="flex gap-3">
+                        <dt className="w-32 shrink-0 text-default-500">{etiqueta}</dt>
+                        <dd className="min-w-0 break-words font-medium text-foreground">{valor}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  {errorNombre && <p className="text-xs text-danger" role="alert">{errorNombre}</p>}
+                </>
+              ) : null}
             </ModalBody>
             <ModalFooter>
-              <Button variant="light" onPress={() => setCreando(false)}>
-                Cancelar
-              </Button>
-              <Button color="primary" onPress={crearLista} isDisabled={guardandoLista || !woNueva} isLoading={guardandoLista}>
-                Crear lista
-              </Button>
+              {pasoCrear === 'elegir' ? (
+                <>
+                  <Button variant="light" onPress={() => setCreando(false)}>
+                    Cancelar
+                  </Button>
+                  <Button color="primary" onPress={() => setPasoCrear('confirmar')} isDisabled={!woNueva}>
+                    Continuar
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="light" onPress={() => setPasoCrear('elegir')} isDisabled={guardandoLista} startContent={<ArrowLeft size={16} />}>
+                    Atrás
+                  </Button>
+                  <Button color="primary" onPress={crearLista} isDisabled={guardandoLista || !woNueva} isLoading={guardandoLista}>
+                    Confirmar y crear
+                  </Button>
+                </>
+              )}
             </ModalFooter>
           </>
         </ModalContent>
