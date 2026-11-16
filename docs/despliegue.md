@@ -72,9 +72,9 @@ Hoy Caddy sirve `atm.hamstitors.trade` con `reverse_proxy web:80` (stack viejo `
    ```
 4. **Rollback del corte:** volver a `reverse_proxy web:80` y recargar Caddy como arriba.
 5. Con todo estable, eliminar el stack viejo `atm-tool-manager` en Portainer.
-6. Después: restaurar la etiqueta `:latest` en `deploy.yml` (ver comentario en el paso de build) y borrar `.github/workflows/build-and-push.yml`.
+6. Si levantaste un servicio temporal `web` para recuperar el sitio, elimínalo con `docker service rm web`.
 
-Hasta el paso 5, `deploy.yml` sube **solo la etiqueta del SHA**: el stack viejo usa `:latest` en el puerto 80 y esta imagen escucha en 8080.
+`deploy.yml` sube las etiquetas `<sha>` y `latest`. Esta imagen escucha en 8080: cualquier servicio antiguo que use `:latest` en el puerto 80 dejaría de funcionar al reiniciarse.
 
 ## Rollback de la aplicación
 

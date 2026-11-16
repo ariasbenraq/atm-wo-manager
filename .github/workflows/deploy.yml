@@ -48,12 +48,9 @@ jobs:
           build-args: |
             VITE_SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }}
             VITE_SUPABASE_ANON_KEY=${{ vars.VITE_SUPABASE_ANON_KEY }}
-          # Only the SHA tag until the cut-over is done: the old stack (Caddy ->
-          # web:80) still runs ghcr.io/ariasbenraq/atm-wo-manager:latest, and this
-          # image listens on 8080. Add the ":latest" line back after deleting
-          # the old "atm-tool-manager" stack.
           tags: |
             ${{ env.REGISTRY }}/atm-wo-manager:${{ github.sha }}
+            ${{ env.REGISTRY }}/atm-wo-manager:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

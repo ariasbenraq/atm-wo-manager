@@ -20,7 +20,7 @@ npm run lint         # ESLint (entire project)
 | `npm run lint` | ESLint on `.` |
 | `npm run preview` | Preview production build (port 4173) |
 
-No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). GitHub Actions workflow (`.github/workflows/build-and-push.yml`) builds a Docker image on push to `produccion` and pushes to GHCR for Portainer deploys.
+No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). CI/CD: `.github/workflows/ci.yml` (lint, build, audit, docker build, gitleaks) and `deploy.yml` (merge to `main`).
 
 ## Architecture
 
@@ -91,4 +91,4 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 - **Excel import** expects columns: `WO`, `MODELO`, `SERIE`, `ID`, `NOMBRE`, `DIRECCION`, `DISTRITO`, `FECHA`, `HORA`, `CE`. Duplicate WO values in the file are rejected without saving anything.
 - **Wo's Excel import** (`ImportarWosExcel`): headers matched after accent/space normalization; only rows matching `LEGAJO_ACTUAL` ('PE101L84') are stored (comparison strips spaces/symbols and uppercases; on zero matches the report lists the legajo values found in the file); in-file duplicate key is **WO + Fecha** (a WO can be reprogrammed to another date); upserts to Supabase on `(user_id, wo, fecha)`. Multi-sheet workbooks: sheet picker with all tabs pre-selected. The Wo's page is the source of truth for WO selection when creating pedidos.
 - **Inventory:** never write `warehouse_items` / `warehouse_transactions` from the client — every stock change goes through the RPCs in `supabase/migrations/20261027_inventario_rpc.sql` (atomic, owner-or-admin, row locks). History is append-only: IN/OUT quantities are positive, ADJUSTMENT is signed; `v_stock_diferencias` must stay empty. A list with `inventory_synced` is locked until `revertir_consumo_lista`.
-- **Deploy:** merge to `main` → CI → image to GHCR (tag = SHA) → Tailscale + SSH → `deploy/deploy.sh` → Swarm stack `atm`. Supabase URL/anon key come from GitHub repo *variables*. See `docs/despliegue.md`. `build-and-push.yml` (old `produccion` flow) is disabled.
+- **Deploy:** merge to `main` → CI → image to GHCR (tag = SHA) → Tailscale + SSH → `deploy/deploy.sh` → Swarm stack `atm`. Supabase URL/anon key come from GitHub repo *variables*. See `docs/despliegue.md`.
