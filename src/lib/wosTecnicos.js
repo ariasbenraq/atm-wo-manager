@@ -56,9 +56,13 @@ export async function cargarNombresTecnicos() {
   }
 }
 
-// Nombre del técnico de una WO: primero por su legajo, luego por el usuario dueño.
+// Nombre del técnico de una WO: el CE del Excel (es el nombre del técnico asignado); si falta,
+// el perfil que tiene ese legajo y, por último, el usuario dueño de la WO.
 export function nombreDeWo(w, nombres) {
-  if (!w || !nombres) return ''
+  if (!w) return ''
+  const ce = String(w.ce || '').trim()
+  if (ce) return ce
+  if (!nombres) return ''
   const leg = normalizarLegajo(w.legajo)
   return (leg && nombres[`legajo:${leg}`]) || nombres[w.userId ?? w.user_id] || ''
 }

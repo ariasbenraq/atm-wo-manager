@@ -15,6 +15,9 @@ import WosSkeleton from '../components/WosSkeleton'
 import WoCard from '../components/WoCard'
 import BuscarWoModal from '../components/BuscarWoModal'
 import PageHeader from '../components/ui/PageHeader'
+import PaletaColores from '../components/PaletaColores'
+import { useColoresLegajo } from '../hooks/useColoresLegajo'
+import { clasesDeColor, grupoDeLegajo, GRUPOS } from '../lib/coloresTarjeta'
 import EmptyState from '../components/ui/EmptyState'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import {
@@ -114,6 +117,7 @@ export default function WosPage() {
   const { session } = useApp()
   const userId = session?.user?.id
   const legajoUsuario = useLegajo()
+  const { colores, cambiar: cambiarColor, restablecer: restablecerColores } = useColoresLegajo()
 
   const [wos, setWos] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -435,6 +439,9 @@ export default function WosPage() {
           <Switch size="sm" isSelected={filtroHoy} onValueChange={alternarFiltroHoy}>
             Work orders de hoy
           </Switch>
+          <div className="ml-auto">
+            <PaletaColores colores={colores} onCambiar={cambiarColor} onRestablecer={restablecerColores} />
+          </div>
         </div>
       </div>
 
@@ -448,15 +455,20 @@ export default function WosPage() {
         </EmptyState>
       ) : (
         <div className="lg:grid lg:grid-cols-2 lg:gap-x-3">
-          {wosPagina.map(wo => (
-            <WoCard
-              key={wo.id}
-              wo={wo}
-              estadoFecha={fechaEstado(wo.fecha)}
-              tecnico={nombreDeWo(wo, nombres)}
-              onClick={() => setDetalle(wo)}
-            />
-          ))}
+          {wosPagina.map(wo => {
+            const grupo = grupoDeLegajo(wo.legajo)
+            return (
+              <WoCard
+                key={wo.id}
+                wo={wo}
+                estadoFecha={fechaEstado(wo.fecha)}
+                tecnico={nombreDeWo(wo, nombres)}
+                fondo={grupo ? clasesDeColor(colores[grupo]) : undefined}
+                grupo={grupo ? GRUPOS.find(g => g.clave === grupo).etiqueta : ''}
+                onClick={() => setDetalle(wo)}
+              />
+            )
+          })}
         </div>
       )}
 

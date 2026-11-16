@@ -71,7 +71,7 @@ function CampoCopiable({ etiqueta, valor, destacado = false, clasesValor = null 
   return (
     <div className="min-w-0">
       <div className="flex items-center gap-0.5">
-        <p className="text-[10px] uppercase tracking-wide text-default-400">{etiqueta}</p>
+        <p className="text-xs uppercase tracking-wide text-default-500">{etiqueta}</p>
         {valor && (
           <button
             type="button"
@@ -94,12 +94,13 @@ function CampoCopiable({ etiqueta, valor, destacado = false, clasesValor = null 
   )
 }
 
-export default function WoCard({ wo, estadoFecha, tecnico = '', onClick }) {
+export default function WoCard({ wo, estadoFecha, tecnico = '', fondo, grupo = '', onClick }) {
   const site = wo.site || wo.nombre_equipo
 
   return (
     <SectionCard
       padding="sm"
+      fondo={fondo}
       className="my-2 cursor-pointer transition-shadow hover:shadow-md"
       onClick={onClick}
     >
@@ -128,24 +129,31 @@ export default function WoCard({ wo, estadoFecha, tecnico = '', onClick }) {
           <CampoCopiable etiqueta="Serie" valor={wo.serie} />
         </div>
         {(tecnico || wo.legajo) && (
-          <div className="mt-0.5 flex items-center gap-1.5 border-t border-default-100 pt-1.5 text-xs text-default-500">
-            <User size={12} className="shrink-0 text-default-400" aria-hidden="true" />
-            <span className="min-w-0 truncate font-medium text-default-700 dark:text-gray-300">
-              {tecnico || 'Sin nombre'}
-            </span>
-            {wo.legajo && (
-              <span className="shrink-0 rounded-md bg-default-100 px-1.5 py-0.5 font-mono text-[11px] text-default-600 dark:bg-white/10 dark:text-gray-300">
-                {wo.legajo}
+          <div className="mt-0.5 space-y-1.5 border-t border-default-100 pt-2 text-xs text-default-500">
+            <div className="flex items-center gap-1.5">
+              <User size={14} className="shrink-0 text-default-500" aria-hidden="true" />
+              <span className="min-w-0 truncate text-sm font-medium text-foreground" title={tecnico || undefined}>
+                {tecnico || 'Sin nombre'}
               </span>
-            )}
-          <button
-              type="button"
-              onClick={e => { e.stopPropagation(); onClick?.() }}
-              className="ml-auto flex shrink-0 cursor-pointer items-center gap-0.5 rounded-md px-1.5 py-1 text-xs font-medium text-primary hover:bg-primary-50"
-              aria-label={`Ver detalle de la WO ${wo.wo}`}
-            >
-              Detalle <ChevronRight size={14} aria-hidden="true" />
-            </button>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {grupo && (
+                <span className="shrink-0 rounded-md border border-default-300 px-1.5 py-0.5 text-xs font-medium text-default-700">{grupo}</span>
+              )}
+              {wo.legajo && (
+                <span className="shrink-0 rounded-md bg-default-100 px-1.5 py-0.5 font-mono text-xs text-default-700 dark:bg-white/10">
+                  {wo.legajo}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onClick?.() }}
+                className="ml-auto flex shrink-0 cursor-pointer items-center gap-0.5 rounded-md px-1.5 py-1 text-xs font-medium text-primary-700 hover:bg-default-100"
+                aria-label={`Ver detalle de la WO ${wo.wo}`}
+              >
+                Detalle <ChevronRight size={14} aria-hidden="true" />
+              </button>
+            </div>
           </div>
         )}
       </div>
