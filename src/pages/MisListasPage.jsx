@@ -163,35 +163,24 @@ export default function MisListasPage() {
   const hayFaltantes = previewSync.some(r => r.falta)
 
   const cargarListas = useCallback(async () => {
-    if (!esAdmin && !userId) return
+    if (!userId) return
     setCargando(true)
     try {
-      let query = supabase
+      // Cada usuario (admin incluido) ve solo las listas creadas por él; la RLS también lo impone
+      const { data, error } = await supabase
         .from('spare_part_lists')
         .select('*')
-      if (!esAdmin && userId) {
-        query = query.eq('user_id', userId)
-      }
-      const { data, error } = await query.order('updated_at', { ascending: false })
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
 
       if (error) throw error
-
-      let usuariosMap = {}
-      if (esAdmin) {
-        const { data: perfiles } = await supabase
-          .from('profiles')
-          .select('id, email, full_name, legajo, contrata')
-        if (perfiles) {
-          usuariosMap = Object.fromEntries(perfiles.map(p => [p.id, p]))
-        }
-      }
 
       const listasConConteo = await Promise.all((data || []).map(async lista => {
         const { count } = await supabase
           .from('spare_part_list_items')
           .select('*', { count: 'exact', head: true })
           .eq('list_id', lista.id)
-        return { ...lista, itemCount: count || 0, usuario: usuariosMap[lista.user_id] || null }
+        return { ...lista, itemCount: count || 0, usuario: null }
       }))
 
       setListas(listasConConteo)
@@ -213,8 +202,9 @@ export default function MisListasPage() {
       }
     } catch {
       const local = await db.sparePartLists.orderBy('localId').reverse().toArray()
-      setListas(local.map(l => ({
+      setListas(local.filter(l => l.userId === userId).map(l => ({
         id: l.idRemoto,
+        user_id: l.userId,
         name: l.name,
         site: l.site || '',
         workOrder: l.workOrder || '',
@@ -227,7 +217,7 @@ export default function MisListasPage() {
     } finally {
       setCargando(false)
     }
-  }, [userId, esAdmin])
+  }, [userId])
 
   useEffect(() => {
     cargarListas()

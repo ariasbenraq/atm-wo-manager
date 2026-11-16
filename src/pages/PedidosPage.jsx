@@ -117,10 +117,13 @@ export default function PedidosPage() {
   const cargarPedidos = useCallback(async () => {
     setCargando(true)
     try {
-      // Cada usuario ve solo sus pedidos (la RLS también lo impone); el admin ve todos
-      let consulta = supabase.from('pedidos').select('*')
-      if (!esAdmin && userId) consulta = consulta.eq('user_id', userId)
-      const { data, error } = await consulta.order('created_at', { ascending: false })
+      // Cada usuario (admin incluido) ve solo los pedidos creados por él; la RLS también lo impone
+      if (!userId) { setCargando(false); return }
+      const { data, error } = await supabase
+        .from('pedidos')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
 
       if (error) throw error
 
@@ -186,7 +189,7 @@ export default function PedidosPage() {
           })
           porPedido.set(i.pedidoId, lista)
         }
-        setPedidos(locales.map(p => ({
+        setPedidos(locales.filter(p => p.userId === userId).map(p => ({
           id: p.idRemoto,
           user_id: p.userId,
           estado: p.estado,
@@ -205,7 +208,7 @@ export default function PedidosPage() {
     } finally {
       setCargando(false)
     }
-  }, [esAdmin, userId])
+  }, [userId])
 
   useEffect(() => { cargarPedidos() }, [cargarPedidos])
 
