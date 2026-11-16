@@ -5,6 +5,8 @@ import { leerCacheWos, siteDeWo } from '../lib/wosCache'
 import { db } from '../lib/db'
 import { recepcionarPedido, actualizarPedido, mensajeErrorInventario, codigoErrorInventario } from '../lib/inventario'
 import { useIsAdmin } from '../hooks/usePermissions'
+import { useLegajo } from '../hooks/useLegajo'
+import { normalizarLegajo } from '../lib/wosTecnicos'
 import { usaKit, KIT_POR_ATM, normalizarPartNumber } from '../lib/kitMantenimiento'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { formatearFecha, formatearFechaHora } from '../lib/date'
@@ -72,6 +74,7 @@ export default function PedidosPage() {
   const { session } = useApp()
   const userId = session?.user?.id
   const esAdmin = useIsAdmin()
+  const legajoUsuario = useLegajo()
 
   const [pestana, setPestana] = useState('pedidos')
   const [pedidos, setPedidos] = useState([])
@@ -114,10 +117,10 @@ export default function PedidosPage() {
   const cargarPedidos = useCallback(async () => {
     setCargando(true)
     try {
-      const { data, error } = await supabase
-        .from('pedidos')
-        .select('*')
-        .order('created_at', { ascending: false })
+      // Cada usuario ve solo sus pedidos (la RLS también lo impone); el admin ve todos
+      let consulta = supabase.from('pedidos').select('*')
+      if (!esAdmin && userId) consulta = consulta.eq('user_id', userId)
+      const { data, error } = await consulta.order('created_at', { ascending: false })
 
       if (error) throw error
 
@@ -202,7 +205,7 @@ export default function PedidosPage() {
     } finally {
       setCargando(false)
     }
-  }, [])
+  }, [esAdmin, userId])
 
   useEffect(() => { cargarPedidos() }, [cargarPedidos])
 
@@ -213,7 +216,7 @@ export default function PedidosPage() {
         supabase.from('repuestos').select('id, nombre, part_number').order('nombre'),
         supabase
           .from('workorders')
-          .select('wo, codigo_equipo, nombre_equipo, modelo, site, direccion, serie, distrito, fecha'),
+          .select('wo, legajo, codigo_equipo, nombre_equipo, modelo, site, direccion, serie, distrito, fecha'),
       ])
       if (repRes.data) setRepuestos(repRes.data)
       if (woRes.data) setWosCatalogo(ordenarWosCatalogo(woRes.data))
@@ -248,6 +251,11 @@ export default function PedidosPage() {
       setPersonas(local.map(p => ({ id: p.idRemoto, nombre: p.nombre, tipo: p.tipo })))
     }
   }
+
+  // Un usuario solo puede crear pedidos con WOs de su legajo; el admin, con cualquiera
+  const wosDisponibles = esAdmin
+    ? wosCatalogo
+    : wosCatalogo.filter(w => legajoUsuario && normalizarLegajo(w.legajo) === legajoUsuario)
 
   function abrirNuevo() {
     setPedidoEditando(null)
@@ -383,6 +391,10 @@ export default function PedidosPage() {
 
   async function guardarPedido() {
     if (!userId) return
+    if (!esAdmin && !formWo.trim()) {
+      setMensaje({ color: 'warning', texto: 'Selecciona una WO de tu legajo para crear el pedido.' })
+      return
+    }
     if (!itemsForm.length) {
       setMensaje({ color: 'warning', texto: 'Agrega al menos un repuesto al pedido.' })
       return
@@ -460,7 +472,7 @@ export default function PedidosPage() {
       setNuevoAbierto(false)
       setMensaje({ color: 'success', texto: 'Pedido guardado.' })
     } catch (e) {
-      setMensaje({ color: 'danger', texto: e.message || 'No se pudo guardar el pedido.' })
+      setMensaje({ color: 'danger', texto: /PEDIDO_WO_AJENA/.test(e.message || '') ? 'Solo puedes crear pedidos con WOs asignadas a tu legajo.' : (e.message || 'No se pudo guardar el pedido.') })
     } finally {
       setGuardandoPedido(false)
     }
@@ -738,9 +750,9 @@ export default function PedidosPage() {
                   selectedKey={woCatalogoKey}
                   onSelectionChange={key => { seleccionarWoCatalogo(key); setDatosManuales(false) }}
                   isLoading={catalogosCargando}
-                  emptyContent="Sin workorders. Puedes ingresar los datos manualmente."
+                  emptyContent={esAdmin ? 'Sin workorders. Puedes ingresar los datos manualmente.' : (legajoUsuario ? 'No hay workorders asignadas a tu legajo.' : 'Tu perfil no tiene legajo asignado.')}
                 >
-                  {wosCatalogo.map(w => (
+                  {wosDisponibles.map(w => (
                     <AutocompleteItem key={w.wo} className={CLASE_DOS_LINEAS} textValue={`${w.wo} ${w.codigo_equipo || ''} ${siteDeWo(w)}`}>
                       <OpcionDosLineas
                         principal={w.wo}
@@ -751,7 +763,7 @@ export default function PedidosPage() {
                   ))}
                 </Autocomplete>
 
-                {datosManuales ? (
+                {esAdmin && datosManuales ? (
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <Input label="WO" placeholder="W23456789" value={formWo} onValueChange={setFormWo} />
                     <Input label="ID ATM" placeholder="ID del cajero" value={formIdAtm} onValueChange={setFormIdAtm} />
@@ -768,16 +780,21 @@ export default function PedidosPage() {
                       {formModelo && <div className="flex gap-2"><dt className="w-16 shrink-0 text-default-400">Modelo</dt><dd>{formModelo}</dd></div>}
                       {formDireccion && <div className="flex gap-2"><dt className="w-16 shrink-0 text-default-400">Dirección</dt><dd>{formDireccion}</dd></div>}
                     </dl>
-                    <Button size="sm" variant="light" className="mt-2 -ml-2" startContent={<Pencil size={14} />} onPress={() => setDatosManuales(true)}>
-                      Editar datos
-                    </Button>
+                    {esAdmin && (
+                      <Button size="sm" variant="light" className="mt-2 -ml-2" startContent={<Pencil size={14} />} onPress={() => setDatosManuales(true)}>
+                        Editar datos
+                      </Button>
+                    )}
                   </div>
-                ) : (
+                ) : esAdmin ? (
                   <Button variant="flat" startContent={<Pencil size={16} />} onPress={() => setDatosManuales(true)}>
                     Ingresar datos manualmente
                   </Button>
+                ) : null}
+                {!esAdmin && !formWo.trim() && (
+                  <p className="text-xs text-default-500">Selecciona una de las WOs asignadas a tu legajo para continuar.</p>
                 )}
-                {!formWo.trim() && (
+                {esAdmin && !formWo.trim() && (
                   <p className="text-xs text-default-400">Sin WO el pedido no se vincula a una visita (no cuenta en el resumen de Inicio).</p>
                 )}
               </>
@@ -899,7 +916,7 @@ export default function PedidosPage() {
               <Button variant="flat" onPress={() => setPaso(p => p - 1)} startContent={<ArrowLeft size={16} />}>Atrás</Button>
             )}
             {paso < 3 ? (
-              <Button color="primary" onPress={() => setPaso(p => p + 1)} isDisabled={paso === 2 && !itemsForm.length} endContent={<ArrowRight size={16} />}>
+              <Button color="primary" onPress={() => setPaso(p => p + 1)} isDisabled={(paso === 1 && !esAdmin && !formWo.trim()) || (paso === 2 && !itemsForm.length)} endContent={<ArrowRight size={16} />}>
                 Continuar
               </Button>
             ) : (
