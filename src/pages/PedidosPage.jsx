@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { leerCacheWos, siteDeWo } from '../lib/wosCache'
 import { db } from '../lib/db'
-import { recepcionarPedido, mensajeErrorInventario, codigoErrorInventario } from '../lib/inventario'
+import { recepcionarPedido, actualizarPedido, mensajeErrorInventario, codigoErrorInventario } from '../lib/inventario'
 import { useIsAdmin } from '../hooks/usePermissions'
 import { usaKit, KIT_POR_ATM, normalizarPartNumber } from '../lib/kitMantenimiento'
 import useMediaQuery from '@mui/material/useMediaQuery'
@@ -84,6 +84,7 @@ export default function PedidosPage() {
   const movil = useMediaQuery('(max-width:639px)')
   const [nuevoAbierto, setNuevoAbierto] = useState(false)
   const [paso, setPaso] = useState(1)
+  const [pedidoEditando, setPedidoEditando] = useState(null) // pedido en edición (null = pedido nuevo)
   const [datosManuales, setDatosManuales] = useState(false)
   const [woCatalogoKey, setWoCatalogoKey] = useState(null)
   const [formWo, setFormWo] = useState('')
@@ -248,6 +249,7 @@ export default function PedidosPage() {
   }
 
   function abrirNuevo() {
+    setPedidoEditando(null)
     setPaso(1)
     setDatosManuales(false)
     setWoCatalogoKey(null)
@@ -262,6 +264,56 @@ export default function PedidosPage() {
     setGuardandoPedido(false)
     setNuevoAbierto(true)
     cargarCatalogosNuevo()
+  }
+
+  // Solo pedidos «guardado»: empieza en el paso de repuestos (lo que más se edita)
+  function abrirEditar(pedido) {
+    if (pedido.estado !== 'guardado') return
+    setPedidoDetalle(null)
+    setPedidoEditando(pedido)
+    setPaso(2)
+    setDatosManuales(false)
+    setWoCatalogoKey(null)
+    setFormWo(pedido.wo || '')
+    setFormIdAtm(pedido.id_atm || '')
+    setFormSite(pedido.site || '')
+    setFormModelo(pedido.modelo || '')
+    setFormDireccion(pedido.direccion || '')
+    setItemsForm((pedido.items || []).map(i => ({
+      spare_part_id: i.spare_part_id,
+      nombre: i.repuesto?.nombre || 'Repuesto',
+      part_number: i.repuesto?.part_number || '',
+      quantity: i.quantity ?? 1,
+    })))
+    setItemRepuestoId('')
+    setItemCantidadStr('1')
+    setGuardandoPedido(false)
+    setNuevoAbierto(true)
+    cargarCatalogosNuevo()
+  }
+
+  async function guardarEdicion() {
+    if (!pedidoEditando || !itemsForm.length) return
+    setGuardandoPedido(true)
+    try {
+      await actualizarPedido({
+        pedidoId: pedidoEditando.id,
+        wo: formWo, idAtm: formIdAtm, site: formSite, modelo: formModelo, direccion: formDireccion,
+        items: itemsForm.map(i => ({ spare_part_id: i.spare_part_id, quantity: i.quantity })),
+      })
+      setNuevoAbierto(false)
+      setMensaje({ color: 'success', texto: 'Pedido actualizado.' })
+      await cargarPedidos()
+    } catch (e) {
+      const noEditable = codigoErrorInventario(e) === 'PEDIDO_NO_EDITABLE'
+      setMensaje({ color: noEditable ? 'warning' : 'danger', texto: mensajeErrorInventario(e, 'No se pudieron guardar los cambios.') })
+      if (noEditable) {
+        setNuevoAbierto(false)
+        await cargarPedidos()
+      }
+    } finally {
+      setGuardandoPedido(false)
+    }
   }
 
   function seleccionarWoCatalogo(woKey) {
@@ -561,7 +613,7 @@ export default function PedidosPage() {
                   <ul className="divide-y divide-default-100">
                     {pedidos.map(pedido => (
                       <li key={pedido.id} className="py-3">
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                           <button
                             type="button"
                             className="min-w-0 flex-1 text-left"
@@ -597,7 +649,17 @@ export default function PedidosPage() {
                               </p>
                             )}
                           </button>
-                          <div className="flex shrink-0 flex-col gap-1 sm:flex-row">
+                          <div className="flex shrink-0 flex-wrap items-center gap-1 sm:justify-end">
+                            {pedido.estado === 'guardado' && (
+                              <Button
+                                size="sm"
+                                variant="flat"
+                                startContent={<Pencil size={15} />}
+                                onPress={() => abrirEditar(pedido)}
+                              >
+                                Editar
+                              </Button>
+                            )}
                             {pedido.estado === 'guardado' && (
                               <Button
                                 size="sm"
@@ -651,7 +713,7 @@ export default function PedidosPage() {
       >
         <ModalContent>
           <ModalHeader className="flex flex-col gap-2">
-            <span>Nuevo pedido</span>
+            <span>{pedidoEditando ? `Editar pedido${pedidoEditando.wo ? ` — ${pedidoEditando.wo}` : ''}` : 'Nuevo pedido'}</span>
             <div className="flex items-center gap-2" role="group" aria-label={`Paso ${paso} de ${PASOS.length}: ${PASOS[paso - 1]}`}>
               {PASOS.map((nombre, idx) => (
                 <div key={nombre} className="flex flex-1 flex-col gap-1">
@@ -838,8 +900,14 @@ export default function PedidosPage() {
                 Continuar
               </Button>
             ) : (
-              <Button color="primary" onPress={guardarPedido} isLoading={guardandoPedido} isDisabled={!itemsForm.length} startContent={<Check size={16} />}>
-                Guardar pedido
+              <Button
+                color="primary"
+                onPress={pedidoEditando ? guardarEdicion : guardarPedido}
+                isLoading={guardandoPedido}
+                isDisabled={!itemsForm.length}
+                startContent={<Check size={16} />}
+              >
+                {pedidoEditando ? 'Guardar cambios' : 'Guardar pedido'}
               </Button>
             )}
           </ModalFooter>
@@ -976,9 +1044,17 @@ export default function PedidosPage() {
             </ul>
           </ModalBody>
           <ModalFooter>
+            {pedidoDetalle?.estado === 'recepcionado' && (
+              <p className="mr-auto text-xs text-default-500">Recepcionado: solo lectura.</p>
+            )}
             <Button variant="flat" onPress={() => setPedidoDetalle(null)}>
               Cerrar
             </Button>
+            {pedidoDetalle?.estado === 'guardado' && (
+              <Button color="primary" startContent={<Pencil size={16} />} onPress={() => abrirEditar(pedidoDetalle)}>
+                Editar pedido
+              </Button>
+            )}
           </ModalFooter>
         </ModalContent>
       </Modal>

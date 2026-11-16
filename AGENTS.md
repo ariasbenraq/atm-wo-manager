@@ -68,7 +68,7 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 | `src/lib/sync.js` | On login, refreshes the local WO cache |
 | `src/lib/date.js` | Date formatting helpers (DD/MM/YYYY) |
 | `src/lib/excel.js` | Shared SheetJS helpers: fecha/hora parsing + header normalizer |
-| `src/lib/inventario.js` | Wrappers of the inventory RPCs (`ajustar_stock`, `fijar_stock`, `eliminar_item_almacen`, `recepcionar_pedido`, `consumir_lista`, `revertir_consumo_lista`) + Spanish error messages |
+| `src/lib/inventario.js` | Wrappers of the inventory RPCs (`ajustar_stock`, `fijar_stock`, `eliminar_item_almacen`, `recepcionar_pedido`, `actualizar_pedido`, `consumir_lista`, `revertir_consumo_lista`) + Spanish error messages |
 | `src/lib/wosTecnicos.js` | Technician names (profiles), WO search filters (date/legajo/text), legajo helpers |
 | `src/lib/resumen.js`, `src/lib/kitMantenimiento.js` | Home summary (`/inicio`): WOs/parts/lists; weekly kit forecast (each ATM of models 6623/6627/6628/6612 uses 1 filter `4450773447` + 8 suction cups `0090035910`) compared with `warehouse_items` stock and pending pedidos |
 | `src/hooks/useLegajo.js` | Legajo of the logged-in user (`profiles.legajo`, assigned by admin) |
@@ -80,7 +80,7 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 | `src/lib/googleForm.js`, `src/components/EnviarFormularioModal.jsx` | Prefilled link to the «Consumo de repuestos» Google Form (field ids, 1–7 parts per submission, zona LIMA, legajo (profile, picked from the form list) and email (registered profile email) prefilled, cliente from the WO, N° presupuesto per item). Google gives no confirmation, so the user marks «Ya lo envié» |
 | `src/lib/coloresTarjeta.js`, `src/lib/preferencias.js`, `src/hooks/useColoresLegajo.js`, `src/components/PaletaColores.jsx` | Per-user card background colors for Lima (`PE101L…`) vs Regiones (`PE…R…`) WOs; palette keys (light/dark classes, AA-checked) stored in `preferencias_usuario` (RLS: own rows) with a localStorage copy for offline. WO technician name = `workorders.ce` (the CE is the technician's name from the Excel), falling back to the profile with that legajo |
 | `src/pages/WosPage.jsx` | Work orders list (10/20 per page, combo search WO/id/distrito/serie) + manual WO |
-| `src/pages/PedidosPage.jsx` | Orders: 3-step create wizard (WO → parts, with «Agregar kit» for kit models → confirm; full screen on phones), receive (inventory IN + usage list), admin personas tab |
+| `src/pages/PedidosPage.jsx` | Orders: 3-step create wizard (WO → parts, with «Agregar kit» for kit models → confirm; full screen on phones), receive (inventory IN + usage list), admin personas tab; pedidos in `guardado` can be edited (same wizard in edit mode → RPC `actualizar_pedido`, atomic, rejects if already received); `recepcionado` pedidos are read-only |
 | `src/pages/AlmacenPage.jsx` | Warehouse inventory + transactions: sticky search, stock filters (con stock / bajo ≤2 / sin stock / todos), tap a card for per-part history |
 | `src/pages/RepuestosPage.jsx` | Spare parts CRUD |
 | `supabase/migrations/` | SQL migrations (base tables predate this folder) |

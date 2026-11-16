@@ -16,6 +16,8 @@ const MENSAJES = {
   NO_ENCONTRADO: () => 'El repuesto ya no está en el almacén.',
   PEDIDO_NO_ENCONTRADO: () => 'El pedido ya no existe.',
   PEDIDO_YA_RECEPCIONADO: () => 'Este pedido ya fue recepcionado.',
+  PEDIDO_NO_EDITABLE: () => 'Este pedido ya fue recepcionado y no se puede editar.',
+  REPUESTO_NO_ENCONTRADO: () => 'Uno de los repuestos ya no existe en el catálogo. Quítalo e inténtalo de nuevo.',
   PEDIDO_SIN_ITEMS: () => 'El pedido no tiene repuestos.',
   REPUESTO_SIN_PN: nombres => `Estos repuestos no tienen part number en el catálogo: ${nombres}. Corrígelos antes de continuar.`,
   LISTA_NO_ENCONTRADA: () => 'La lista ya no existe.',
@@ -56,6 +58,18 @@ export const fijarStock = ({ partNumber, cantidad, motivo }) =>
 
 export const eliminarItemAlmacen = partNumber =>
   llamar('eliminar_item_almacen', { p_part_number: partNumber })
+
+// Edita un pedido que aún está «guardado» (datos de la WO + repuestos y cantidades) en una sola operación
+export const actualizarPedido = ({ pedidoId, wo, idAtm, site, modelo, direccion, items }) =>
+  llamar('actualizar_pedido', {
+    p_pedido_id: pedidoId,
+    p_wo: wo,
+    p_id_atm: idAtm,
+    p_site: site,
+    p_modelo: modelo,
+    p_direccion: direccion,
+    p_items: items,
+  })
 
 export const recepcionarPedido = ({ pedidoId, recepcionadoPorId = null, entregadoPorId = null }) =>
   llamar('recepcionar_pedido', {
