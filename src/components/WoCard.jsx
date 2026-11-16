@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Card } from 'konsta/react'
-import { Copy, Check } from 'lucide-react'
+import { Copy, Check, User } from 'lucide-react'
 import { formatearFecha } from '../lib/date'
 
 const CLASES_ESTADO = {
@@ -94,7 +94,7 @@ function CampoCopiable({ etiqueta, valor, destacado = false, clasesValor = null 
   )
 }
 
-export default function WoCard({ wo, estadoFecha, onClick }) {
+export default function WoCard({ wo, estadoFecha, tecnico = '', onClick }) {
   const site = wo.site || wo.nombre_equipo
 
   return (
@@ -127,6 +127,19 @@ export default function WoCard({ wo, estadoFecha, onClick }) {
           <CampoCopiable etiqueta="Modelo" valor={wo.modelo} />
           <CampoCopiable etiqueta="Serie" valor={wo.serie} />
         </div>
+        {(tecnico || wo.legajo) && (
+          <div className="mt-0.5 flex items-center gap-1.5 border-t border-black/5 pt-1.5 text-xs text-gray-500 dark:border-white/10">
+            <User size={12} className="shrink-0 text-gray-400" aria-hidden="true" />
+            <span className="min-w-0 truncate font-medium text-gray-700 dark:text-gray-300">
+              {tecnico || 'Sin nombre'}
+            </span>
+            {wo.legajo && (
+              <span className="shrink-0 rounded-md bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-600 dark:bg-white/10 dark:text-gray-300">
+                {wo.legajo}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </Card>
   )

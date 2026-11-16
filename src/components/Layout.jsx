@@ -25,11 +25,10 @@ import {
 } from '@heroui/react'
 import MuiAlert from '@mui/material/Alert'
 import Fade from '@mui/material/Fade'
-import { ClipboardList, Headset, List, LogOut, Menu, Package, Shield, ShoppingCart, Warehouse, Wrench } from 'lucide-react'
+import { ClipboardList, Headset, List, LogOut, Menu, Package, Shield, ShoppingCart, Warehouse } from 'lucide-react'
 
 const vistas = [
   { key: 'tareas', label: 'Tareas', icon: ClipboardList, path: '/tareas' },
-  { key: 'mis-tareas', label: 'Mis tareas', icon: Wrench, path: '/mis-tareas' },
   { key: 'wos', label: "Wo's", icon: Headset, path: '/wos' },
   { key: 'repuestos', label: 'Repuestos', icon: Package, path: '/repuestos' },
   { key: 'mis-listas', label: 'Mis listas', icon: List, path: '/mis-listas' },
@@ -151,12 +150,6 @@ export default function Layout() {
   const path = location.pathname.replace(/^\//, '') || 'tareas'
   const vistaActiva = vistas.find(v => v.key === path) || vistas[0]
   const VistaIcono = vistaActiva.icon
-
-  function irAProximaTarea() {
-    if (!proximaTarea?.tarea?.wo) return
-    setModalProximaTareaAbierto(false)
-    navigate(`/mis-tareas?wo=${proximaTarea.tarea.wo}`)
-  }
 
   async function handleReLogin() {
     setReLoginCargando(true)
@@ -399,9 +392,6 @@ export default function Layout() {
             <ModalFooter>
               <Button variant="light" onPress={() => setModalProximaTareaAbierto(false)}>
                 Cerrar
-              </Button>
-              <Button color="primary" onPress={irAProximaTarea} isDisabled={!proximaTarea?.tarea?.wo}>
-                Ir a la tarea
               </Button>
             </ModalFooter>
           </>

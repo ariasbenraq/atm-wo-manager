@@ -6,6 +6,9 @@ import { db } from '../lib/db'
 import { formatearFecha } from '../lib/date'
 import { formatMes } from '../lib/excel'
 import { LEGAJO_ACTUAL } from '../lib/wosConfig'
+import {
+  hoyLima, normalizarLegajo, cargarNombresTecnicos, coincideFiltros, hayFiltros,
+} from '../lib/wosTecnicos'
 import ImportarWosExcel from '../components/ImportarWosExcel'
 import WosSkeleton from '../components/WosSkeleton'
 import WoCard from '../components/WoCard'
@@ -83,19 +86,24 @@ function compararHora(a, b) {
   return ma - mb
 }
 
+function resumenFiltros(f, nombres, wos) {
+  const partes = []
+  if (f.texto?.trim()) partes.push(`«${f.texto.trim()}»`)
+  if (f.desde || f.hasta) {
+    partes.push(f.desde === f.hasta ? formatearFecha(f.desde) : `${f.desde ? formatearFecha(f.desde) : '…'} – ${f.hasta ? formatearFecha(f.hasta) : '…'}`)
+  }
+  if (f.legajo) {
+    const w = wos.find(x => normalizarLegajo(x.legajo) === f.legajo)
+    partes.push([w?.legajo, w && nombres[w.user_id]].filter(Boolean).join(' · ') || f.legajo)
+  }
+  return partes.join(' · ')
+}
+
 function fechaEstado(fecha) {
   if (!fecha) return null
   const hoy = hoyLima()
   if (fecha === hoy) return 'hoy'
   return fecha < hoy ? 'pasado' : 'futuro'
-}
-
-function hoyLima() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(new Date())
-}
-
-function normalizarLegajo(texto) {
-  return String(texto || '').replace(/[^a-z0-9]/gi, '').toUpperCase()
 }
 
 export default function WosPage() {
@@ -112,6 +120,8 @@ export default function WosPage() {
   const [tamanoPagina, setTamanoPagina] = useState(10)
   const [soloMios, setSoloMios] = useState(false)
   const [filtroHoy, setFiltroHoy] = useState(false)
+  const [filtrosBusqueda, setFiltrosBusqueda] = useState(null)
+  const [nombres, setNombres] = useState({})
 
   const [fabAbierto, setFabAbierto] = useState(false)
   const [importarAbierto, setImportarAbierto] = useState(false)
@@ -151,6 +161,12 @@ export default function WosPage() {
 
   useEffect(() => { cargar() }, [cargar])
 
+  useEffect(() => {
+    let activo = true
+    cargarNombresTecnicos(wos.map(w => w.user_id)).then(n => { if (activo) setNombres(n) })
+    return () => { activo = false }
+  }, [wos])
+
   const wosFiltradas = useMemo(() => {
     let resultado = wos
     if (seleccion) {
@@ -160,6 +176,9 @@ export default function WosPage() {
     const fechaFiltro = filtroHoy ? hoy : ''
     if (fechaFiltro) {
       resultado = resultado.filter(w => w.fecha === fechaFiltro)
+    }
+    if (hayFiltros(filtrosBusqueda)) {
+      resultado = resultado.filter(w => coincideFiltros(w, filtrosBusqueda, nombres))
     }
     if (soloMios) {
       const mio = normalizarLegajo(LEGAJO_ACTUAL)
@@ -178,7 +197,7 @@ export default function WosPage() {
       if (cmpHora !== 0) return cmpHora
       return String(a.wo || '').localeCompare(String(b.wo || ''))
     })
-  }, [wos, seleccion, filtroHoy, soloMios])
+  }, [wos, seleccion, filtroHoy, soloMios, filtrosBusqueda, nombres])
 
   const totalPaginas = Math.max(1, Math.ceil(wosFiltradas.length / tamanoPagina))
   const paginaSegura = Math.min(pagina, totalPaginas)
@@ -187,7 +206,7 @@ export default function WosPage() {
     paginaSegura * tamanoPagina
   )
 
-  useEffect(() => { setPagina(1) }, [seleccion, tamanoPagina, filtroHoy, soloMios])
+  useEffect(() => { setPagina(1) }, [seleccion, tamanoPagina, filtroHoy, soloMios, filtrosBusqueda])
 
   function alternarFiltroHoy() {
     setFiltroHoy(v => !v)
@@ -320,6 +339,14 @@ export default function WosPage() {
               {seleccion.wo} ✕
             </Chip>
           )}
+          {hayFiltros(filtrosBusqueda) && (
+            <Chip
+              className="min-w-0 cursor-pointer bg-primary text-white"
+              onClick={() => setFiltrosBusqueda(null)}
+            >
+              {resumenFiltros(filtrosBusqueda, nombres, wos)} ✕
+            </Chip>
+          )}
           <span className="ml-auto shrink-0 text-xs text-gray-500">{wosFiltradas.length} resultados</span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -336,7 +363,7 @@ export default function WosPage() {
         <WosSkeleton filas={6} className="pt-3" />
       ) : wosPagina.length === 0 ? (
         <p className="py-6 text-center text-sm text-gray-500">
-          {seleccion || filtroHoy || soloMios
+          {seleccion || filtroHoy || soloMios || hayFiltros(filtrosBusqueda)
             ? 'Sin WOs para este filtro.'
             : 'No hay workorders. Toca + para importar un Excel o crear una.'}
         </p>
@@ -347,6 +374,7 @@ export default function WosPage() {
               key={wo.id}
               wo={wo}
               estadoFecha={fechaEstado(wo.fecha)}
+              tecnico={nombres[wo.user_id] || ''}
               onClick={() => setDetalle(wo)}
             />
           ))}
@@ -417,10 +445,19 @@ export default function WosPage() {
       <BuscarWoModal
         isOpen={buscarAbierto}
         onClose={() => setBuscarAbierto(false)}
+        nombres={nombres}
+        filtrosIniciales={filtrosBusqueda}
         onSeleccionar={item => {
           setSeleccion(item)
+          setFiltrosBusqueda(null)
           setFiltroHoy(false)
           setSoloMios(false)
+        }}
+        onAplicar={filtros => {
+          setSeleccion(null)
+          setFiltroHoy(false)
+          setSoloMios(false)
+          setFiltrosBusqueda(filtros)
         }}
       />
 
