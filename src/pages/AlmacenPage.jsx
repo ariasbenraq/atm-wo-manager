@@ -15,6 +15,7 @@ import {
 import OpcionDosLineas from '../components/ui/OpcionDosLineas'
 import { LISTA_DOS_LINEAS, CLASE_DOS_LINEAS } from '../components/ui/listaOpciones'
 import { Search, Plus, Minus, Warehouse, History, RotateCcw, Pencil, Trash2, Clock } from 'lucide-react'
+import PageHeader from '../components/ui/PageHeader'
 
 // Por debajo o igual a este número, el repuesto se marca como «stock bajo»
 const STOCK_BAJO = 2
@@ -345,20 +346,14 @@ export default function AlmacenPage() {
         />
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-primary-50 p-2.5 text-primary-600">
-            <Warehouse size={20} />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-default-900">Almacén</h1>
-            <p className="text-sm text-default-500">
-              {itemsFiltrados.length} repuesto{itemsFiltrados.length === 1 ? '' : 's'}
+      <PageHeader
+        icon={Warehouse}
+        title="Almacén"
+        subtitle={<>
+          {itemsFiltrados.length} repuesto{itemsFiltrados.length === 1 ? '' : 's'}
               {items.length !== itemsFiltrados.length ? ` de ${items.length}` : ''} en inventario
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-2">
+        </>}
+        actions={<>
           <Button
             variant="flat"
             radius="lg"
@@ -390,8 +385,8 @@ export default function AlmacenPage() {
           >
             Ajustar inventario
           </Button>
-        </div>
-      </div>
+        </>}
+      />
 
       <div className="sticky top-14 z-20 -mx-4 space-y-2 bg-background px-4 py-2 md:-mx-6 md:px-6">
         <Input
@@ -426,11 +421,11 @@ export default function AlmacenPage() {
       </div>
 
       {cargando ? (
-        <div className="rounded-xl border border-default-200 bg-content1 px-5 py-4 text-sm text-default-400">
+        <div className="rounded-xl border border-default-200 bg-content1 p-4 text-sm text-default-400">
           Cargando inventario...
         </div>
       ) : itemsFiltrados.length === 0 ? (
-        <div className="rounded-xl border border-default-200 bg-content1 px-5 py-6 text-sm text-default-400 flex flex-col items-center gap-3">
+        <div className="rounded-xl border border-default-200 bg-content1 p-6 text-sm text-default-400 flex flex-col items-center gap-3">
           <RotateCcw size={24} className="text-default-300" />
           <span>{filtro ? 'No se encontraron repuestos.' : vista !== 'todos' && items.length > 0 ? 'No hay repuestos en esta vista.' : 'El almacén está vacío. Agrega repuestos usando "Ajustar inventario".'}</span>
         </div>
@@ -440,7 +435,7 @@ export default function AlmacenPage() {
             {itemsFiltrados.map(item => (
               <div
                 key={item.id}
-                className="rounded-xl border border-default-200 bg-content1 px-4 py-3 shadow-sm"
+                className="rounded-xl border border-default-200 bg-content1 p-3 shadow-sm"
               >
                 <div
                   className="flex cursor-pointer items-start justify-between gap-2"
@@ -451,11 +446,11 @@ export default function AlmacenPage() {
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') cargarHistorialItem(item) }}
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-[14px] font-semibold text-default-900 truncate">
+                    <p className="text-sm font-semibold text-default-900 truncate">
                       {item.nombre || item.part_number}
                     </p>
                     {item.nombre && (
-                      <p className="text-[12px] font-mono text-default-400 truncate mt-0.5">
+                      <p className="text-xs font-mono text-default-400 truncate mt-0.5">
                         {item.part_number}
                       </p>
                     )}
@@ -465,7 +460,7 @@ export default function AlmacenPage() {
                       {item.quantity}
                     </span>
                     {tonoStock(item.quantity).chip && (
-                      <Chip size="sm" variant="flat" color={tonoStock(item.quantity).chip} className="mt-1 h-5 text-[10px]">
+                      <Chip size="sm" variant="flat" color={tonoStock(item.quantity).chip} className="mt-1 h-5 text-xs">
                         {tonoStock(item.quantity).etiqueta}
                       </Chip>
                     )}
@@ -539,7 +534,7 @@ export default function AlmacenPage() {
             ))}
           </div>
           <div className="hidden md:block overflow-x-auto rounded-xl border border-default-200 bg-content1 shadow-sm">
-            <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 border-b border-default-100 bg-default-50/80 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400 items-center">
+            <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 border-b border-default-100 bg-default-50/80 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.16em] text-default-400 items-center">
               <span>Repuesto</span>
               <span className="text-center">Cantidad</span>
               <span className="text-center">Ajustar</span>
@@ -553,17 +548,17 @@ export default function AlmacenPage() {
                     className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-4 py-2 items-center transition-colors hover:bg-default-50/60"
                   >
                     <div className="flex items-center min-w-0 gap-2">
-                      <p className="truncate text-[14px] font-medium text-default-900">
+                      <p className="truncate text-sm font-medium text-default-900">
                         {item.nombre || item.part_number}
                       </p>
                       {item.nombre && (
-                        <span className="shrink-0 font-mono text-[12px] text-default-400">
+                        <span className="shrink-0 font-mono text-xs text-default-400">
                           {item.part_number}
                         </span>
                       )}
                     </div>
                     <div className="flex items-center justify-center">
-                      <span className="font-mono text-[15px] font-semibold text-default-700 tabular-nums">
+                      <span className="font-mono text-base font-semibold text-default-700 tabular-nums">
                         {item.quantity}
                       </span>
                     </div>
@@ -727,7 +722,7 @@ export default function AlmacenPage() {
                 <p className="text-sm text-default-500">No hay transacciones registradas.</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 border-b border-default-100 bg-default-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400 items-center min-w-[450px]">
+                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 border-b border-default-100 bg-default-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-default-400 items-center min-w-[450px]">
                     <span>Part Number</span>
                     <span className="text-center">Tipo</span>
                     <span className="text-center">Cantidad</span>
@@ -739,7 +734,7 @@ export default function AlmacenPage() {
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-default-900 truncate">{tx.part_number}</p>
                           {(tx.work_order || tx.motivo) && (
-                            <p className="text-[11px] text-default-400 truncate">
+                            <p className="text-xs text-default-400 truncate">
                               {[tx.work_order, tx.motivo].filter(Boolean).join(' · ')}
                             </p>
                           )}
@@ -780,7 +775,7 @@ export default function AlmacenPage() {
             <ModalHeader className="text-default-900">Editar cantidad</ModalHeader>
             <ModalBody className="space-y-4">
               <div className="rounded-xl border border-default-200 bg-default-50 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">Repuesto</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-default-400">Repuesto</p>
                 <p className="mt-1 text-sm font-semibold text-default-800">{itemEditando?.nombre || itemEditando?.part_number}</p>
                 {itemEditando?.nombre && (
                   <p className="mt-0.5 font-mono text-xs text-default-400">{itemEditando?.part_number}</p>
@@ -885,7 +880,7 @@ export default function AlmacenPage() {
             <ModalHeader className="text-default-900">Historial del repuesto</ModalHeader>
             <ModalBody className="space-y-5">
               <div className="rounded-xl border border-default-200 bg-default-50 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">Repuesto</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-default-400">Repuesto</p>
                 <p className="mt-1 text-sm font-semibold text-default-800">{itemHistorial?.nombre || itemHistorial?.part_number}</p>
                 {itemHistorial?.nombre && (
                   <p className="mt-0.5 font-mono text-xs text-default-400">{itemHistorial?.part_number}</p>
@@ -910,7 +905,7 @@ export default function AlmacenPage() {
                                 <span className="font-mono text-sm font-semibold tabular-nums text-default-700">
                                   {cantidadTexto(tx)}
                                   {tx.balance_after != null && (
-                                    <span className="ml-1 text-[11px] font-normal text-default-400">→ {tx.balance_after}</span>
+                                    <span className="ml-1 text-xs font-normal text-default-400">→ {tx.balance_after}</span>
                                   )}
                                 </span>
                               </span>
@@ -919,7 +914,7 @@ export default function AlmacenPage() {
                             {(tx.work_order || tx.site || tx.motivo) && (
                               <p className="mt-0.5 text-xs text-default-500">
                                 {[tx.work_order, tx.site].filter(Boolean).join(' · ')}
-                                {tx.motivo && <span className="block text-[11px] text-default-400">{tx.motivo}</span>}
+                                {tx.motivo && <span className="block text-xs text-default-400">{tx.motivo}</span>}
                               </p>
                             )}
                           </li>
@@ -938,7 +933,7 @@ export default function AlmacenPage() {
                           <li key={idx} className="flex items-center justify-between gap-3 px-3 py-2">
                             <div className="min-w-0">
                               <p className="truncate text-sm font-medium text-default-900">{uso.lista?.name || '-'}</p>
-                              <p className="truncate text-[11px] text-default-400">
+                              <p className="truncate text-xs text-default-400">
                                 {[uso.lista?.work_order, uso.lista?.site, fechaCorta(uso.lista?.created_at)].filter(Boolean).join(' · ')}
                               </p>
                             </div>

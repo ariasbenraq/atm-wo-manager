@@ -60,7 +60,7 @@ function PrevisionKit({ kit, cargando, onPedir }) {
     <Card shadow="sm" className="border border-default-200">
       <CardBody className="space-y-3 p-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Repuestos de la semana</h2>
+          <h2 className="text-base font-semibold text-foreground">Repuestos de la semana</h2>
           <p className="text-xs text-default-500">
             {kit.atms
               ? `${kit.atms} ATM${kit.atms === 1 ? '' : 's'} de modelos 6623, 6627, 6628 o 6612, de hoy al domingo. Cada uno usa 1 filtro y 8 ventosas.`
@@ -183,7 +183,7 @@ export default function InicioPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold text-foreground">{nombre ? `Hola, ${nombre}` : 'Inicio'}</h1>
+        <h1 className="text-xl font-semibold text-foreground">{nombre ? `Hola, ${nombre}` : 'Inicio'}</h1>
         <p className="text-sm text-default-500 first-letter:uppercase">
           {FORMATO_DIA.format(new Date())}
           {profile?.legajo ? ` · ${profile.legajo}` : ''}
@@ -248,7 +248,7 @@ export default function InicioPage() {
       <Card shadow="sm" className="border border-default-200">
         <CardBody className="p-0">
           <div className="flex items-center justify-between px-4 pb-2 pt-4">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
               <ClipboardCheck size={16} className="text-default-400" /> Agenda de hoy
             </h2>
             <button

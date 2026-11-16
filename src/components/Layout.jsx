@@ -139,7 +139,7 @@ export default function Layout() {
           {vistas.map(item => <EnlaceLateral key={item.key} item={item} activa={item.key === vistaActiva.key} onIr={ir} />)}
           {esAdmin && (
             <>
-              <p className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-white/65">Administración</p>
+              <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-widest text-white/65">Administración</p>
               {vistasAdmin.map(item => <EnlaceLateral key={item.key} item={item} activa={item.key === vistaActiva.key} onIr={ir} />)}
             </>
           )}
@@ -222,7 +222,7 @@ export default function Layout() {
               type="button"
               onClick={() => ir(item.key)}
               aria-current={activa ? 'page' : undefined}
-              className={`flex min-h-14 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${activa ? 'text-primary' : 'text-default-500'}`}
+              className={`flex min-h-14 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 text-xs font-medium ${activa ? 'text-primary' : 'text-default-500'}`}
             >
               <Icon size={22} strokeWidth={activa ? 2.4 : 1.8} />
               {item.label}
@@ -233,7 +233,7 @@ export default function Layout() {
           <DropdownTrigger>
             <button
               type="button"
-              className={`flex min-h-14 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${enMas ? 'text-primary' : 'text-default-500'}`}
+              className={`flex min-h-14 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 text-xs font-medium ${enMas ? 'text-primary' : 'text-default-500'}`}
             >
               <Menu size={22} strokeWidth={enMas ? 2.4 : 1.8} />
               Más

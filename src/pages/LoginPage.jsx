@@ -84,7 +84,7 @@ export default function LoginPage() {
         <Card shadow="lg" className="border border-default-200/70 bg-content1">
           <CardBody className="space-y-5 p-6">
             <div className="space-y-2 text-center">
-              <h1 className="text-xl font-semibold text-default-800">Acceso técnico</h1>
+              <h1 className="text-xl font-semibold text-foreground">Acceso técnico</h1>
               <p className="text-sm text-default-500">
                 Ingresa con tu usuario o correo electrónico.
               </p>

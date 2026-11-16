@@ -17,17 +17,18 @@ import { LISTA_DOS_LINEAS, CLASE_DOS_LINEAS } from '../components/ui/listaOpcion
 import {
   List, Plus, Minus, ArrowLeft, Pencil, Trash2, Copy, Share2, X, Check, Warehouse, ChevronRight, Undo2, Send,
 } from 'lucide-react'
+import PageHeader from '../components/ui/PageHeader'
 
 // Dos procesos independientes (en cualquier orden): descontar del almacén y enviar al Google Form
-function EstadoChips({ lista }) {
+function EstadoChips({ lista, className = 'ml-2' }) {
   const sincronizada = Boolean(lista.inventory_synced)
   const enviada = Boolean(lista.form_enviado_en)
   return (
-    <span className="ml-2 inline-flex flex-wrap items-center gap-1 align-middle">
-      <Chip size="sm" variant="flat" radius="lg" color={sincronizada ? 'success' : 'warning'} className="h-5 text-[10px]">
+    <span className={`${className} inline-flex flex-wrap items-center gap-1 align-middle`}>
+      <Chip size="sm" variant="flat" radius="lg" color={sincronizada ? 'success' : 'warning'} className="h-5 text-xs">
         {sincronizada ? 'Almacén: descontada' : 'Almacén: pendiente'}
       </Chip>
-      <Chip size="sm" variant="flat" radius="lg" color={enviada ? 'primary' : 'default'} className="h-5 text-[10px]">
+      <Chip size="sm" variant="flat" radius="lg" color={enviada ? 'primary' : 'default'} className="h-5 text-xs">
         {enviada ? 'Formulario: enviado' : 'Formulario: pendiente'}
       </Chip>
     </span>
@@ -701,19 +702,12 @@ export default function MisListasPage() {
 
       {!listaActiva ? (
         <>
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="rounded-xl bg-primary-50 p-2.5 text-primary-600">
-                <List size={20} />
-              </div>
-              <div className="space-y-1">
-                <h2 className="text-lg font-semibold text-default-900 leading-tight">Mis listas de repuestos</h2>
-                <p className="text-sm text-default-500">
-                  Agrupa repuestos para revisarlos o dictarlos por teléfono
-                </p>
-              </div>
-            </div>
-            <Button
+          <PageHeader
+            icon={List}
+            title="Mis listas de repuestos"
+            subtitle="Agrupa repuestos para revisarlos o dictarlos por teléfono"
+            actions={
+              <Button
               color="primary"
               radius="lg"
               startContent={<Plus size={16} />}
@@ -728,14 +722,15 @@ export default function MisListasPage() {
             >
               Crear lista
             </Button>
-          </div>
+            }
+          />
 
           {cargando ? (
-            <div className="rounded-xl border border-default-200 bg-content1 px-5 py-4 text-sm text-default-400">
+            <div className="rounded-xl border border-default-200 bg-content1 p-4 text-sm text-default-400">
               Cargando listas...
             </div>
           ) : listas.length === 0 ? (
-            <div className="rounded-xl border border-default-200 bg-content1 px-5 py-4 text-sm text-default-400">
+            <div className="rounded-xl border border-default-200 bg-content1 p-4 text-sm text-default-400">
               Aún no tienes listas. Crea una para empezar a agrupar repuestos.
             </div>
           ) : (
@@ -743,7 +738,7 @@ export default function MisListasPage() {
               {listas.map(lista => (
                 <div
                   key={lista.id}
-                  className="group rounded-xl border border-default-200 bg-content1 px-4 py-3.5 shadow-sm transition-all duration-200 hover:shadow-[0_4px_16px_0_rgb(0_0_0/0.08)] hover:border-primary-200/60 hover:-translate-y-0.5 cursor-pointer active:scale-[0.99]"
+                  className="group rounded-xl border border-default-200 bg-content1 p-4 shadow-sm transition-all duration-200 hover:shadow-[0_4px_16px_0_rgb(0_0_0/0.08)] hover:border-primary-200/60 hover:-translate-y-0.5 cursor-pointer active:scale-[0.99]"
                   onClick={() => cargarItems(lista)}
                   role="button"
                   tabIndex={0}
@@ -751,20 +746,20 @@ export default function MisListasPage() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 space-y-1">
-                      <p className="text-[15px] font-semibold text-default-900 leading-tight truncate group-hover:text-primary-700 transition-colors">
+                      <p className="text-base font-semibold text-default-900 leading-tight truncate group-hover:text-primary-700 transition-colors">
                         {lista.name}
                       </p>
-                      <div className="text-[13px] text-default-500 flex flex-wrap gap-x-2 items-center">
+                      <div className="text-sm text-default-500 flex flex-wrap gap-x-2 items-center">
                         <span className="font-medium text-default-600">{lista.itemCount} repuesto{lista.itemCount === 1 ? '' : 's'}</span>
                         {lista.site ? <span className="text-default-400">· {lista.site}</span> : null}
                         {lista.work_order || lista.workOrder ? <span className="text-default-400">· {lista.work_order || lista.workOrder}</span> : null}
                         {lista.updated_at ? <span className="text-default-400">· {tiempoRelativo(lista.updated_at)}</span> : null}
-                        <EstadoChips lista={lista} />
                         {esAdmin && lista.usuario ? <span className="text-default-400">· {lista.usuario.email || lista.usuario.full_name || lista.user_id?.slice(0, 8)}</span> : null}
                       </div>
+                      <EstadoChips lista={lista} className="" />
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <span aria-hidden="true" className="px-2.5 text-[12px] font-medium text-default-500 md:hidden">Ver</span>
+                      <span aria-hidden="true" className="px-2.5 text-xs font-medium text-default-500 md:hidden">Ver</span>
                       <ChevronRight size={16} className="text-default-300 group-hover:text-default-500 transition-colors hidden md:block" />
                     </div>
                   </div>
@@ -787,7 +782,7 @@ export default function MisListasPage() {
               <ArrowLeft size={18} />
             </Button>
             <div className="min-w-0 flex-1 basis-40">
-              <h2 className="text-sm font-semibold text-default-900 truncate">
+              <h2 className="text-base font-semibold text-foreground truncate">
                 {listaActiva.name}
               </h2>
               <div className="text-xs text-default-500">
@@ -804,7 +799,7 @@ export default function MisListasPage() {
                 radius="lg"
                 aria-label="Agregar repuesto"
                 startContent={<Plus size={14} />}
-                className="text-[13px] font-medium h-8 px-2.5"
+                className="text-sm font-medium h-8 px-2.5"
                 isDisabled={listaSincronizada}
                 onPress={() => {
                   setAgregandoItem(true)
@@ -825,7 +820,7 @@ export default function MisListasPage() {
                 variant="light"
                 radius="lg"
                 startContent={listaSincronizada ? <Undo2 size={14} /> : <Warehouse size={14} />}
-                className="text-[13px] font-medium h-8 px-2.5"
+                className="text-sm font-medium h-8 px-2.5"
                 aria-label={listaSincronizada ? 'Revertir sincronización' : 'Sincronizar con almacén'}
                 isDisabled={sincronizando || guardandoReversion}
                 isLoading={sincronizando}
@@ -845,7 +840,7 @@ export default function MisListasPage() {
                 variant="light"
                 radius="lg"
                 startContent={<Send size={14} />}
-                className="text-[13px] font-medium h-8 px-2.5"
+                className="text-sm font-medium h-8 px-2.5"
                 aria-label="Enviar al formulario"
                 isDisabled={!items.length}
                 onPress={() => setEnviandoForm(true)}
@@ -909,11 +904,11 @@ export default function MisListasPage() {
           )}
 
           {cargandoItems ? (
-            <div className="rounded-xl border border-default-200 bg-content1 px-5 py-4 text-sm text-default-400">
+            <div className="rounded-xl border border-default-200 bg-content1 p-4 text-sm text-default-400">
               Cargando repuestos...
             </div>
           ) : items.length === 0 ? (
-            <div className="rounded-xl border border-default-200 bg-content1 px-5 py-6 text-sm text-default-400 flex flex-col items-center gap-4">
+            <div className="rounded-xl border border-default-200 bg-content1 p-6 text-sm text-default-400 flex flex-col items-center gap-4">
               <span>Esta lista no tiene repuestos.</span>
               <Button
                 color="primary"
@@ -944,14 +939,14 @@ export default function MisListasPage() {
                 {items.map(item => (
                   <div
                     key={item.id}
-                    className="rounded-xl border border-default-200 bg-content1 px-4 py-3 shadow-sm"
+                    className="rounded-xl border border-default-200 bg-content1 p-3 shadow-sm"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="text-[14px] font-semibold text-default-900 truncate">
+                        <p className="text-sm font-semibold text-default-900 truncate">
                           {item.repuesto?.nombre || '—'}
                         </p>
-                        <p className="text-[12px] font-mono text-default-400 truncate mt-0.5">
+                        <p className="text-xs font-mono text-default-400 truncate mt-0.5">
                           {item.repuesto?.part_number || '—'}
                         </p>
                       </div>
@@ -967,7 +962,7 @@ export default function MisListasPage() {
                         >
                           <Minus size={13} />
                         </Button>
-                        <span className="font-mono text-[15px] font-semibold text-default-700 tabular-nums w-7 text-center">
+                        <span className="font-mono text-base font-semibold text-default-700 tabular-nums w-7 text-center">
                           {item.quantity ?? 1}
                         </span>
                         <Button
@@ -988,7 +983,7 @@ export default function MisListasPage() {
                         size="sm"
                         variant="light"
                         radius="lg"
-                        className="flex-1 text-[12px] font-medium text-default-500 hover:bg-default-100 h-8 min-w-0"
+                        className="flex-1 text-xs font-medium text-default-500 hover:bg-default-100 h-8 min-w-0"
                         startContent={copiandoItemId === item.id ? <Check size={13} className="text-success" /> : <Copy size={13} />}
                         onPress={() => copiarPartNumberYUnidades(item)}
                       >
@@ -1022,7 +1017,7 @@ export default function MisListasPage() {
               </div>
               {/* Desktop: table layout */}
               <div className="hidden md:block overflow-x-auto rounded-xl border border-default-200 bg-content1 shadow-sm">
-                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 border-b border-default-100 bg-default-50/80 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400 items-center">
+                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 border-b border-default-100 bg-default-50/80 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.16em] text-default-400 items-center">
                   <span>Nombre</span>
                   <span className="text-center">Unidades</span>
                   <span className="text-center">Copiar a GCEW</span>
@@ -1037,10 +1032,10 @@ export default function MisListasPage() {
                         className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 px-4 py-1.5 items-center transition-colors hover:bg-default-50/60"
                       >
                         <div className="flex flex-col min-w-0">
-                          <p className="truncate text-[14px] font-medium text-default-900">
+                          <p className="truncate text-sm font-medium text-default-900">
                             {item.repuesto?.nombre || '—'}
                           </p>
-                          <p className="text-[12px] font-mono text-default-400 truncate">
+                          <p className="text-xs font-mono text-default-400 truncate">
                             {item.repuesto?.part_number || '—'}
                           </p>
                         </div>
@@ -1056,7 +1051,7 @@ export default function MisListasPage() {
                           >
                             <Minus size={12} />
                           </Button>
-                          <span className="font-mono text-[14px] font-semibold text-default-700 tabular-nums w-7 text-center">
+                          <span className="font-mono text-sm font-semibold text-default-700 tabular-nums w-7 text-center">
                             {item.quantity ?? 1}
                           </span>
                           <Button
@@ -1076,7 +1071,7 @@ export default function MisListasPage() {
                             size="sm"
                             variant="light"
                             radius="lg"
-                            className="font-semibold text-[11px] text-default-500 hover:text-default-700 h-7 px-2 min-w-0"
+                            className="font-semibold text-xs text-default-500 hover:text-default-700 h-7 px-2 min-w-0"
                             onPress={() => copiarPartNumberYUnidades(item)}
                           >
                             {copiandoItemId === item.id ? (
@@ -1127,7 +1122,7 @@ export default function MisListasPage() {
               startContent={copiando ? <Check size={16} className="text-success-500" /> : <Copy size={16} />}
               onPress={copiarLista}
               isDisabled={!items.length}
-              className="flex-1 text-[14px] font-medium text-default-600 hover:bg-default-100 h-9"
+              className="flex-1 text-sm font-medium text-default-600 hover:bg-default-100 h-9"
             >
               {copiando ? 'Copiado' : 'Copiar lista'}
             </Button>
@@ -1137,7 +1132,7 @@ export default function MisListasPage() {
               startContent={<Share2 size={16} />}
               onPress={compartirLista}
               isDisabled={!items.length}
-              className="flex-1 text-[14px] font-medium text-default-600 hover:bg-default-100 h-9"
+              className="flex-1 text-sm font-medium text-default-600 hover:bg-default-100 h-9"
             >
               Compartir
             </Button>

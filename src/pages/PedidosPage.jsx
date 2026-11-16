@@ -21,6 +21,7 @@ import {
 import {
   ShoppingCart, Plus, Minus, Trash2, X, Check, Package, ClipboardCheck, ChevronRight, ArrowLeft, ArrowRight, PackagePlus, Pencil,
 } from 'lucide-react'
+import PageHeader from '../components/ui/PageHeader'
 
 function agruparItemsPorPedido(items) {
   const porPedido = new Map()
@@ -587,6 +588,8 @@ export default function PedidosPage() {
         />
       )}
 
+      <PageHeader icon={ShoppingCart} title="Pedidos" subtitle="Pedidos de repuestos por WO: crea, edita y recepciona" />
+
       <Tabs selectedKey={pestana} onSelectionChange={setPestana} aria-label="Secciones de pedidos">
         <Tab key="pedidos" title="Pedidos">
           <div className="pt-3">
@@ -718,7 +721,7 @@ export default function PedidosPage() {
               {PASOS.map((nombre, idx) => (
                 <div key={nombre} className="flex flex-1 flex-col gap-1">
                   <span className={`h-1.5 rounded-full ${idx + 1 <= paso ? 'bg-primary' : 'bg-default-200'}`} />
-                  <span className={`text-[11px] font-medium ${idx + 1 === paso ? 'text-primary' : 'text-default-400'}`}>
+                  <span className={`text-xs font-medium ${idx + 1 === paso ? 'text-primary' : 'text-default-400'}`}>
                     {idx + 1}. {nombre}
                   </span>
                 </div>

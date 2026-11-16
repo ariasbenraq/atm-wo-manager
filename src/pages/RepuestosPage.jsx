@@ -10,6 +10,7 @@ import {
 } from '@heroui/react'
 import { Boxes, Plus, Search, Check, List, BookmarkPlus } from 'lucide-react'
 import RepuestoCard from '../components/RepuestoCard'
+import PageHeader from '../components/ui/PageHeader'
 
 export default function RepuestosPage() {
   const { session } = useApp()
@@ -414,19 +415,11 @@ export default function RepuestosPage() {
         />
       )}
 
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div className="rounded-xl bg-warning-50 p-2.5 text-warning-600">
-            <Boxes size={20} />
-          </div>
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold text-default-900 leading-tight">Repuestos</h2>
-            <p className="text-sm text-default-500">
-              Inventario base de repuestos técnicos
-            </p>
-          </div>
-        </div>
-        {puedeCrear && (
+      <PageHeader
+        icon={Boxes}
+        title="Repuestos"
+        subtitle="Inventario base de repuestos técnicos"
+        actions={puedeCrear ? (
           <Button
             color="primary"
             radius="lg"
@@ -436,14 +429,14 @@ export default function RepuestosPage() {
           >
             Crear repuesto
           </Button>
-        )}
-      </div>
+        ) : null}
+      />
 
       <div className="rounded-xl border border-default-200 bg-content1 overflow-hidden">
         <div className="px-5 pt-5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold text-default-900">Inventario</p>
-            <Chip size="sm" variant="flat" color="warning" className="shrink-0 text-[12px] font-medium">
+            <Chip size="sm" variant="flat" color="warning" className="shrink-0 text-xs font-medium">
               {repuestosFiltrados.length} repuesto{repuestosFiltrados.length === 1 ? '' : 's'}
             </Chip>
           </div>
@@ -466,13 +459,13 @@ export default function RepuestosPage() {
         <div className="border-b border-default-100 mt-5" />
 
         {cargandoLista ? (
-          <div className="px-5 py-4 text-sm text-default-400">Cargando repuestos...</div>
+          <div className="p-4 text-sm text-default-400">Cargando repuestos...</div>
         ) : repuestos.length === 0 ? (
-          <div className="px-5 py-4 text-sm text-default-400">
+          <div className="p-4 text-sm text-default-400">
             Aún no hay repuestos registrados.
           </div>
         ) : repuestosFiltrados.length === 0 ? (
-          <div className="px-5 py-4 text-sm text-default-400">
+          <div className="p-4 text-sm text-default-400">
             No se encontraron repuestos con ese nombre.
           </div>
         ) : (
@@ -575,7 +568,7 @@ export default function RepuestosPage() {
             <ModalHeader className="text-default-900">Detalle del repuesto</ModalHeader>
             <ModalBody className="space-y-4">
               <div className="rounded-xl border border-default-200 bg-default-50 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-default-400">
                   Nombre completo
                 </p>
                 <p className="mt-2 break-words text-sm font-semibold text-default-800">
@@ -585,7 +578,7 @@ export default function RepuestosPage() {
 
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="rounded-xl border border-default-200 bg-default-50 p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-default-400">
                     Part number
                   </p>
                   <p className="mt-2 break-all font-mono text-sm text-default-700">
@@ -595,7 +588,7 @@ export default function RepuestosPage() {
 
                 {repuestoDetalle?.compatibility && (
                   <div className="rounded-xl border border-default-200 bg-default-50 p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-default-400">
                       Compatibilidad
                     </p>
                     <p className="mt-2 text-sm text-default-700">
@@ -606,7 +599,7 @@ export default function RepuestosPage() {
               </div>
 
               <div className="rounded-xl border border-default-200 bg-default-50 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-default-400">
                   Detalle
                 </p>
                 <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-default-700">

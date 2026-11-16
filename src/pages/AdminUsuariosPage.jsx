@@ -8,7 +8,8 @@ import {
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
   Alert as HeroAlert,
 } from '@heroui/react'
-import { Shield, ShieldOff, Search, ArrowLeft, Pencil } from 'lucide-react'
+import { Shield, ShieldOff, Search, Pencil } from 'lucide-react'
+import PageHeader from '../components/ui/PageHeader'
 
 export default function AdminUsuariosPage() {
   const { session, profile } = useApp()
@@ -156,34 +157,13 @@ export default function AdminUsuariosPage() {
         />
       )}
 
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div className="rounded-xl bg-primary-50 p-2.5 text-primary-600">
-            <Shield size={20} />
-          </div>
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold text-default-900 leading-tight">Usuarios</h2>
-            <p className="text-sm text-default-500">
-              Administra los roles y accesos del sistema
-            </p>
-          </div>
-        </div>
-        <Button
-          variant="light"
-          radius="lg"
-          startContent={<ArrowLeft size={16} />}
-          onPress={() => navigate('/repuestos')}
-          className="shrink-0 text-[14px] font-medium text-default-600 hover:bg-default-100 h-9"
-        >
-          Volver
-        </Button>
-      </div>
+      <PageHeader icon={Shield} title="Usuarios" subtitle="Administra los roles, nombres y legajos del sistema" />
 
       <div className="rounded-xl border border-default-200 bg-content1 overflow-hidden">
         <div className="px-5 pt-5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold text-default-900">Todos los usuarios</p>
-            <Chip size="sm" variant="flat" color="primary" className="shrink-0 text-[12px] font-medium">
+            <Chip size="sm" variant="flat" color="primary" className="shrink-0 text-xs font-medium">
               {usuarios.length} usuario{usuarios.length === 1 ? '' : 's'}
             </Chip>
           </div>
@@ -206,15 +186,15 @@ export default function AdminUsuariosPage() {
         <div className="border-b border-default-100 mt-5" />
 
         {cargando ? (
-          <div className="px-5 py-4 text-sm text-default-400">Cargando usuarios...</div>
+          <div className="p-4 text-sm text-default-400">Cargando usuarios...</div>
         ) : usuariosFiltrados.length === 0 ? (
-          <div className="px-5 py-4 text-sm text-default-400">
+          <div className="p-4 text-sm text-default-400">
             {filtroNormalizado ? 'No se encontraron usuarios con ese criterio.' : 'No hay usuarios registrados.'}
           </div>
         ) : (
           <div className="px-5 pb-5">
             <div className="overflow-hidden rounded-xl border border-default-200 mt-5">
-              <div className="grid grid-cols-[1fr_auto] gap-2 border-b border-default-100 bg-default-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-default-400">
+              <div className="grid grid-cols-[1fr_auto] gap-2 border-b border-default-100 bg-default-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.16em] text-default-400">
                 <span>Nombre / Email</span>
                 <span className="text-right pr-14">Rol</span>
               </div>
@@ -222,19 +202,19 @@ export default function AdminUsuariosPage() {
                 {usuariosFiltrados.map(usuario => (
                   <div
                     key={usuario.id}
-                    className="grid grid-cols-[1fr_auto] gap-2 px-4 py-3 items-center transition-colors hover:bg-default-50"
+                    className="grid grid-cols-[1fr_auto] gap-2 p-3 items-center transition-colors hover:bg-default-50"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-[14px] font-medium text-default-900">
+                      <p className="truncate text-sm font-medium text-default-900">
                         {usuario.full_name || '—'}
                       </p>
-                      <p className="truncate text-[13px] text-default-500">
+                      <p className="truncate text-sm text-default-500">
                         {usuario.email || '—'}
                       </p>
                       {usuario.legajo ? (
-                        <p className="font-mono text-[12px] text-default-600">{usuario.legajo}</p>
+                        <p className="font-mono text-xs text-default-600">{usuario.legajo}</p>
                       ) : (
-                        <p className="text-[12px] text-warning-700">Sin legajo</p>
+                        <p className="text-xs text-warning-700">Sin legajo</p>
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -242,7 +222,7 @@ export default function AdminUsuariosPage() {
                         size="sm"
                         variant="flat"
                         color={usuario.role === 'admin' ? 'warning' : 'default'}
-                        className="text-[12px] font-medium"
+                        className="text-xs font-medium"
                       >
                         {usuario.role === 'admin' ? 'Admin' : 'Usuario'}
                       </Chip>
