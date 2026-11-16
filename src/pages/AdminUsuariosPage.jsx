@@ -7,6 +7,7 @@ import {
   cambiarEstadoUsuario,
   reiniciarClaveUsuario,
   cambiarEmailUsuario,
+  eliminarUsuario,
 } from '../lib/adminUsuarios'
 import { CONTRATAS, normalizarLegajo } from '../lib/registro'
 import {
@@ -17,6 +18,7 @@ import {
 } from '@heroui/react'
 import {
   Shield, ShieldOff, Search, Pencil, MoreVertical, KeyRound, Ban, UserCheck, Copy,
+  Trash2, TriangleAlert,
 } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
 
@@ -56,6 +58,10 @@ export default function AdminUsuariosPage() {
 
   // Cambio de estado (aprobar / suspender / reactivar)
   const [estadoPendiente, setEstadoPendiente] = useState(null) // { usuario, estado }
+
+  // Eliminación de cuenta (también «rechazar» una solicitud pendiente)
+  const [eliminando, setEliminando] = useState(null)
+  const [fraseConfirmacion, setFraseConfirmacion] = useState('')
 
   // Reinicio de clave
   const [reiniciando, setReiniciando] = useState(null)
@@ -213,6 +219,34 @@ export default function AdminUsuariosPage() {
       setMensaje({ color: 'danger', texto: e.message })
       setEstadoPendiente(null)
     } finally {
+      setGuardando(false)
+    }
+  }
+
+  // ---- Eliminación ----
+  const FRASE_ELIMINAR = 'Eliminar cuenta'
+
+  function abrirEliminar(usuario) {
+    setEliminando(usuario)
+    setFraseConfirmacion('')
+  }
+
+  async function confirmarEliminar() {
+    if (!eliminando || fraseConfirmacion !== FRASE_ELIMINAR) return
+    setGuardando(true)
+    try {
+      await eliminarUsuario(eliminando.id, fraseConfirmacion)
+      setUsuarios(prev => prev.filter(u => u.id !== eliminando.id))
+      setMensaje({
+        color: 'success',
+        texto: eliminando.estado === 'pendiente'
+          ? `Solicitud de ${nombreDe(eliminando)} rechazada y cuenta eliminada.`
+          : `Cuenta de ${nombreDe(eliminando)} eliminada.`,
+      })
+    } catch (e) {
+      setMensaje({ color: 'danger', texto: e.message })
+    } finally {
+      setEliminando(null)
       setGuardando(false)
     }
   }
@@ -376,16 +410,29 @@ export default function AdminUsuariosPage() {
                     </div>
 
                     {estado === 'pendiente' && !propio && (
-                      <Button
-                        size="sm"
-                        color="primary"
-                        radius="lg"
-                        className="min-h-9"
-                        startContent={<UserCheck size={15} />}
-                        onPress={() => setEstadoPendiente({ usuario, estado: 'activo' })}
-                      >
-                        Aprobar
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="flat"
+                          color="danger"
+                          radius="lg"
+                          className="min-h-9"
+                          startContent={<Trash2 size={15} />}
+                          onPress={() => abrirEliminar(usuario)}
+                        >
+                          Rechazar
+                        </Button>
+                        <Button
+                          size="sm"
+                          color="primary"
+                          radius="lg"
+                          className="min-h-9"
+                          startContent={<UserCheck size={15} />}
+                          onPress={() => setEstadoPendiente({ usuario, estado: 'activo' })}
+                        >
+                          Aprobar
+                        </Button>
+                      </>
                     )}
 
                     <Dropdown placement="bottom-end">
@@ -403,7 +450,7 @@ export default function AdminUsuariosPage() {
                       </DropdownTrigger>
                       <DropdownMenu
                         aria-label="Acciones de usuario"
-                        disabledKeys={propio ? ['clave', 'suspender', 'reactivar', 'rol'] : []}
+                        disabledKeys={propio ? ['clave', 'suspender', 'reactivar', 'rol', 'eliminar'] : []}
                       >
                         <DropdownItem
                           key="editar"
@@ -445,6 +492,15 @@ export default function AdminUsuariosPage() {
                             Suspender
                           </DropdownItem>
                         )}
+                        <DropdownItem
+                          key="eliminar"
+                          className="text-danger"
+                          color="danger"
+                          startContent={<Trash2 size={14} />}
+                          onPress={() => abrirEliminar(usuario)}
+                        >
+                          Eliminar cuenta
+                        </DropdownItem>
                       </DropdownMenu>
                     </Dropdown>
                   </div>
@@ -556,6 +612,60 @@ export default function AdminUsuariosPage() {
                 isLoading={guardando}
               >
                 Confirmar
+              </Button>
+            </ModalFooter>
+          </>
+        </ModalContent>
+      </Modal>
+
+      {/* Eliminar cuenta / rechazar solicitud */}
+      <Modal isOpen={Boolean(eliminando)} onOpenChange={abierto => !abierto && !guardando && setEliminando(null)}>
+        <ModalContent>
+          <>
+            <ModalHeader className="text-danger">
+              {eliminando?.estado === 'pendiente' ? 'Rechazar solicitud' : 'Eliminar cuenta'}
+            </ModalHeader>
+            <ModalBody className="space-y-3">
+              <div className="flex gap-3 rounded-lg border border-danger-200 bg-danger-50 p-3 text-sm text-danger-700">
+                <TriangleAlert size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+                <p>
+                  Esta acción es <strong>irreversible</strong>. Se eliminará la cuenta de{' '}
+                  <strong>{eliminando && nombreDe(eliminando)}</strong>
+                  {eliminando?.legajo && <> (<span className="font-mono">{eliminando.legajo}</span>)</>}
+                  {eliminando?.estado !== 'pendiente' && (
+                    <> junto con todos sus datos: listas de repuestos, pedidos, WOs importadas, almacén y
+                    movimientos, y preferencias</>
+                  )}
+                  . Para volver a usar la aplicación tendría que registrarse de nuevo.
+                </p>
+              </div>
+              {eliminando?.estado !== 'pendiente' && (
+                <p className="text-xs text-default-500">
+                  Si solo quieres quitarle el acceso sin perder su historial, usa «Suspender».
+                </p>
+              )}
+              <Input
+                label={`Escribe «${FRASE_ELIMINAR}» para confirmar`}
+                value={fraseConfirmacion}
+                onValueChange={setFraseConfirmacion}
+                autoComplete="off"
+                variant="bordered"
+                radius="lg"
+                color="danger"
+              />
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" radius="lg" onPress={() => setEliminando(null)} isDisabled={guardando}>
+                Cancelar
+              </Button>
+              <Button
+                color="danger"
+                radius="lg"
+                onPress={confirmarEliminar}
+                isLoading={guardando}
+                isDisabled={fraseConfirmacion !== FRASE_ELIMINAR}
+              >
+                {eliminando?.estado === 'pendiente' ? 'Rechazar y eliminar' : 'Eliminar cuenta'}
               </Button>
             </ModalFooter>
           </>

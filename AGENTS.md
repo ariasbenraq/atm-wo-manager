@@ -33,7 +33,7 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 - `/mis-listas` — spare part lists lifecycle + warehouse inventory sync
 - `/pedidos` — parts orders (WO from Wo's page + manual, reception → warehouse IN + "Uso de repuestos" list)
 - `/almacen` — per-user warehouse inventory + transactions
-- `/admin/usuarios` — admin-only: approve registrations, edit data, reset password, suspend/reactivate, change role
+- `/admin/usuarios` — admin-only: approve or reject registrations, edit data, reset password, suspend/reactivate, delete account, change role
 - `/login` — email or username login
 - `/registro` — public sign-up (nombre, apellido, email, contrata Iderka/Fonta, legajo `PE101L84`/`PE101R12`, password); account starts `pendiente`
 - `/restablecer-clave` — public; target of the recovery link an admin generates with «Reiniciar clave»; user creates a new password
@@ -85,7 +85,7 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 | `src/pages/PedidosPage.jsx` | Orders: 3-step create wizard (WO → parts, with «Agregar kit» for kit models → confirm; full screen on phones), receive (inventory IN + usage list), admin personas tab; pedidos in `guardado` can be edited (same wizard in edit mode → RPC `actualizar_pedido`, atomic, rejects if already received); `recepcionado` pedidos are read-only |
 | `src/pages/AlmacenPage.jsx` | Warehouse inventory + transactions: sticky search, stock filters (con stock / bajo ≤2 / sin stock / todos), tap a card for per-part history |
 | `src/pages/RepuestosPage.jsx` | Spare parts CRUD |
-| `src/lib/registro.js`, `src/lib/adminUsuarios.js`, `src/components/CuentaBloqueada.jsx` | Sign-up validators (legajo regex, contratas), wrapper of the Edge Function `supabase/functions/admin-usuarios` (`cambiar_estado`, `reiniciar_clave`, `cambiar_email`; service role, admin-only; deploy with `supabase functions deploy admin-usuarios`, not part of the Docker pipeline), blocked-account screen. `profiles.estado` = `pendiente`/`activo`/`suspendido`; non-active accounts are blocked server-side by restrictive RLS policies (`usuario_activo()`) + a trigger on warehouse tables, and suspended ones are also banned in Auth. Requires Auth → «Confirm email» OFF and `/restablecer-clave` in the Redirect URLs |
+| `src/lib/registro.js`, `src/lib/adminUsuarios.js`, `src/components/CuentaBloqueada.jsx` | Sign-up validators (legajo regex, contratas), wrapper of the Edge Function `supabase/functions/admin-usuarios` (`cambiar_estado`, `reiniciar_clave`, `cambiar_email`, `eliminar_usuario` — requires typing «Eliminar cuenta», cascades to all user data; service role, admin-only; deploy with `supabase functions deploy admin-usuarios`, not part of the Docker pipeline), blocked-account screen. `profiles.estado` = `pendiente`/`activo`/`suspendido`; non-active accounts are blocked server-side by restrictive RLS policies (`usuario_activo()`) + a trigger on warehouse tables, and suspended ones are also banned in Auth. Requires Auth → «Confirm email» OFF and `/restablecer-clave` in the Redirect URLs |
 | `supabase/migrations/` | SQL migrations (base tables predate this folder) |
 
 ## Constraints

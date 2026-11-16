@@ -6,6 +6,7 @@
 //   cambiar_estado  { user_id, estado: 'activo' | 'suspendido' }
 //   reiniciar_clave { user_id, redirect_to, enviar_correo }
 //   cambiar_email   { user_id, email }
+//   eliminar_usuario { user_id, confirmacion: 'Eliminar cuenta' }
 // Solo la puede llamar un admin con cuenta activa.
 
 /* global Deno */
@@ -120,6 +121,24 @@ Deno.serve(async req => {
       })
       if (errLink) throw errLink
       return responder({ ok: true, enviado: false, link: enlace.properties.action_link })
+    }
+
+    if (accion === 'eliminar_usuario') {
+      // Doble control: la frase también se valida en el servidor
+      if (params.confirmacion !== 'Eliminar cuenta') throw new ErrorControlado('CONFIRMACION_INVALIDA')
+
+      if (objetivo.role === 'admin' && objetivo.estado === 'activo') {
+        const { count } = await admin
+          .from('profiles').select('id', { count: 'exact', head: true })
+          .eq('role', 'admin').eq('estado', 'activo').neq('id', userId)
+        if (!count) throw new ErrorControlado('ULTIMO_ADMIN')
+      }
+
+      // Borra la cuenta de Auth; profiles y los datos del usuario (listas,
+      // pedidos, WOs, almacén, preferencias) caen por ON DELETE CASCADE.
+      const { error: errDel } = await admin.auth.admin.deleteUser(userId)
+      if (errDel) throw errDel
+      return responder({ ok: true })
     }
 
     if (accion === 'cambiar_email') {
