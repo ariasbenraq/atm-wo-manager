@@ -12,6 +12,9 @@ import {
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
   Autocomplete, AutocompleteItem,
 } from '@heroui/react'
+import { cargarWosDeLegajo } from '../lib/wosCatalogo'
+import { siteDeWo } from '../lib/wosCache'
+import { formatearFecha } from '../lib/date'
 import OpcionDosLineas from '../components/ui/OpcionDosLineas'
 import { LISTA_DOS_LINEAS, CLASE_DOS_LINEAS } from '../components/ui/listaOpciones'
 import {
@@ -66,6 +69,10 @@ export default function MisListasPage() {
   const [nuevoNombre, setNuevoNombre] = useState('')
   const [nuevoSite, setNuevoSite] = useState('')
   const [nuevoWorkOrder, setNuevoWorkOrder] = useState('')
+  // WOs del legajo del usuario para elegir al crear una lista
+  const [wosLegajo, setWosLegajo] = useState([])
+  const [wosCargando, setWosCargando] = useState(false)
+  const [woClaveNueva, setWoClaveNueva] = useState(null)
   const [errorNombre, setErrorNombre] = useState(null)
   const [guardandoLista, setGuardandoLista] = useState(false)
 
@@ -272,6 +279,35 @@ export default function MisListasPage() {
     setEditandoNombre(false)
     setEliminando(null)
     if (editandoItem) cerrarEditarItem()
+  }
+
+  const textoWo = w => `${w.wo} ${w.codigo_equipo || ''} ${siteDeWo(w)}`
+
+  async function abrirCrearLista() {
+    setNuevoNombre('')
+    setNuevoSite('')
+    setNuevoWorkOrder('')
+    setWoClaveNueva(null)
+    setErrorNombre(null)
+    setCreando(true)
+    setWosCargando(true)
+    try {
+      setWosLegajo(await cargarWosDeLegajo(legajoUsuario))
+    } catch {
+      setWosLegajo([])
+    } finally {
+      setWosCargando(false)
+    }
+  }
+
+  function elegirWoNueva(key) {
+    setWoClaveNueva(key)
+    const w = wosLegajo.find(x => x.wo === key)
+    if (!w) return
+    setNuevoNombre(w.wo)
+    setNuevoSite(siteDeWo(w))
+    setNuevoWorkOrder(w.wo)
+    setErrorNombre(null)
   }
 
   async function crearLista() {
@@ -708,13 +744,7 @@ export default function MisListasPage() {
               color="primary"
               radius="lg"
               startContent={<Plus size={16} />}
-              onPress={() => {
-                setNuevoNombre('')
-                setNuevoSite('')
-                setNuevoWorkOrder('')
-                setErrorNombre(null)
-                setCreando(true)
-              }}
+              onPress={abrirCrearLista}
               className="shrink-0 shadow-sm"
             >
               Crear lista
@@ -1142,20 +1172,40 @@ export default function MisListasPage() {
           <>
             <ModalHeader className="text-default-900">Crear nueva lista</ModalHeader>
             <ModalBody>
-              <Input
+              <Autocomplete
+                {...LISTA_DOS_LINEAS}
                 label="Nombre de la lista"
-                placeholder="Ej. Repuestos preventivo"
-                value={nuevoNombre}
-                onValueChange={v => {
+                placeholder="Elige una WO de tu legajo o escribe un nombre"
+                allowsCustomValue
+                inputValue={nuevoNombre}
+                selectedKey={woClaveNueva}
+                onInputChange={v => {
+                  // Al elegir una opción el componente devuelve su texto completo: se guarda solo la WO
+                  const w = wosLegajo.find(x => textoWo(x) === v)
+                  if (w) { setNuevoNombre(w.wo); return }
                   setNuevoNombre(v)
+                  if (woClaveNueva && v !== woClaveNueva) setWoClaveNueva(null)
                   if (errorNombre) setErrorNombre(null)
                 }}
+                onSelectionChange={key => { if (key) elegirWoNueva(String(key)) }}
+                isLoading={wosCargando}
                 isInvalid={Boolean(errorNombre)}
                 errorMessage={errorNombre}
                 variant="bordered"
                 radius="lg"
                 autoFocus
-              />
+                emptyContent={legajoUsuario ? 'Sin WOs de tu legajo. Escribe un nombre.' : 'Tu perfil no tiene legajo. Escribe un nombre.'}
+              >
+                {wosLegajo.map(w => (
+                  <AutocompleteItem key={w.wo} className={CLASE_DOS_LINEAS} textValue={textoWo(w)}>
+                    <OpcionDosLineas
+                      principal={w.wo}
+                      derecha={w.fecha ? formatearFecha(w.fecha) : ''}
+                      secundario={[w.codigo_equipo, siteDeWo(w)].filter(Boolean).join(' · ') || 'Sin ID ni site'}
+                    />
+                  </AutocompleteItem>
+                ))}
+              </Autocomplete>
               <Input
                 label="Site"
                 placeholder="Ej. SITIO001"
