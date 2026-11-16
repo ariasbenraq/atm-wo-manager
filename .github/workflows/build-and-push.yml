@@ -1,11 +1,10 @@
 name: Build and push image
 
+# DISABLED: replaced by deploy.yml (CI -> GHCR by SHA -> Tailscale/SSH -> Swarm).
+# The Dockerfile now builds an nginx image that listens on 8080, so running this
+# workflow would overwrite ":latest" with an image the OLD stack (web:80) cannot
+# serve. Delete this file once the old "atm-tool-manager" stack is gone.
 on:
-  push:
-    branches:
-      - produccion
-    tags:
-      - "v*"
   workflow_dispatch:
 
 env:
@@ -22,6 +21,7 @@ concurrency:
 
 jobs:
   build:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -1,0 +1,37 @@
+# Docker Swarm stack for atm.hamstitors.trade (web only: the app talks to
+# Supabase directly, so there is no API, database or Redis here).
+# Deployed by deploy.sh (never by hand): `docker stack deploy -c docker-stack.yml atm`.
+#
+# Required shell variable (deploy.sh exports it): TAG (git SHA). REGISTRY is optional.
+#
+# Network: only "edge", the existing overlay shared with Caddy. The service
+# joins it as "atm-web" (a unique name; the old stack still owns "web").
+services:
+  atm-web:
+    image: ${REGISTRY:-ghcr.io/ariasbenraq}/atm-wo-manager:${TAG:?TAG is required}
+    networks: [edge]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    deploy:
+      replicas: 1
+      restart_policy: { condition: any, delay: 5s }
+      update_config:
+        order: start-first
+        parallelism: 1
+        monitor: 15s
+        failure_action: rollback
+      rollback_config: { order: start-first }
+      resources:
+        limits: { memory: 128M }
+
+networks:
+  edge:
+    external: true
+    name: edge

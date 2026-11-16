@@ -1,0 +1,62 @@
+name: CI
+
+# Runs on every pull request and is reused by deploy.yml as the gate before
+# anything is built or deployed. Never use pull_request_target here: this
+# repository is public and its logs are readable by anyone.
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  # Public Supabase settings (repository *variables*, not secrets). Fork PRs and
+  # unconfigured repos get harmless placeholders: the build does not need real ones.
+  VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || 'https://ci-placeholder.supabase.co' }}
+  VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || 'ci-placeholder-anon-key' }}
+
+jobs:
+  # There is no "test" job: the project has no test script (see docs/despliegue.md).
+  lint-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+
+  docker-build:
+    # Builds the production image without pushing it, so a broken Dockerfile
+    # is caught in the pull request and not on deploy day.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          build-args: |
+            VITE_SUPABASE_URL=${{ env.VITE_SUPABASE_URL }}
+            VITE_SUPABASE_ANON_KEY=${{ env.VITE_SUPABASE_ANON_KEY }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
