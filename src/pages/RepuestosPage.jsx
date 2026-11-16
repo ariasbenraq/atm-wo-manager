@@ -5,11 +5,11 @@ import { coincideBusqueda } from '../lib/busqueda'
 import { db } from '../lib/db'
 import { useCan } from '../hooks/usePermissions'
 import {
-  Input, Button, Chip,
+  Input, Textarea, Button, Chip,
   ScrollShadow, Alert as HeroAlert,
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
 } from '@heroui/react'
-import { Boxes, Plus, Search, Check, List, BookmarkPlus } from 'lucide-react'
+import { Boxes, Plus, Search, Check, List, Lock, Save } from 'lucide-react'
 import RepuestoCard from '../components/RepuestoCard'
 import PageHeader from '../components/ui/PageHeader'
 
@@ -29,6 +29,11 @@ export default function RepuestosPage() {
   const [mensaje, setMensaje] = useState(null)
   const [cargandoLista, setCargandoLista] = useState(true)
   const [repuestoDetalle, setRepuestoDetalle] = useState(null)
+  // Detalle personal: texto propio de cada usuario por repuesto (repuesto_id -> texto)
+  const [detallesPersonales, setDetallesPersonales] = useState({})
+  const [textoPersonal, setTextoPersonal] = useState('')
+  const [guardandoPersonal, setGuardandoPersonal] = useState(false)
+  const [mensajePersonal, setMensajePersonal] = useState(null)
   const [repuestoEditando, setRepuestoEditando] = useState(null)
   const [editNombre, setEditNombre] = useState('')
   const [editPartNumber, setEditPartNumber] = useState('')
@@ -98,6 +103,18 @@ export default function RepuestosPage() {
   useEffect(() => {
     cargarRepuestos()
   }, [])
+
+  useEffect(() => {
+    if (!userId) return
+    supabase
+      .from('repuestos_detalle_personal')
+      .select('repuesto_id, texto')
+      .eq('user_id', userId)
+      .then(({ data, error }) => {
+        if (error) return
+        setDetallesPersonales(Object.fromEntries((data || []).map(d => [d.repuesto_id, d.texto])))
+      })
+  }, [userId])
 
   function validarFormulario() {
     const nuevosErrores = {}
@@ -199,10 +216,50 @@ export default function RepuestosPage() {
 
   function abrirDetalle(repuesto) {
     setRepuestoDetalle(repuesto)
+    setTextoPersonal(detallesPersonales[repuesto.id] || '')
+    setMensajePersonal(null)
   }
 
   function cerrarDetalle() {
     setRepuestoDetalle(null)
+    setMensajePersonal(null)
+  }
+
+  async function guardarDetallePersonal() {
+    if (!repuestoDetalle?.id || !userId) return
+    setGuardandoPersonal(true)
+    setMensajePersonal(null)
+    const texto = textoPersonal.trim()
+    const { error } = texto
+      ? await supabase
+        .from('repuestos_detalle_personal')
+        .upsert(
+          { user_id: userId, repuesto_id: repuestoDetalle.id, texto, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id,repuesto_id' }
+        )
+      : await supabase
+        .from('repuestos_detalle_personal')
+        .delete()
+        .eq('user_id', userId)
+        .eq('repuesto_id', repuestoDetalle.id)
+    setGuardandoPersonal(false)
+    if (error) {
+      setMensajePersonal({
+        color: 'danger',
+        texto: /repuestos_detalle_personal|does not exist/i.test(error.message || '')
+          ? 'Falta aplicar la migración 20261120 en Supabase.'
+          : error.message,
+      })
+      return
+    }
+    setDetallesPersonales(prev => {
+      const siguiente = { ...prev }
+      if (texto) siguiente[repuestoDetalle.id] = texto
+      else delete siguiente[repuestoDetalle.id]
+      return siguiente
+    })
+    setTextoPersonal(texto)
+    setMensajePersonal({ color: 'success', texto: 'Detalle personal guardado.' })
   }
 
   function cerrarEdicion() {
@@ -533,7 +590,7 @@ export default function RepuestosPage() {
                 radius="lg"
               />
               <Input
-                label="Detalle"
+                label="Detalle general"
                 placeholder="Ej. Compatible con ATM SelfServ 80"
                 value={descripcion}
                 onValueChange={setDescripcion}
@@ -565,50 +622,76 @@ export default function RepuestosPage() {
         <ModalContent>
           <>
             <ModalHeader className="text-default-900">Detalle del repuesto</ModalHeader>
-            <ModalBody className="space-y-4">
-              <div className="rounded-xl border border-default-200 bg-default-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-default-400">
-                  Nombre completo
+            <ModalBody className="space-y-3">
+              <p className="flex items-center gap-1.5 text-xs text-default-500">
+                <Lock size={12} aria-hidden="true" />
+                Los datos del repuesto están bloqueados: puedes seleccionarlos y copiarlos. Solo tu detalle personal es editable.
+              </p>
+              <Input
+                label="Nombre completo"
+                value={repuestoDetalle?.nombre || 'Sin nombre'}
+                isReadOnly
+                variant="bordered"
+                radius="lg"
+                endContent={<Lock size={14} className="text-default-400" aria-hidden="true" />}
+              />
+              <Input
+                label="Part number"
+                value={repuestoDetalle?.part_number || 'Sin part number'}
+                isReadOnly
+                variant="bordered"
+                radius="lg"
+                classNames={{ input: 'font-mono' }}
+                endContent={<Lock size={14} className="text-default-400" aria-hidden="true" />}
+              />
+              {repuestoDetalle?.compatibility && (
+                <Textarea
+                  label="Compatibilidad"
+                  value={repuestoDetalle.compatibility}
+                  isReadOnly
+                  minRows={1}
+                  variant="bordered"
+                  radius="lg"
+                />
+              )}
+              <Textarea
+                label="Detalle general"
+                value={repuestoDetalle?.descripcion || 'Sin detalle adicional'}
+                isReadOnly
+                minRows={2}
+                variant="bordered"
+                radius="lg"
+              />
+              <Textarea
+                label="Detalle personal"
+                description="Solo tú lo ves. Úsalo para tus propias notas o características del repuesto."
+                placeholder="Escribe aquí tus notas personales..."
+                value={textoPersonal}
+                onValueChange={v => { setTextoPersonal(v); setMensajePersonal(null) }}
+                minRows={3}
+                maxLength={2000}
+                variant="bordered"
+                radius="lg"
+              />
+              {mensajePersonal && (
+                <p className={`text-xs ${mensajePersonal.color === 'danger' ? 'text-danger' : 'text-success-600'}`} role="status">
+                  {mensajePersonal.texto}
                 </p>
-                <p className="mt-2 break-words text-sm font-semibold text-default-800">
-                  {repuestoDetalle?.nombre || 'Sin nombre'}
-                </p>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-xl border border-default-200 bg-default-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-default-400">
-                    Part number
-                  </p>
-                  <p className="mt-2 break-all font-mono text-sm text-default-700">
-                    {repuestoDetalle?.part_number || 'Sin part number'}
-                  </p>
-                </div>
-
-                {repuestoDetalle?.compatibility && (
-                  <div className="rounded-xl border border-default-200 bg-default-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-default-400">
-                      Compatibilidad
-                    </p>
-                    <p className="mt-2 text-sm text-default-700">
-                      {repuestoDetalle.compatibility}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-xl border border-default-200 bg-default-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-default-400">
-                  Detalle
-                </p>
-                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-default-700">
-                  {repuestoDetalle?.descripcion || 'Sin detalle adicional'}
-                </p>
-              </div>
+              )}
             </ModalBody>
             <ModalFooter>
-              <Button color="primary" radius="lg" onPress={cerrarDetalle}>
+              <Button variant="light" radius="lg" onPress={cerrarDetalle}>
                 Cerrar
+              </Button>
+              <Button
+                color="primary"
+                radius="lg"
+                startContent={<Save size={16} />}
+                onPress={guardarDetallePersonal}
+                isLoading={guardandoPersonal}
+                isDisabled={textoPersonal.trim() === (detallesPersonales[repuestoDetalle?.id] || '')}
+              >
+                Guardar detalle personal
               </Button>
             </ModalFooter>
           </>
@@ -645,7 +728,7 @@ export default function RepuestosPage() {
                 radius="lg"
               />
               <Input
-                label="Detalle"
+                label="Detalle general"
                 value={editDescripcion}
                 onValueChange={setEditDescripcion}
                 variant="bordered"
