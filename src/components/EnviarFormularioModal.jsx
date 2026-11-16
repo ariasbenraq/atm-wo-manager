@@ -94,9 +94,11 @@ export default function EnviarFormularioModal({ isOpen, onClose, lista, items, l
         .eq('id', lista.id)
       if (err) {
         throw new Error(
-          err.code === '42703' || /form_enviado_en/.test(err.message || '')
-            ? 'Falta aplicar la migración 20261103 en Supabase.'
-            : err.message
+          /FORMULARIO_SOLO_IDERKA/.test(err.message || '')
+            ? 'Solo los técnicos de la contrata IDERKA pueden enviar al formulario.'
+            : err.code === '42703' || /form_enviado_en/.test(err.message || '')
+              ? 'Falta aplicar la migración 20261103 en Supabase.'
+              : err.message
         )
       }
       onEstadoCambiado(valor)
