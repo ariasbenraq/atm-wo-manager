@@ -17,7 +17,7 @@ RUN npm run build
 # Fails the build if the URL is missing or is not https.
 RUN node docker/render-nginx-conf.mjs nginx.conf /app/nginx.rendered.conf
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 COPY --from=build /app/nginx.rendered.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 8080
