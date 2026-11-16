@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { hoyLima, rangoSemana } from './wosTecnicos'
+import { normalizarPartNumber } from './kitMantenimiento'
 
 function sumarCantidades(items) {
   return (items || []).reduce((s, i) => s + (Number(i.quantity) || 0), 0)
@@ -52,16 +53,20 @@ export function resumirPartes(pedidos, propias, hoy, fin) {
 
 // Pedidos y listas desde Supabase. Cada parte puede fallar por separado (sin conexión).
 export async function cargarResumenRemoto(userId) {
-  const [pedidosRes, listasRes] = await Promise.allSettled([
+  const [pedidosRes, listasRes, stockRes] = await Promise.allSettled([
     supabase
       .from('pedidos')
-      .select('id, wo, estado, pedido_items(quantity)')
+      .select('id, wo, estado, pedido_items(quantity, repuestos(part_number))')
       .eq('user_id', userId),
     supabase
       .from('spare_part_lists')
       .select('id, name, spare_part_list_items(quantity)')
       .eq('user_id', userId)
       .eq('inventory_synced', false),
+    supabase
+      .from('warehouse_items')
+      .select('part_number, quantity')
+      .eq('user_id', userId),
   ])
 
   const ok = r => r.status === 'fulfilled' && !r.value.error
@@ -73,9 +78,32 @@ export async function cargarResumenRemoto(userId) {
         .filter(l => l.partes > 0)
     : null
 
+  // Stock actual y unidades en pedidos aún no recibidos, por número de parte
+  let stock = null
+  if (ok(stockRes)) {
+    stock = new Map()
+    for (const i of stockRes.value.data || []) {
+      const k = normalizarPartNumber(i.part_number)
+      stock.set(k, (stock.get(k) || 0) + (Number(i.quantity) || 0))
+    }
+  }
+  let entrante = null
+  if (pedidos) {
+    entrante = new Map()
+    for (const p of pedidos) {
+      if (p.estado !== 'guardado') continue
+      for (const it of p.pedido_items || []) {
+        const k = normalizarPartNumber(it.repuestos?.part_number)
+        if (k) entrante.set(k, (entrante.get(k) || 0) + (Number(it.quantity) || 0))
+      }
+    }
+  }
+
   return {
     pedidos,
     listas,
+    stock,
+    entrante,
     pedidosPorRecibir: pedidos ? pedidos.filter(p => p.estado === 'guardado').length : null,
   }
 }

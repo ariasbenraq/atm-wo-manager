@@ -68,6 +68,7 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 | `src/lib/excel.js` | Shared SheetJS helpers: fecha/hora parsing + header normalizer |
 | `src/lib/inventario.js` | Wrappers of the inventory RPCs (`ajustar_stock`, `fijar_stock`, `eliminar_item_almacen`, `recepcionar_pedido`, `consumir_lista`, `revertir_consumo_lista`) + Spanish error messages |
 | `src/lib/wosTecnicos.js` | Technician names (profiles), WO search filters (date/legajo/text), legajo helpers |
+| `src/lib/resumen.js`, `src/lib/kitMantenimiento.js` | Home summary (`/inicio`): WOs/parts/lists; weekly kit forecast (each ATM of models 6623/6627/6628/6612 uses 1 filter `4450773447` + 8 suction cups `0090035910`) compared with `warehouse_items` stock and pending pedidos |
 | `src/hooks/useLegajo.js` | Legajo of the logged-in user (`profiles.legajo`, assigned by admin) |
 | `src/hooks/usePermissions.js` | Roles/permissions (`useIsAdmin`, `useCan`) |
 | `src/context/AppContext.jsx` | Shared state, auth, sync orchestration, CRUD |

@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardBody, Chip, Skeleton } from '@heroui/react'
-import { ClipboardCheck, Cog, ListChecks, PackageCheck, CalendarDays, CalendarRange, ChevronRight, WifiOff } from 'lucide-react'
+import { ClipboardCheck, Cog, ListChecks, PackageCheck, CalendarDays, CalendarRange, ChevronRight, WifiOff, TriangleAlert, CircleCheck } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { refrescarCacheWos, leerCacheWos } from '../lib/wosCache'
 import { cargarResumenRemoto, resumirWos, resumirPartes } from '../lib/resumen'
 import { formatearFecha } from '../lib/date'
+import { calcularKit } from '../lib/kitMantenimiento'
 
 const FORMATO_DIA = new Intl.DateTimeFormat('es-PE', {
   weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Lima',
@@ -18,6 +19,7 @@ function Tile({ icon, titulo, valor, detalle, tono = 'default', alVer, cargando 
     primary: 'bg-primary-50 text-primary-600',
     warning: 'bg-warning-50 text-warning-700',
     success: 'bg-success-50 text-success-700',
+    danger: 'bg-danger-50 text-danger-600',
   }
   return (
     <button
@@ -37,6 +39,87 @@ function Tile({ icon, titulo, valor, detalle, tono = 'default', alVer, cargando 
       )}
       <p className="mt-0.5 min-h-4 text-xs text-default-500">{detalle}</p>
     </button>
+  )
+}
+
+const ESTADO_KIT = {
+  ok: { color: 'success', texto: 'Alcanza' },
+  cubierto: { color: 'warning', texto: 'Con pedido' },
+  falta: { color: 'danger', texto: 'Falta' },
+  desconocido: { color: 'default', texto: 'Sin dato' },
+}
+
+function PrevisionKit({ kit, cargando, onPedir }) {
+  if (cargando || !kit) {
+    return <Skeleton className="h-40 rounded-xl" />
+  }
+  const faltan = kit.partes.filter(p => p.estado === 'falta')
+  const cubiertos = kit.partes.filter(p => p.estado === 'cubierto')
+
+  return (
+    <Card shadow="sm" className="border border-default-200">
+      <CardBody className="space-y-3 p-4">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Repuestos de la semana</h2>
+          <p className="text-xs text-default-500">
+            {kit.atms
+              ? `${kit.atms} ATM${kit.atms === 1 ? '' : 's'} de modelos 6623, 6627, 6628 o 6612, de hoy al domingo. Cada uno usa 1 filtro y 8 ventosas.`
+              : 'No tienes ATMs de modelos 6623, 6627, 6628 o 6612 programados de hoy al domingo.'}
+          </p>
+        </div>
+
+        {faltan.length > 0 && (
+          <div role="alert" className="flex items-start gap-2 rounded-lg bg-danger-50 p-3 text-sm text-danger-700">
+            <TriangleAlert size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">No contamos con la cantidad necesaria</p>
+              <p className="text-xs">
+                {faltan.map(p => `${p.nombre}: faltan ${p.aSolicitar}`).join(' · ')}.
+                {' '}Considera solicitarlo en el siguiente pedido.
+              </p>
+              <button type="button" onClick={onPedir} className="mt-1.5 cursor-pointer text-xs font-semibold underline">
+                Ir a Pedidos
+              </button>
+            </div>
+          </div>
+        )}
+        {faltan.length === 0 && cubiertos.length > 0 && (
+          <div className="flex items-start gap-2 rounded-lg bg-warning-50 p-3 text-xs text-warning-800" role="status">
+            <TriangleAlert size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+            Tu stock no alcanza, pero lo que falta ya está en pedidos por recibir.
+          </div>
+        )}
+        {kit.atms > 0 && faltan.length === 0 && cubiertos.length === 0 && kit.partes.every(p => p.estado === 'ok') && (
+          <div className="flex items-center gap-2 text-xs text-success-700" role="status">
+            <CircleCheck size={16} aria-hidden="true" /> Tienes stock suficiente para toda la semana.
+          </div>
+        )}
+
+        <ul className="divide-y divide-default-100">
+          {kit.partes.map(p => {
+            const e = ESTADO_KIT[p.estado]
+            return (
+              <li key={p.part_number} className="flex items-center gap-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 text-sm font-medium text-foreground">{p.nombre}</p>
+                  <p className="font-mono text-xs text-default-500">{p.part_number}</p>
+                </div>
+                <div className="shrink-0 text-right text-xs text-default-500">
+                  <p>Necesitas <strong className="text-sm text-foreground tabular-nums">{p.necesario}</strong></p>
+                  <p>
+                    Tienes <strong className="tabular-nums">{p.enStock ?? '—'}</strong>
+                    {p.porRecibir > 0 && ` · +${p.porRecibir} por recibir`}
+                  </p>
+                </div>
+                <Chip size="sm" variant="flat" color={e.color} className="shrink-0">
+                  {p.estado === 'falta' ? `Falta ${p.aSolicitar}` : e.texto}
+                </Chip>
+              </li>
+            )
+          })}
+        </ul>
+      </CardBody>
+    </Card>
   )
 }
 
@@ -79,6 +162,12 @@ export default function InicioPage() {
   const partes = useMemo(() => (
     resumenWos && remoto?.pedidos
       ? resumirPartes(remoto.pedidos, resumenWos.propias, resumenWos.hoy, resumenWos.fin)
+      : null
+  ), [resumenWos, remoto])
+
+  const kit = useMemo(() => (
+    resumenWos && remoto
+      ? calcularKit(resumenWos.semana, remoto.stock, remoto.entrante)
       : null
   ), [resumenWos, remoto])
 
@@ -127,9 +216,15 @@ export default function InicioPage() {
           alVer={() => navigate('/pedidos')}
         />
         <Tile
-          icon={Cog} titulo="Partes esta semana" cargando={cargandoWos || cargandoRemoto}
-          valor={partes?.semana.total}
-          detalle={detallePartes(partes?.semana)}
+          icon={Cog}
+          tono={kit?.hayFalta ? 'danger' : kit?.hayCubierto ? 'warning' : 'default'}
+          titulo="Repuestos esta semana" cargando={cargandoWos || cargandoRemoto}
+          valor={kit ? kit.partes.reduce((s, p) => s + p.necesario, 0) : undefined}
+          detalle={
+            !kit ? '' : kit.hayFalta ? 'Falta stock: considera pedir'
+              : kit.hayCubierto ? 'Cubierto con pedidos por recibir'
+              : kit.atms ? 'Stock suficiente' : 'Sin ATMs con kit'
+          }
           alVer={() => navigate('/pedidos')}
         />
         <Tile
@@ -147,6 +242,8 @@ export default function InicioPage() {
           alVer={() => navigate('/pedidos')}
         />
       </div>
+
+      <PrevisionKit kit={kit} cargando={cargandoWos || cargandoRemoto} onPedir={() => navigate('/pedidos')} />
 
       <Card shadow="sm" className="border border-default-200">
         <CardBody className="p-0">
