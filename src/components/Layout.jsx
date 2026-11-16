@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { useIsAdmin } from '../hooks/usePermissions'
+import { useTelemetria } from '../hooks/useTelemetria'
 import CuentaBloqueada from './CuentaBloqueada'
 import {
   Navbar,
@@ -25,7 +26,7 @@ import {
   Alert as HeroAlert,
 } from '@heroui/react'
 import { useTema, ETIQUETA_TEMA } from '../hooks/useTema'
-import { Headset, Home, Moon, Sun, SunMoon, List, LogOut, Menu, Package, Shield, ShoppingCart, Warehouse } from 'lucide-react'
+import { Activity, Headset, Home, Moon, Sun, SunMoon, List, LogOut, Menu, Package, Shield, ShoppingCart, Warehouse } from 'lucide-react'
 
 const vistas = [
   { key: 'inicio', label: 'Inicio', icon: Home, path: '/inicio' },
@@ -38,6 +39,7 @@ const vistas = [
 
 const vistasAdmin = [
   { key: 'admin/usuarios', label: 'Usuarios', icon: Shield, path: '/admin/usuarios' },
+  { key: 'admin/monitoreo', label: 'Monitoreo', icon: Activity, path: '/admin/monitoreo' },
 ]
 
 const CLAVES_INFERIOR = ['inicio', 'wos', 'pedidos', 'mis-listas', 'almacen']
@@ -66,6 +68,7 @@ export default function Layout() {
   const esAdmin = useIsAdmin()
   const navigate = useNavigate()
   const location = useLocation()
+  useTelemetria(Boolean(session) && (!profile?.estado || profile.estado === 'activo'))
   const { tema, alternar: alternarTema } = useTema()
   const IconoTema = tema === 'oscuro' ? Moon : tema === 'claro' ? Sun : SunMoon
   const [modalReLoginAbierto, setModalReLoginAbierto] = useState(false)
