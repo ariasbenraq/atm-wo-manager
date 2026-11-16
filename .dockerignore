@@ -1,9 +1,15 @@
 node_modules
 dist
+build
 .git
-*.log
+.github
+deploy
+docs
 .env
 .env.*
 !.env.example
+*.log
+Dockerfile
+.dockerignore
 tests
 supabase
