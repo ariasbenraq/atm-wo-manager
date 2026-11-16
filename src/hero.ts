@@ -8,9 +8,9 @@ export default heroui({
   themes: {
     light: {
       colors: {
-        background: "#f6f7fb",
+        background: "#f3f5f9",
         foreground: "#14181f",
-        primary: { DEFAULT: "#0f62fe", foreground: "#ffffff" },
+        primary: { DEFAULT: "#1769e0", foreground: "#ffffff" },
         secondary: { DEFAULT: "#6929c4", foreground: "#ffffff" },
         success: { DEFAULT: "#198038", foreground: "#ffffff" },
         warning: { DEFAULT: "#f1a208", foreground: "#14181f" },

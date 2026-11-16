@@ -490,7 +490,7 @@ export default function WosPage() {
       {fabAbierto && (
         <div className="fixed inset-0 z-20" onClick={() => setFabAbierto(false)} aria-hidden="true" />
       )}
-      <div className="fixed right-4 bottom-4 z-30 flex flex-col items-end gap-3">
+      <div className="fixed right-4 bottom-20 z-30 lg:bottom-4 flex flex-col items-end gap-3">
         {fabAbierto && (
           <>
             <button

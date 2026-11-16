@@ -319,7 +319,7 @@ export default function AlmacenPage() {
         />
       )}
 
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="rounded-xl bg-primary-50 p-2.5 text-primary-600">
             <Warehouse size={20} />
