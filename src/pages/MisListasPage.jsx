@@ -46,7 +46,7 @@ function tiempoRelativo(iso) {
 }
 
 export default function MisListasPage() {
-  const { session } = useApp()
+  const { session, profile } = useApp()
   const userId = session?.user?.id
   const esAdmin = useIsAdmin()
 
@@ -98,6 +98,10 @@ export default function MisListasPage() {
     ? String(listaActiva.usuario?.legajo || '').replace(/\s+/g, '').toUpperCase()
     : legajoUsuario
   const [confirmarSync, setConfirmarSync] = useState(false)
+  // Correo registrado del técnico dueño de la lista (el formulario lo pide)
+  const emailDeLista = esDeOtro
+    ? (listaActiva.usuario?.email || '')
+    : (profile?.email || session?.user?.email || '')
   const [stockSync, setStockSync] = useState(null) // Map(part_number -> stock) | 'error' | null
   const [erroresSync, setErroresSync] = useState([])
   const [revirtiendo, setRevirtiendo] = useState(false)
@@ -1353,6 +1357,7 @@ export default function MisListasPage() {
         lista={listaActiva}
         items={items}
         legajo={legajoDeLista}
+        email={emailDeLista}
         onEstadoCambiado={actualizarEstadoFormulario}
         onPresupuestoGuardado={(id, valor) => setItems(prev => prev.map(i => (i.id === id ? { ...i, presupuesto: valor } : i)))}
       />

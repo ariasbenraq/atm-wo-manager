@@ -27,6 +27,84 @@ const SECCIONES = {
   7: [[1622640595, 80677276, 2030789526], [1582194104, 2109256138, 194941138], [17355909, 603921661, 879818450], [2043729314, 1885021334, 1897096441], [1205032502, 730938818, 1150533521], [1192923260, 1274312639, 1231011363], [1718945658, 524545914, 1691415478]],
 }
 
+// Opciones del desplegable «LEGAJO o CSR» del formulario
+export const LEGAJOS_FORM = [
+  'PE101R01',
+  'PE101R02',
+  'PE101R06',
+  'PE101R07',
+  'PE101R08',
+  'PE101R14',
+  'PE101R16',
+  'PE101R24',
+  'PE101R31',
+  'PE101R32',
+  'PE101R39',
+  'PE101R45',
+  'PE101R46',
+  'PE101R58',
+  'PE101R59',
+  'PE101R61',
+  'PE101R62',
+  'PE101R63',
+  'PE101R65',
+  'PE101R67',
+  'PE101R77',
+  'PE101R79',
+  'PE101R81',
+  'PE101R83',
+  'PE101R84',
+  'PE101R85',
+  'PE101R86',
+  'PE101R87',
+  'PE101R88',
+  'PE101R89',
+  'PE101R92',
+  'PE101R94',
+  'PE101R97',
+  'PE101R98',
+  'PE904R02',
+  'PE101R04',
+  'PE101R05',
+  'PE101R68',
+  'PE101R80',
+  'PE101R03',
+  'PE101R57',
+  'PE901R08',
+  'PE101R48',
+  'PE901R07',
+  'PE901R02',
+  'PE901R03',
+  'PE101R30',
+  'PE101R23',
+  'PE901R09',
+  'PE101R33',
+  'PE101L01',
+  'PE101L59',
+  'PE101L23',
+  'PE101L21',
+  'PE101L44',
+  'PE101L57',
+  'PE101L65',
+  'PE101L76',
+  'PE101L83',
+  'PE101L84',
+  'PE101L85',
+  'PE101L09',
+  'PE101L27',
+  'PE101L45',
+  'PE101L55',
+  'PE101L60',
+  'PE101L77',
+  'PE101R40',
+]
+
+// Legajo del perfil (cualquier mayúscula/espacio) -> opción del formulario, o '' si no existe en la lista
+export function legajoParaForm(texto) {
+  const t = String(texto || '').replace(/[^a-z0-9]/gi, '').toUpperCase()
+  return LEGAJOS_FORM.includes(t) ? t : ''
+}
+
 export const CLIENTES_FORM = [
   'BANCO DE CREDITO DEL PERU',
   'BANCO CONTINENTAL',
@@ -70,12 +148,14 @@ export function dividirEnEnvios(items) {
 }
 
 // items: [{ partNumber, cantidad, presupuesto }] (1 a 7). fecha: 'AAAA-MM-DD'.
-export function construirUrlFormulario({ wo, legajo, cliente, fecha, items }) {
+// email: correo del técnico; el formulario lo recoge en un campo propio (parámetro «emailAddress»).
+export function construirUrlFormulario({ wo, legajo, email, cliente, fecha, items }) {
   if (!items.length || items.length > MAX_REPUESTOS_POR_ENVIO) {
     throw new Error('El formulario admite de 1 a 7 repuestos por envío.')
   }
   const params = new URLSearchParams()
   params.set('usp', 'pp_url')
+  if (email) params.set('emailAddress', email)
   if (wo) params.set(`entry.${CAMPO.wo}`, wo)
   if (legajo) params.set(`entry.${CAMPO.legajo}`, legajo)
   params.set(`entry.${CAMPO.zona}`, ZONA_FORM)

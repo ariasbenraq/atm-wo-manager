@@ -1,15 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
-  Input, Select, SelectItem, Button, Chip, Alert as HeroAlert,
+  Input, Select, SelectItem, Autocomplete, AutocompleteItem, Button, Chip, Alert as HeroAlert,
 } from '@heroui/react'
 import { ExternalLink, Check, Undo2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
 import { hoyLima } from '../lib/wosTecnicos'
 import {
-  CLIENTES_FORM, ZONA_FORM, MAX_REPUESTOS_POR_ENVIO,
-  clienteParaForm, dividirEnEnvios, construirUrlFormulario,
+  CLIENTES_FORM, LEGAJOS_FORM, ZONA_FORM, MAX_REPUESTOS_POR_ENVIO,
+  clienteParaForm, legajoParaForm, dividirEnEnvios, construirUrlFormulario,
 } from '../lib/googleForm'
 
 const FORMATO_FECHA_LIMA = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' })
@@ -18,8 +18,10 @@ function fechaLima(iso) {
   return iso ? FORMATO_FECHA_LIMA.format(new Date(iso)) : hoyLima()
 }
 
-export default function EnviarFormularioModal({ isOpen, onClose, lista, items, legajo, onEstadoCambiado, onPresupuestoGuardado }) {
+export default function EnviarFormularioModal({ isOpen, onClose, lista, items, legajo, email: emailRegistrado, onEstadoCambiado, onPresupuestoGuardado }) {
   const [wo, setWo] = useState('')
+  const [legajoSel, setLegajoSel] = useState('')
+  const [correo, setCorreo] = useState('')
   const [cliente, setCliente] = useState('')
   const [clienteAuto, setClienteAuto] = useState(false)
   const [fecha, setFecha] = useState('')
@@ -31,6 +33,8 @@ export default function EnviarFormularioModal({ isOpen, onClose, lista, items, l
     if (!isOpen || !lista) return
     const woLista = String(lista.work_order || lista.workOrder || '').trim()
     setWo(woLista)
+    setLegajoSel(legajoParaForm(legajo))
+    setCorreo(String(emailRegistrado || '').trim())
     setFecha(fechaLima(lista.inventory_synced_at))
     setPresupuestos(Object.fromEntries(items.map(i => [i.id, i.presupuesto || ''])))
     setError(null)
@@ -57,10 +61,11 @@ export default function EnviarFormularioModal({ isOpen, onClose, lista, items, l
 
   const sinPartNumber = items.some(i => !i.repuesto?.part_number)
   const woLimpia = wo.trim().toUpperCase()
-  const listo = Boolean(woLimpia && cliente && fecha && !sinPartNumber)
+  const correoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo.trim())
+  const listo = Boolean(woLimpia && legajoSel && correoValido && cliente && fecha && !sinPartNumber)
 
   function urlEnvio(envio) {
-    return construirUrlFormulario({ wo: woLimpia, legajo, cliente, fecha, items: envio })
+    return construirUrlFormulario({ wo: woLimpia, legajo: legajoSel, email: correo.trim(), cliente, fecha, items: envio })
   }
 
   // Guarda los presupuestos escritos (si la columna existe); no bloquea la apertura del formulario
@@ -111,8 +116,7 @@ export default function EnviarFormularioModal({ isOpen, onClose, lista, items, l
         <ModalHeader>Enviar al formulario de consumo</ModalHeader>
         <ModalBody className="space-y-3">
           <p className="text-xs text-default-500">
-            Se abre el Google Form con los datos ya escritos. Revísalos y pulsa «Enviar» allí. El formulario también
-            pide tu correo: Google lo completa si estás con tu cuenta.
+            Se abre el Google Form con los datos ya escritos. Revísalos y pulsa «Enviar» allí.
           </p>
 
           <Input
@@ -134,10 +138,28 @@ export default function EnviarFormularioModal({ isOpen, onClose, lista, items, l
               variant="bordered" radius="lg" size="sm" isRequired
             />
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-default-500">
-            <span>Legajo:</span>
-            {legajo ? <Chip size="sm" variant="flat" className="font-mono">{legajo}</Chip> : <span className="text-warning-700">sin asignar: elígelo en el formulario</span>}
-            <span className="ml-2">Zona:</span>
+          <div className="grid grid-cols-2 gap-2">
+            <Autocomplete
+              label="Legajo" size="sm" variant="bordered" radius="lg" isRequired
+              defaultItems={LEGAJOS_FORM.map(l => ({ key: l }))}
+              selectedKey={legajoSel || null}
+              onSelectionChange={k => setLegajoSel(k ? String(k) : '')}
+              description={legajoSel && legajoSel === legajoParaForm(legajo) ? 'Tomado de tu perfil' : undefined}
+              errorMessage={!legajoSel ? (legajo ? `«${legajo}» no está en el formulario: elige uno.` : 'Elige un legajo.') : undefined}
+              isInvalid={!legajoSel}
+            >
+              {o => <AutocompleteItem key={o.key}>{o.key}</AutocompleteItem>}
+            </Autocomplete>
+            <Input
+              label="Correo" type="email" size="sm" variant="bordered" radius="lg" isRequired
+              value={correo} onValueChange={setCorreo}
+              description={correoValido && correo.trim() === String(emailRegistrado || '').trim() ? 'Tomado de tu registro' : undefined}
+              isInvalid={!correoValido}
+              errorMessage={!correoValido ? 'Escribe un correo válido.' : undefined}
+            />
+          </div>
+          <div className="flex items-center gap-2 text-xs text-default-500">
+            <span>Zona:</span>
             <Chip size="sm" variant="flat">{ZONA_FORM}</Chip>
           </div>
 
@@ -182,7 +204,7 @@ export default function EnviarFormularioModal({ isOpen, onClose, lista, items, l
                 {envios.length > 1 ? `Abrir formulario (${idx + 1} de ${envios.length}) · ${envio.length} repuesto${envio.length === 1 ? '' : 's'}` : 'Abrir formulario'}
               </a>
             )) : (
-              <p className="text-xs text-default-400">Completa WO, cliente y fecha para generar el enlace.</p>
+              <p className="text-xs text-default-400">Completa WO, legajo, correo, cliente y fecha para generar el enlace.</p>
             )}
           </div>
 
