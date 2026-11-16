@@ -22,7 +22,6 @@
     "dayjs": "^1.11.20",
     "dexie": "^4.3.0",
     "framer-motion": "^12.35.2",
-    "konsta": "^5.5.0",
     "lucide-react": "^0.577.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

@@ -14,16 +14,15 @@ import ImportarWosExcel from '../components/ImportarWosExcel'
 import WosSkeleton from '../components/WosSkeleton'
 import WoCard from '../components/WoCard'
 import BuscarWoModal from '../components/BuscarWoModal'
-import AppShell from '../components/AppShell'
+import PageHeader from '../components/ui/PageHeader'
+import EmptyState from '../components/ui/EmptyState'
+import useMediaQuery from '@mui/material/useMediaQuery'
 import {
-  Chip, Fab, Sheet, Button as KonstaButton,
-} from 'konsta/react'
-import {
-  Input, Button, Switch, Select, SelectItem, Pagination,
+  Input, Button, Chip, Switch, Select, SelectItem, Pagination,
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
   Alert as HeroAlert,
 } from '@heroui/react'
-import { Plus, X, Check, FileSpreadsheet, FilePlus2, Search } from 'lucide-react'
+import { Plus, X, Check, FileSpreadsheet, FilePlus2, Search, Headset } from 'lucide-react'
 
 const CAMPOS_DETALLE = [
   ['Año', 'anio'],
@@ -130,6 +129,7 @@ export default function WosPage() {
   const [filtrosBusqueda, setFiltrosBusqueda] = useState(null)
   const [nombres, setNombres] = useState({})
 
+  const movil = useMediaQuery('(max-width:639px)')
   const [fabAbierto, setFabAbierto] = useState(false)
   const [importarAbierto, setImportarAbierto] = useState(false)
   const [nuevoAbierto, setNuevoAbierto] = useState(false)
@@ -377,7 +377,9 @@ export default function WosPage() {
   }
 
   return (
-    <AppShell title="Wo's">
+    <div className="space-y-3">
+      <PageHeader icon={Headset} title="Wo's" subtitle="Órdenes de trabajo asignadas" />
+
       {mensaje && (
         <HeroAlert
           color={mensaje.color}
@@ -412,22 +414,16 @@ export default function WosPage() {
         />
       )}
 
-      <div className="sticky top-14 z-20 -mx-4 bg-background px-6 pb-2 pt-1">
+      <div className="sticky top-14 z-20 -mx-4 bg-background px-4 pb-2 pt-1 md:-mx-6 md:px-6">
         <div className="flex items-center gap-1.5 pb-1">
           {seleccion && (
-            <Chip
-              className="shrink-0 cursor-pointer bg-primary text-white"
-              onClick={() => setSeleccion(null)}
-            >
-              {seleccion.wo} ✕
+            <Chip color="primary" className="shrink-0" onClose={() => setSeleccion(null)}>
+              {seleccion.wo}
             </Chip>
           )}
           {hayFiltros(filtrosBusqueda) && (
-            <Chip
-              className="min-w-0 cursor-pointer bg-primary text-white"
-              onClick={() => setFiltrosBusqueda(null)}
-            >
-              {resumenFiltros(filtrosBusqueda, nombres, wos)} ✕
+            <Chip color="primary" className="min-w-0" onClose={() => setFiltrosBusqueda(null)}>
+              {resumenFiltros(filtrosBusqueda, nombres, wos)}
             </Chip>
           )}
           <span className="ml-auto shrink-0 text-xs text-default-500">{wosFiltradas.length} resultados</span>
@@ -445,11 +441,11 @@ export default function WosPage() {
       {cargando ? (
         <WosSkeleton filas={6} className="pt-3" />
       ) : wosPagina.length === 0 ? (
-        <p className="py-6 text-center text-sm text-default-500">
+        <EmptyState icon={Headset}>
           {seleccion || filtroHoy || soloMios || hayFiltros(filtrosBusqueda)
             ? 'Sin WOs para este filtro.'
             : 'No hay workorders. Toca + para importar un Excel o crear una.'}
-        </p>
+        </EmptyState>
       ) : (
         <div className="lg:grid lg:grid-cols-2 lg:gap-x-3">
           {wosPagina.map(wo => (
@@ -492,37 +488,40 @@ export default function WosPage() {
       {fabAbierto && (
         <div className="fixed inset-0 z-20" onClick={() => setFabAbierto(false)} aria-hidden="true" />
       )}
-      <div className="fixed right-4 bottom-20 z-30 lg:bottom-4 flex flex-col items-end gap-3">
+      <div className="fixed bottom-20 right-4 z-30 flex flex-col items-end gap-3 lg:bottom-4">
         {fabAbierto && (
           <>
-            <button
-              type="button"
-              onClick={() => { setFabAbierto(false); setBuscarAbierto(true) }}
-              className="flex items-center gap-2 rounded-full bg-content1 px-4 py-2.5 text-sm font-medium text-foreground shadow-lg dark:bg-gray-800 dark:text-white"
+            <Button
+              radius="full" className="bg-content1 font-medium text-foreground shadow-lg"
+              startContent={<Search size={18} />}
+              onPress={() => { setFabAbierto(false); setBuscarAbierto(true) }}
             >
-              <Search size={18} /> Buscar WO
-            </button>
-            <button
-              type="button"
-              onClick={() => { setFabAbierto(false); setImportarAbierto(true) }}
-              className="flex items-center gap-2 rounded-full bg-content1 px-4 py-2.5 text-sm font-medium text-foreground shadow-lg dark:bg-gray-800 dark:text-white"
+              Buscar WO
+            </Button>
+            <Button
+              radius="full" className="bg-content1 font-medium text-foreground shadow-lg"
+              startContent={<FileSpreadsheet size={18} />}
+              onPress={() => { setFabAbierto(false); setImportarAbierto(true) }}
             >
-              <FileSpreadsheet size={18} /> Importar Excel
-            </button>
-            <button
-              type="button"
-              onClick={() => { setFabAbierto(false); abrirNuevo() }}
-              className="flex items-center gap-2 rounded-full bg-content1 px-4 py-2.5 text-sm font-medium text-foreground shadow-lg dark:bg-gray-800 dark:text-white"
+              Importar Excel
+            </Button>
+            <Button
+              radius="full" className="bg-content1 font-medium text-foreground shadow-lg"
+              startContent={<FilePlus2 size={18} />}
+              onPress={() => { setFabAbierto(false); abrirNuevo() }}
             >
-              <FilePlus2 size={18} /> Nueva WO
-            </button>
+              Nueva WO
+            </Button>
           </>
         )}
-        <Fab
-          onClick={() => setFabAbierto(v => !v)}
+        <Button
+          isIconOnly color="primary" radius="full" className="h-14 w-14 shadow-lg"
           aria-label={fabAbierto ? 'Cerrar acciones' : 'Abrir acciones'}
-          icon={<Plus size={24} className={`transition-transform ${fabAbierto ? 'rotate-45' : ''}`} />}
-        />
+          aria-expanded={fabAbierto}
+          onPress={() => setFabAbierto(v => !v)}
+        >
+          <Plus size={24} className={`transition-transform ${fabAbierto ? 'rotate-45' : ''}`} />
+        </Button>
       </div>
 
       <BuscarWoModal
@@ -551,45 +550,42 @@ export default function WosPage() {
         onImportado={cargar}
       />
 
-      {/* Sheet: detalle + acciones */}
-      <Sheet opened={Boolean(detalle)} onBackdropClick={() => setDetalle(null)}>
-        <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-black/20" />
-        <div className="max-h-[70vh] overflow-y-auto px-5 pb-6">
-          <div className="mb-3">
-            <p className="text-lg font-semibold text-foreground">{detalle?.wo}</p>
-            <p className="text-xs text-default-500">
+      {/* Detalle de la WO */}
+      <Modal
+        isOpen={Boolean(detalle)}
+        onOpenChange={abierto => !abierto && setDetalle(null)}
+        placement={movil ? 'bottom' : 'center'}
+        size="lg"
+        scrollBehavior="inside"
+      >
+        <ModalContent>
+          <ModalHeader className="flex flex-col gap-0.5">
+            <span className="text-lg">{detalle?.wo}</span>
+            <span className="text-xs font-normal text-default-500">
               {formatearFecha(detalle?.fecha)}
               {detalle?.tipo_pm ? ` · ${detalle.tipo_pm}` : ''}
-            </p>
-          </div>
-          <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
-            {detalle && CAMPOS_DETALLE.map(([etiqueta, campo]) => {
-              const valor = campo === '__fecha' ? formatearFecha(detalle?.fecha) : campo === 'mes' ? formatMes(detalle?.mes) : detalle?.[campo]
-              if (!valor) return null
-              return (
-                <div key={campo}>
-                  <dt className="text-xs text-default-400">{etiqueta}</dt>
-                  <dd className="text-sm text-foreground">{valor}</dd>
-                </div>
-              )
-            })}
-          </dl>
-          <div className="mt-5 flex gap-2">
-            <KonstaButton
-              className="w-full bg-red-500 text-white"
-              onClick={() => { setEliminando(detalle); setDetalle(null) }}
-            >
-              Eliminar
-            </KonstaButton>
-            <KonstaButton
-              className="border border-gray-300 bg-content1 text-foreground dark:border-gray-600 dark:bg-transparent"
-              onClick={() => setDetalle(null)}
-            >
-              Cerrar
-            </KonstaButton>
-          </div>
-        </div>
-      </Sheet>
+            </span>
+          </ModalHeader>
+          <ModalBody>
+            <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+              {detalle && CAMPOS_DETALLE.map(([etiqueta, campo]) => {
+                const valor = campo === '__fecha' ? formatearFecha(detalle?.fecha) : campo === 'mes' ? formatMes(detalle?.mes) : detalle?.[campo]
+                if (!valor) return null
+                return (
+                  <div key={campo}>
+                    <dt className="text-xs text-default-500">{etiqueta}</dt>
+                    <dd className="text-sm text-foreground">{valor}</dd>
+                  </div>
+                )
+              })}
+            </dl>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="flat" onPress={() => setDetalle(null)}>Cerrar</Button>
+            <Button color="danger" onPress={() => { setEliminando(detalle); setDetalle(null) }}>Eliminar</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
       {/* Modal: nueva WO manual (mínimo) */}
       <Modal isOpen={nuevoAbierto} onOpenChange={setNuevoAbierto} placement="center" size="md">
@@ -701,6 +697,6 @@ export default function WosPage() {
           </ModalFooter>
         </ModalContent>
       </Modal>
-    </AppShell>
+    </div>
   )
 }

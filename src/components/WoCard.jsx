@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { Card } from 'konsta/react'
-import { Copy, Check, User } from 'lucide-react'
+import SectionCard from './ui/SectionCard'
+import { Copy, Check, User, ChevronRight } from 'lucide-react'
 import { formatearFecha } from '../lib/date'
 
 const CLASES_ESTADO = {
@@ -98,9 +98,9 @@ export default function WoCard({ wo, estadoFecha, tecnico = '', onClick }) {
   const site = wo.site || wo.nombre_equipo
 
   return (
-    <Card
-      className="!mx-0 !my-2 cursor-pointer"
-      contentWrapPadding="p-3"
+    <SectionCard
+      padding="sm"
+      className="my-2 cursor-pointer transition-shadow hover:shadow-md"
       onClick={onClick}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
@@ -128,7 +128,7 @@ export default function WoCard({ wo, estadoFecha, tecnico = '', onClick }) {
           <CampoCopiable etiqueta="Serie" valor={wo.serie} />
         </div>
         {(tecnico || wo.legajo) && (
-          <div className="mt-0.5 flex items-center gap-1.5 border-t border-black/5 pt-1.5 text-xs text-default-500 dark:border-white/10">
+          <div className="mt-0.5 flex items-center gap-1.5 border-t border-default-100 pt-1.5 text-xs text-default-500">
             <User size={12} className="shrink-0 text-default-400" aria-hidden="true" />
             <span className="min-w-0 truncate font-medium text-default-700 dark:text-gray-300">
               {tecnico || 'Sin nombre'}
@@ -138,9 +138,17 @@ export default function WoCard({ wo, estadoFecha, tecnico = '', onClick }) {
                 {wo.legajo}
               </span>
             )}
+          <button
+              type="button"
+              onClick={e => { e.stopPropagation(); onClick?.() }}
+              className="ml-auto flex shrink-0 cursor-pointer items-center gap-0.5 rounded-md px-1.5 py-1 text-xs font-medium text-primary hover:bg-primary-50"
+              aria-label={`Ver detalle de la WO ${wo.wo}`}
+            >
+              Detalle <ChevronRight size={14} aria-hidden="true" />
+            </button>
           </div>
         )}
       </div>
-    </Card>
+    </SectionCard>
   )
 }
