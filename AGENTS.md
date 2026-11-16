@@ -79,8 +79,8 @@ No test framework or CI lint/typecheck configured. No TypeScript (plain JSX). Gi
 | `src/pages/MisListasPage.jsx` | Lists CRUD + warehouse sync (confirmation shows stock before → after and blocks if insufficient); two independent states per list: warehouse (`inventory_synced`) and Google Form (`form_enviado_en`) |
 | `src/lib/googleForm.js`, `src/components/EnviarFormularioModal.jsx` | Prefilled link to the «Consumo de repuestos» Google Form (field ids, 1–7 parts per submission, zona LIMA, legajo (profile, picked from the form list) and email (registered profile email) prefilled, cliente from the WO, N° presupuesto per item). Google gives no confirmation, so the user marks «Ya lo envié» |
 | `src/pages/WosPage.jsx` | Work orders list (10/20 per page, combo search WO/id/distrito/serie) + manual WO |
-| `src/pages/PedidosPage.jsx` | Orders: create (WO from Wo's), receive (inventory IN + usage list), admin personas tab |
-| `src/pages/AlmacenPage.jsx` | Warehouse inventory + transactions |
+| `src/pages/PedidosPage.jsx` | Orders: 3-step create wizard (WO → parts, with «Agregar kit» for kit models → confirm; full screen on phones), receive (inventory IN + usage list), admin personas tab |
+| `src/pages/AlmacenPage.jsx` | Warehouse inventory + transactions: sticky search, stock filters (con stock / bajo ≤2 / sin stock / todos), tap a card for per-part history |
 | `src/pages/RepuestosPage.jsx` | Spare parts CRUD |
 | `supabase/migrations/` | SQL migrations (base tables predate this folder) |
 

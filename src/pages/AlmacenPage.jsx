@@ -12,7 +12,30 @@ import {
   Select, SelectItem,
   Autocomplete, AutocompleteItem,
 } from '@heroui/react'
-import { Search, Plus, Minus, Warehouse, History, RotateCcw, Pencil, Trash2, Clock, Eye, EyeOff } from 'lucide-react'
+import { Search, Plus, Minus, Warehouse, History, RotateCcw, Pencil, Trash2, Clock } from 'lucide-react'
+
+// Por debajo o igual a este número, el repuesto se marca como «stock bajo»
+const STOCK_BAJO = 2
+
+const VISTAS = [
+  { key: 'stock', etiqueta: 'Con stock' },
+  { key: 'bajo', etiqueta: 'Stock bajo' },
+  { key: 'sin', etiqueta: 'Sin stock' },
+  { key: 'todos', etiqueta: 'Todos' },
+]
+
+function coincideVista(item, vista) {
+  if (vista === 'stock') return item.quantity > 0
+  if (vista === 'bajo') return item.quantity > 0 && item.quantity <= STOCK_BAJO
+  if (vista === 'sin') return item.quantity <= 0
+  return true
+}
+
+function tonoStock(q) {
+  if (q <= 0) return { texto: 'text-danger', chip: 'danger', etiqueta: 'Sin stock' }
+  if (q <= STOCK_BAJO) return { texto: 'text-warning-600', chip: 'warning', etiqueta: 'Stock bajo' }
+  return { texto: 'text-default-800', chip: null, etiqueta: '' }
+}
 
 export default function AlmacenPage() {
   const { session } = useApp()
@@ -22,7 +45,7 @@ export default function AlmacenPage() {
   const [cargando, setCargando] = useState(true)
   const [filtro, setFiltro] = useState('')
   const [mensaje, setMensaje] = useState(null)
-  const [ocultarCeros, setOcultarCeros] = useState(true)
+  const [vista, setVista] = useState('stock')
 
   const [ajustando, setAjustando] = useState(false)
   const [ajustePartNumber, setAjustePartNumber] = useState('')
@@ -108,7 +131,8 @@ export default function AlmacenPage() {
 
   useEffect(() => { cargar() }, [cargar])
 
-  const itemsConStock = ocultarCeros ? items.filter(i => i.quantity > 0) : items
+  const itemsConStock = items.filter(i => coincideVista(i, vista))
+  const conteoVista = Object.fromEntries(VISTAS.map(v => [v.key, items.filter(i => coincideVista(i, v.key)).length]))
 
   const filtroNormalizado = filtro.trim().toLowerCase()
   const itemsFiltrados = filtroNormalizado
@@ -328,7 +352,7 @@ export default function AlmacenPage() {
             <h1 className="text-lg font-bold text-default-900">Almacén</h1>
             <p className="text-sm text-default-500">
               {itemsFiltrados.length} repuesto{itemsFiltrados.length === 1 ? '' : 's'}
-              {ocultarCeros && items.length !== itemsFiltrados.length ? ` de ${items.length}` : ''} en inventario
+              {items.length !== itemsFiltrados.length ? ` de ${items.length}` : ''} en inventario
             </p>
           </div>
         </div>
@@ -367,27 +391,36 @@ export default function AlmacenPage() {
         </div>
       </div>
 
-      <div className="flex gap-2 items-center">
+      <div className="sticky top-14 z-20 -mx-4 space-y-2 bg-background px-4 py-2 md:-mx-6 md:px-6">
         <Input
-          placeholder="Buscar por part number..."
+          placeholder="Buscar por part number o nombre..."
           startContent={<Search size={16} className="text-default-400" />}
           value={filtro}
           onValueChange={setFiltro}
           variant="bordered"
           radius="lg"
-          size="sm"
-          className="flex-1"
+          aria-label="Buscar repuesto"
+          isClearable
+          onClear={() => setFiltro('')}
         />
-        <Button
-          size="sm"
-          variant="flat"
-          radius="lg"
-          startContent={ocultarCeros ? <Eye size={14} /> : <EyeOff size={14} />}
-          onPress={() => setOcultarCeros(prev => !prev)}
-          className="shrink-0"
-        >
-          {ocultarCeros ? 'Solo con stock' : 'Mostrar todos'}
-        </Button>
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5" role="group" aria-label="Filtrar por stock">
+          {VISTAS.map(v => (
+            <button
+              key={v.key}
+              type="button"
+              onClick={() => setVista(v.key)}
+              aria-pressed={vista === v.key}
+              className={`flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${
+                vista === v.key
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-default-200 bg-content1 text-default-600 hover:bg-default-100'
+              }`}
+            >
+              {v.etiqueta}
+              <span className={`tabular-nums ${vista === v.key ? 'text-primary-foreground/80' : 'text-default-400'}`}>{conteoVista[v.key]}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {cargando ? (
@@ -397,7 +430,7 @@ export default function AlmacenPage() {
       ) : itemsFiltrados.length === 0 ? (
         <div className="rounded-xl border border-default-200 bg-white px-5 py-6 text-sm text-default-400 flex flex-col items-center gap-3">
           <RotateCcw size={24} className="text-default-300" />
-          <span>{filtro ? 'No se encontraron repuestos.' : ocultarCeros && items.length > 0 ? 'Todos los repuestos están en cero.' : 'El almacén está vacío. Agrega repuestos usando "Ajustar inventario".'}</span>
+          <span>{filtro ? 'No se encontraron repuestos.' : vista !== 'todos' && items.length > 0 ? 'No hay repuestos en esta vista.' : 'El almacén está vacío. Agrega repuestos usando "Ajustar inventario".'}</span>
         </div>
       ) : (
         <>
@@ -407,7 +440,14 @@ export default function AlmacenPage() {
                 key={item.id}
                 className="rounded-xl border border-default-200 bg-white px-4 py-3 shadow-sm"
               >
-                <div className="flex items-start justify-between gap-2">
+                <div
+                  className="flex cursor-pointer items-start justify-between gap-2"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Ver historial de ${item.nombre || item.part_number}`}
+                  onClick={() => cargarHistorialItem(item)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') cargarHistorialItem(item) }}
+                >
                   <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-semibold text-default-900 truncate">
                       {item.nombre || item.part_number}
@@ -418,9 +458,16 @@ export default function AlmacenPage() {
                       </p>
                     )}
                   </div>
-                  <span className="font-mono text-[17px] font-bold text-default-800 tabular-nums shrink-0">
-                    {item.quantity}
-                  </span>
+                  <div className="shrink-0 text-right">
+                    <span className={`block font-mono text-2xl font-bold tabular-nums leading-none ${tonoStock(item.quantity).texto}`}>
+                      {item.quantity}
+                    </span>
+                    {tonoStock(item.quantity).chip && (
+                      <Chip size="sm" variant="flat" color={tonoStock(item.quantity).chip} className="mt-1 h-5 text-[10px]">
+                        {tonoStock(item.quantity).etiqueta}
+                      </Chip>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center justify-between gap-1 mt-2 pt-2 border-t border-default-100">
                   <div className="flex gap-1">
@@ -429,7 +476,7 @@ export default function AlmacenPage() {
                       size="sm"
                       variant="light"
                       radius="lg"
-                      className="min-w-8 h-8 text-default-400 hover:text-primary"
+                      className="min-w-10 h-10 text-default-400 hover:text-primary"
                       onPress={() => { setItemEditando(item); setEditCantidad(String(item.quantity)); setEditMotivo('') }}
                     >
                       <Pencil size={15} />
@@ -439,7 +486,7 @@ export default function AlmacenPage() {
                       size="sm"
                       variant="light"
                       radius="lg"
-                      className="min-w-8 h-8 text-default-400 hover:text-default-600"
+                      className="min-w-10 h-10 text-default-400 hover:text-default-600"
                       onPress={() => cargarHistorialItem(item)}
                     >
                       <Clock size={15} />
@@ -450,7 +497,7 @@ export default function AlmacenPage() {
                       variant="light"
                       radius="lg"
                       isDisabled={item.quantity > 0}
-                      className="min-w-8 h-8 text-default-400 hover:text-danger"
+                      className="min-w-10 h-10 text-default-400 hover:text-danger"
                       onPress={() => setItemEliminando(item)}
                     >
                       <Trash2 size={15} />
@@ -462,7 +509,7 @@ export default function AlmacenPage() {
                       size="sm"
                       variant="light"
                       radius="lg"
-                      className="min-w-8 h-8 text-default-400 hover:text-danger"
+                      className="min-w-10 h-10 text-default-400 hover:text-danger"
                       isDisabled={item.quantity <= 0 || moviendo.has(item.part_number)}
                       onPress={() => moverUno(item, -1)}
                     >
@@ -474,7 +521,7 @@ export default function AlmacenPage() {
                       variant="light"
                       radius="lg"
                       isDisabled={moviendo.has(item.part_number)}
-                      className="min-w-8 h-8 text-default-400 hover:text-primary"
+                      className="min-w-10 h-10 text-default-400 hover:text-primary"
                       onPress={() => moverUno(item, 1)}
                     >
                       <Plus size={15} />
@@ -818,7 +865,7 @@ export default function AlmacenPage() {
         </ModalContent>
       </Modal>
 
-      <Modal isOpen={Boolean(itemHistorial)} onOpenChange={abierto => !abierto && setItemHistorial(null)} size="2xl">
+      <Modal isOpen={Boolean(itemHistorial)} onOpenChange={abierto => !abierto && setItemHistorial(null)} size="2xl" scrollBehavior="inside" placement="center">
         <ModalContent>
           <>
             <ModalHeader className="text-default-900">Historial del repuesto</ModalHeader>
@@ -840,37 +887,30 @@ export default function AlmacenPage() {
                     {historialTransacciones.length === 0 ? (
                       <p className="text-xs text-default-400">Sin movimientos registrados.</p>
                     ) : (
-                      <div className="overflow-x-auto rounded-lg border border-default-200">
-                        <div className="grid grid-cols-[auto_1fr_auto_auto] gap-2 border-b border-default-100 bg-default-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-default-400 items-center min-w-[480px]">
-                          <span>Tipo</span>
-                          <span>Cantidad</span>
-                          <span>Work Order</span>
-                          <span className="text-right">Fecha</span>
-                        </div>
-                        <div className="divide-y divide-default-100 max-h-[25vh] overflow-y-auto">
-                          {historialTransacciones.map(tx => (
-                            <div key={tx.id} className="grid grid-cols-[auto_1fr_auto_auto] gap-2 px-3 py-2 items-center min-w-[480px]">
-                              <Chip color={chipColor(tx.type)} variant="flat" size="sm" radius="lg">
-                                {tx.type}
-                              </Chip>
-                              <span className="font-mono text-sm text-default-700 tabular-nums">
-                                {cantidadTexto(tx)}
-                                {tx.balance_after != null && (
-                                  <span className="ml-1 text-[11px] text-default-400">→ {tx.balance_after}</span>
-                                )}
+                      <ul className="divide-y divide-default-100 overflow-hidden rounded-lg border border-default-200">
+                        {historialTransacciones.map(tx => (
+                          <li key={tx.id} className="px-3 py-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="flex items-center gap-2">
+                                <Chip color={chipColor(tx.type)} variant="flat" size="sm" radius="lg">{tx.type}</Chip>
+                                <span className="font-mono text-sm font-semibold tabular-nums text-default-700">
+                                  {cantidadTexto(tx)}
+                                  {tx.balance_after != null && (
+                                    <span className="ml-1 text-[11px] font-normal text-default-400">→ {tx.balance_after}</span>
+                                  )}
+                                </span>
                               </span>
-                              <span className="text-xs text-default-500">
-                                {tx.work_order || '-'}
-                                {tx.site ? ` · ${tx.site}` : ''}
-                                {tx.motivo && <span className="block text-[11px] text-default-400">{tx.motivo}</span>}
-                              </span>
-                              <span className="text-xs text-default-400 text-right whitespace-nowrap">
-                                {fechaCorta(tx.created_at)}
-                              </span>
+                              <span className="text-xs text-default-400">{fechaCorta(tx.created_at)}</span>
                             </div>
-                          ))}
-                        </div>
-                      </div>
+                            {(tx.work_order || tx.site || tx.motivo) && (
+                              <p className="mt-0.5 text-xs text-default-500">
+                                {[tx.work_order, tx.site].filter(Boolean).join(' · ')}
+                                {tx.motivo && <span className="block text-[11px] text-default-400">{tx.motivo}</span>}
+                              </p>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </div>
 
@@ -879,35 +919,19 @@ export default function AlmacenPage() {
                     {historialListas.length === 0 ? (
                       <p className="text-xs text-default-400">Este repuesto no ha sido agregado a ninguna lista.</p>
                     ) : (
-                      <div className="overflow-x-auto rounded-lg border border-default-200">
-                        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 border-b border-default-100 bg-default-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-default-400 items-center min-w-[500px]">
-                          <span>Lista</span>
-                          <span>Work Order</span>
-                          <span>Cant.</span>
-                          <span className="text-right">Fecha</span>
-                        </div>
-                        <div className="divide-y divide-default-100 max-h-[25vh] overflow-y-auto">
-                          {historialListas.map((uso, idx) => (
-                            <div key={idx} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-2 items-center min-w-[500px]">
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-default-900 truncate">{uso.lista?.name || '-'}</p>
-                                {uso.lista?.site && (
-                                  <p className="text-[11px] text-default-400 truncate">{uso.lista.site}</p>
-                                )}
-                              </div>
-                              <span className="text-xs text-default-500 font-mono">
-                                {uso.lista?.work_order || '-'}
-                              </span>
-                              <span className="font-mono text-sm text-default-700 tabular-nums text-center">
-                                {uso.quantity}
-                              </span>
-                              <span className="text-xs text-default-400 text-right whitespace-nowrap">
-                                {fechaCorta(uso.lista?.created_at)}
-                              </span>
+                      <ul className="divide-y divide-default-100 overflow-hidden rounded-lg border border-default-200">
+                        {historialListas.map((uso, idx) => (
+                          <li key={idx} className="flex items-center justify-between gap-3 px-3 py-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-default-900">{uso.lista?.name || '-'}</p>
+                              <p className="truncate text-[11px] text-default-400">
+                                {[uso.lista?.work_order, uso.lista?.site, fechaCorta(uso.lista?.created_at)].filter(Boolean).join(' · ')}
+                              </p>
                             </div>
-                          ))}
-                        </div>
-                      </div>
+                            <span className="shrink-0 font-mono text-sm font-semibold tabular-nums text-default-700">{uso.quantity} u.</span>
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </div>
                 </>
