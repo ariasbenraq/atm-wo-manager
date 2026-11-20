@@ -10,6 +10,7 @@ import RepuestosPage from './pages/RepuestosPage'
 import MisListasPage from './pages/MisListasPage'
 import AlmacenPage from './pages/AlmacenPage'
 import PedidosPage from './pages/PedidosPage'
+import MovilidadesPage from './pages/MovilidadesPage'
 import AdminUsuariosPage from './pages/AdminUsuariosPage'
 import AdminMonitoreoPage from './pages/AdminMonitoreoPage'
 
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/mis-listas" element={<MisListasPage />} />
           <Route path="/almacen" element={<AlmacenPage />} />
           <Route path="/pedidos" element={<PedidosPage />} />
+          <Route path="/movilidades" element={<MovilidadesPage />} />
           <Route path="/admin/usuarios" element={<AdminUsuariosPage />} />
           <Route path="/admin/monitoreo" element={<AdminMonitoreoPage />} />
         </Route>

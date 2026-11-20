@@ -26,7 +26,7 @@ import {
   Alert as HeroAlert,
 } from '@heroui/react'
 import { useTema, ETIQUETA_TEMA } from '../hooks/useTema'
-import { Activity, Headset, Home, Moon, Sun, SunMoon, List, LogOut, Menu, Package, Shield, ShoppingCart, Warehouse } from 'lucide-react'
+import { Activity, Headset, Home, Moon, Sun, SunMoon, List, LogOut, Menu, Package, Route, Shield, ShoppingCart, Warehouse } from 'lucide-react'
 
 const vistas = [
   { key: 'inicio', label: 'Inicio', icon: Home, path: '/inicio' },
@@ -35,6 +35,7 @@ const vistas = [
   { key: 'mis-listas', label: 'Mis listas', icon: List, path: '/mis-listas' },
   { key: 'pedidos', label: 'Pedidos', icon: ShoppingCart, path: '/pedidos' },
   { key: 'almacen', label: 'Almacén', icon: Warehouse, path: '/almacen' },
+  { key: 'movilidades', label: 'Movilidades', icon: Route, path: '/movilidades' },
 ]
 
 const vistasAdmin = [
