@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { useIsAdmin } from '../hooks/usePermissions'
+import { esModoDemo } from '../lib/demo/modoDemo'
 import { useTelemetria } from '../hooks/useTelemetria'
 import CuentaBloqueada from './CuentaBloqueada'
 import {
@@ -69,7 +70,9 @@ export default function Layout() {
   const esAdmin = useIsAdmin()
   const navigate = useNavigate()
   const location = useLocation()
-  useTelemetria(Boolean(session) && (!profile?.estado || profile.estado === 'activo'))
+  const enDemo = esModoDemo()
+  // La demo no registra telemetría (no debe escribir nada en la base de datos)
+  useTelemetria(Boolean(session) && !enDemo && (!profile?.estado || profile.estado === 'activo'))
   const { tema, alternar: alternarTema } = useTema()
   const IconoTema = tema === 'oscuro' ? Moon : tema === 'claro' ? Sun : SunMoon
   const [modalReLoginAbierto, setModalReLoginAbierto] = useState(false)
@@ -223,6 +226,12 @@ export default function Layout() {
       )}
 
       <main className="mx-auto max-w-3xl space-y-4 p-4 pb-28 md:space-y-5 md:p-6 lg:max-w-5xl lg:pb-10">
+        {enDemo && (
+          <div role="status" className="rounded-lg border border-warning-300 bg-warning-50 px-3 py-2 text-xs text-warning-800 dark:bg-warning-100/10 dark:text-warning-600">
+            <strong>Modo demostración:</strong> los datos son ficticios y temporales. Nada se guarda en la base de datos
+            y todo se borra al salir. Los formularios de Google (consumo de repuestos y movilidad) sí se abren con datos prellenados.
+          </div>
+        )}
         <Outlet />
       </main>
       </div>
