@@ -7,7 +7,7 @@ import { db } from '../lib/db'
 import { formatearFecha } from '../lib/date'
 import { formatMes } from '../lib/excel'
 import { useLegajo } from '../hooks/useLegajo'
-import { useIsAdmin } from '../hooks/usePermissions'
+import { usePuedeGestionarWos } from '../hooks/usePermissions'
 import {
   hoyLima, normalizarLegajo, cargarNombresTecnicos, coincideFiltros, hayFiltros, nombreDeWo,
 } from '../lib/wosTecnicos'
@@ -119,7 +119,8 @@ export default function WosPage() {
   const userId = session?.user?.id
   const legajoUsuario = useLegajo()
   // Solo los administradores importan, crean, modifican o eliminan WOs; el resto solo lee
-  const esAdmin = useIsAdmin()
+  // Admin o cuenta demo (en memoria): pueden importar, crear y eliminar WOs
+  const esAdmin = usePuedeGestionarWos()
   const { colores, cambiar: cambiarColor, restablecer: restablecerColores } = useColoresLegajo()
 
   const [wos, setWos] = useState([])
