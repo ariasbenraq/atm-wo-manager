@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { traducirErrorAuth } from '../lib/registro'
 import { useApp } from '../context/AppContext'
+import { activarModoDemo, esCredencialDemo, DEMO_SESION } from '../lib/demo/modoDemo'
 import {
   Card,
   CardBody,
@@ -39,6 +40,14 @@ export default function LoginPage() {
     setCargando(true)
 
     try {
+      // Cuenta de demostración: entra sin Supabase y todo queda solo en memoria
+      if (esCredencialDemo(username, password)) {
+        activarModoDemo()
+        setSession(DEMO_SESION)
+        navigate('/inicio', { replace: true })
+        return
+      }
+
       let email = username.trim()
 
       // Si no parece email, buscar username en profiles
