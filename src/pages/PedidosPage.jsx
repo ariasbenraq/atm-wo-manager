@@ -5,7 +5,7 @@ import { leerCacheWos, siteDeWo } from '../lib/wosCache'
 import { ordenarWosCatalogo, CAMPOS_CATALOGO_WO } from '../lib/wosCatalogo'
 import { db } from '../lib/db'
 import { recepcionarPedido, actualizarPedido, mensajeErrorInventario, codigoErrorInventario } from '../lib/inventario'
-import { useIsAdmin } from '../hooks/usePermissions'
+import { useIsAdmin, usePuedeGestionarWos } from '../hooks/usePermissions'
 import { useLegajo } from '../hooks/useLegajo'
 import { normalizarLegajo } from '../lib/wosTecnicos'
 import { usaKit, KIT_POR_ATM, normalizarPartNumber } from '../lib/kitMantenimiento'
@@ -41,7 +41,9 @@ const PASOS = ['WO', 'Repuestos', 'Confirmar']
 export default function PedidosPage() {
   const { session } = useApp()
   const userId = session?.user?.id
-  const esAdmin = useIsAdmin()
+  const esAdminReal = useIsAdmin()
+  // Admin o cuenta demo (en memoria): pueden elegir cualquier WO o ingresar sus datos a mano
+  const esAdmin = usePuedeGestionarWos()
   const legajoUsuario = useLegajo()
 
   const [pestana, setPestana] = useState('pedidos')
@@ -680,7 +682,7 @@ export default function PedidosPage() {
           </div>
         </Tab>
 
-        {esAdmin && (
+        {esAdminReal && (
           <Tab key="personas" title="Personas">
             <div className="pt-3">
               <PersonasPedidos />

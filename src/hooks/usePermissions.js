@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useApp } from '../context/AppContext'
+import { esModoDemo } from '../lib/demo/modoDemo'
 
 export const ROLES = {
   ADMIN: 'admin',
@@ -46,3 +47,10 @@ export function useCan(accion, recurso) {
 }
 
 
+
+// Importar/crear/editar/eliminar WOs: solo admin, y la cuenta demo (sus datos viven en memoria,
+// nunca llegan a la base de datos).
+export function usePuedeGestionarWos() {
+  const esAdmin = useIsAdmin()
+  return esAdmin || esModoDemo()
+}
